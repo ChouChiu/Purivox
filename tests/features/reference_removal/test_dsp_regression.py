@@ -139,7 +139,7 @@ def test_reference_cancellation_protects_quiet_vocal_buried_in_wide_backing():
         0.75,
         8,
         center_extraction=True,
-        weak_vocal_protection=True,
+        open_mic_focus=True,
     )
     output_center = np.mean(output, axis=0)
     input_center = np.mean(mixture, axis=0)

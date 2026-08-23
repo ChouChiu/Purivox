@@ -82,11 +82,11 @@ def test_reference_pipeline_rejects_same_song_and_accompaniment(tmp_path: Path):
         run_reference_job(job, CancellationToken())
 
 
-def test_weak_vocal_protection_requires_center_extraction(tmp_path: Path):
+def test_open_mic_focus_requires_center_extraction(tmp_path: Path):
     with pytest.raises(ValueError, match="requires center extraction"):
         ReferenceJob(
             song=tmp_path / "song.wav",
             accompaniment=tmp_path / "reference.wav",
             output=tmp_path / "output.wav",
-            weak_vocal_protection=True,
+            open_mic_focus=True,
         )

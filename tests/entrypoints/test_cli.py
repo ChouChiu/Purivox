@@ -25,7 +25,7 @@ def test_reference_enhancement_switches_default_off_and_can_be_enabled():
     parser = build_parser()
     defaults = parser.parse_args(["mr", "song.wav", "reference.flac", "output.wav"])
     assert not defaults.center_extraction
-    assert not defaults.weak_vocal_protection
+    assert not defaults.open_mic_focus
 
     enabled = parser.parse_args(
         [
@@ -34,11 +34,22 @@ def test_reference_enhancement_switches_default_off_and_can_be_enabled():
             "reference.flac",
             "output.wav",
             "--center-extraction",
-            "--weak-vocal-protection",
+            "--open-mic-focus",
         ]
     )
     assert enabled.center_extraction
-    assert enabled.weak_vocal_protection
+    assert enabled.open_mic_focus
+
+    with pytest.raises(SystemExit):
+        parser.parse_args(
+            [
+                "mr",
+                "song.wav",
+                "reference.flac",
+                "output.wav",
+                "--weak-vocal-protection",
+            ]
+        )
 
 
 def test_reference_alignment_defaults_on_and_cli_can_disable_it():

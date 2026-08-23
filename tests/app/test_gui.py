@@ -42,9 +42,9 @@ def test_main_window_has_mr_workspace_with_two_subpages(qtbot):
     assert not hasattr(window.mr, "align")
     assert not hasattr(window.full_stage, "align")
     window.mr.center_extraction.setChecked(False)
-    assert not window.mr.weak_vocal_protection.isEnabled()
+    assert not window.mr.open_mic_focus.isEnabled()
     window.mr.center_extraction.setChecked(True)
-    assert window.mr.weak_vocal_protection.isEnabled()
+    assert window.mr.open_mic_focus.isEnabled()
     assert window.ai.model.count() == 4
     assert window.settings.log_level_card.configItem is cfg.log_level
     previous_level = cfg.log_level.value
@@ -87,9 +87,9 @@ def test_full_stage_page_orders_sources_and_renders_analysis(qtbot, tmp_path: Pa
     assert [path.name for path in page.source_paths()] == ["first.wav", "second.wav"]
     assert not hasattr(page, "move_up")
     page.center_extraction.setChecked(False)
-    assert not page.weak_vocal_protection.isEnabled()
+    assert not page.open_mic_focus.isEnabled()
     page.center_extraction.setChecked(True)
-    assert page.weak_vocal_protection.isEnabled()
+    assert page.open_mic_focus.isEnabled()
 
     source = (tmp_path / "second.wav").resolve()
     analysis = FullStageAnalysis(
@@ -130,7 +130,7 @@ def test_full_stage_job_forwards_normal_mr_parameters(qtbot, tmp_path: Path):
     item.setData(Qt.ItemDataRole.UserRole, str(source))
     window.full_stage.sources.addItem(item)
     window.full_stage.center_extraction.setChecked(True)
-    window.full_stage.weak_vocal_protection.setChecked(True)
+    window.full_stage.open_mic_focus.setChecked(True)
 
     job = window._full_stage_job()
 
@@ -138,7 +138,7 @@ def test_full_stage_job_forwards_normal_mr_parameters(qtbot, tmp_path: Path):
     assert job.sigma == 3
     assert job.auto_align
     assert job.center_extraction
-    assert job.weak_vocal_protection
+    assert job.open_mic_focus
 
 
 def test_system_accent_color_is_applied_and_tracks_palette_changes(qtbot, monkeypatch):
@@ -210,7 +210,7 @@ def test_reference_start_forwards_explicit_enhancement_switches(qtbot, tmp_path:
     window.mr.acc_edit.setText(str(tmp_path / "reference.wav"))
     window.mr.output_edit.setText(str(tmp_path / "output.wav"))
     window.mr.center_extraction.setChecked(True)
-    window.mr.weak_vocal_protection.setChecked(True)
+    window.mr.open_mic_focus.setChecked(True)
     started = []
     monkeypatch.setattr(window, "_start_worker", lambda page, operation: started.append(operation))
 
@@ -221,7 +221,7 @@ def test_reference_start_forwards_explicit_enhancement_switches(qtbot, tmp_path:
     assert job.sigma == 3
     assert job.auto_align
     assert job.center_extraction
-    assert job.weak_vocal_protection
+    assert job.open_mic_focus
 
 
 def test_combo_boxes_use_stable_menu_without_opacity_animation(qtbot):

@@ -14,20 +14,17 @@ from shared.processing import CancellationToken
 
 def test_model_directory_uses_purivox_environment_variable(monkeypatch, tmp_path: Path):
     preferred = tmp_path / "preferred"
-    legacy = tmp_path / "legacy"
     monkeypatch.setenv("PURIVOX_MODELS", str(preferred))
-    monkeypatch.setenv("MR_REMOVER_MODELS", str(legacy))
 
     assert candidate_model_dirs()[0] == preferred.resolve()
-    assert legacy.resolve() not in candidate_model_dirs()
 
 
-def test_legacy_model_environment_variable_remains_supported(monkeypatch, tmp_path: Path):
-    legacy = tmp_path / "legacy"
+def test_retired_model_environment_variable_is_ignored(monkeypatch, tmp_path: Path):
+    retired = tmp_path / "retired"
     monkeypatch.delenv("PURIVOX_MODELS", raising=False)
-    monkeypatch.setenv("MR_REMOVER_MODELS", str(legacy))
+    monkeypatch.setenv("MR_REMOVER_MODELS", str(retired))
 
-    assert candidate_model_dirs()[0] == legacy.resolve()
+    assert retired.resolve() not in candidate_model_dirs()
 
 
 def test_catalog_is_unique_and_has_hashes():
