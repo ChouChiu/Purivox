@@ -23,15 +23,34 @@ def test_feature_dependency_boundaries():
         relative = path.relative_to(SOURCE_ROOT)
         imports = _imports(path)
         if relative.parts[0] == "shared":
-            forbidden = {name for name in imports if name == "app" or name.startswith("features")}
+            forbidden = {
+                name
+                for name in imports
+                if name == "app"
+                or name.startswith("app.")
+                or name == "entrypoints"
+                or name.startswith("entrypoints.")
+                or name == "features"
+                or name.startswith("features.")
+            }
         elif relative.parts[0] == "features" and len(relative.parts) >= 2:
             own_feature = relative.parts[1]
             forbidden = {
                 name
                 for name in imports
-                if name.startswith("features.")
-                and len(name.split(".")) >= 2
-                and name.split(".")[1] != own_feature
+                if name == "app"
+                or name.startswith("app.")
+                or name == "entrypoints"
+                or name.startswith("entrypoints.")
+                or (
+                    name.startswith("features.")
+                    and len(name.split(".")) >= 2
+                    and name.split(".")[1] != own_feature
+                )
+            }
+        elif relative.parts[0] == "app":
+            forbidden = {
+                name for name in imports if name == "entrypoints" or name.startswith("entrypoints.")
             }
         else:
             forbidden = set()
