@@ -1,6 +1,6 @@
 # Architecture and Data Flow
 
-<p align="center">
+<p align="left">
   <a href="../architecture.md">简体中文</a> · <strong>English</strong>
 </p>
 

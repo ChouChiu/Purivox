@@ -1,6 +1,6 @@
 # Audio Station
 
-<p align="center">
+<p align="left">
   <a href="README.md">简体中文</a> · <strong>English</strong>
 </p>
 

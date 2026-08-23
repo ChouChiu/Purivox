@@ -1,6 +1,6 @@
 # Reference-Guided Vocal Isolation
 
-<p align="center">
+<p align="left">
   <a href="../reference-removal.md">简体中文</a> · <strong>English</strong>
 </p>
 

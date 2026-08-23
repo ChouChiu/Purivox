@@ -1,6 +1,6 @@
 # AI Track Separation
 
-<p align="center">
+<p align="left">
   <a href="../neural-separation.md">简体中文</a> · <strong>English</strong>
 </p>
 

@@ -1,6 +1,6 @@
 # 开发、测试与发布
 
-<p align="center">
+<p align="left">
   <strong>简体中文</strong> · <a href="en/development.md">English</a>
 </p>
 

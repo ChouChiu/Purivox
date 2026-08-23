@@ -1,6 +1,6 @@
 # Development, Testing, and Release
 
-<p align="center">
+<p align="left">
   <a href="../development.md">简体中文</a> · <strong>English</strong>
 </p>
 

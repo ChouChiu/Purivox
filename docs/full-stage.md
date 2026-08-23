@@ -1,6 +1,6 @@
 # 完整舞台实现
 
-<p align="center">
+<p align="left">
   <strong>简体中文</strong> · <a href="en/full-stage.md">English</a>
 </p>
 

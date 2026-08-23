@@ -1,6 +1,6 @@
 # Full Stage Processing
 
-<p align="center">
+<p align="left">
   <a href="../full-stage.md">简体中文</a> · <strong>English</strong>
 </p>
 
