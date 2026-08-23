@@ -32,6 +32,8 @@ def test_main_window_has_mr_workspace_with_two_subpages(qtbot):
     assert window.mr_workspace.stack.currentWidget() is window.full_stage
     window.mr_workspace.show_single()
     assert window.mr_workspace.stack.currentWidget() is window.mr
+    assert window.mr.title.text() == "单曲垫音消除"
+    assert window.full_stage.title.text() == "整场垫音消除"
     assert not hasattr(window.mr, "algorithm")
     assert not hasattr(window.mr, "sigma")
     assert not hasattr(window.full_stage, "sigma")
@@ -57,9 +59,13 @@ def test_home_page_presents_mr_workspace_and_ai(qtbot):
     window.home.retranslate("zh_cn")
 
     assert window.home.section_title.text() == "选择处理方式"
-    assert "单曲或全场" in window.home.mr_card.meta.text()
+    meta = window.home.mr_card.meta.text()
+    assert "舞台 / 现场音频" in meta
+    assert "歌曲音源" in meta
     assert not hasattr(window.home, "full_stage_card")
-    assert "仅原曲" in window.home.ai_card.meta.text()
+    assert "一份待处理音频" in window.home.ai_card.meta.text()
+    assert window.home.mr_card.open_button.text() == "开始垫音消除"
+    assert window.home.ai_card.open_button.text() == "开始 AI 分离"
 
     with qtbot.waitSignal(window.home.mr_requested):
         window.home.mr_card.open_button.click()

@@ -195,13 +195,13 @@ class MrPage(PageScrollArea):
 
     def retranslate(self, language: str) -> None:
         self.language = language
-        self.title.setText(tr(language, "nav_mr"))
+        self.title.setText(tr(language, "mr_single_title"))
         self.files.title_label.setText(tr(language, "file_select"))
         self.parameters.title_label.setText(tr(language, "params"))
         self.status_card.title_label.setText(tr(language, "status_group"))
         self.preview_card.title_label.setText(tr(language, "preview_title"))
         self.data_card.title_label.setText(tr(language, "audio_data_title"))
-        self.song_label.setText(tr(language, "song_label"))
+        self.song_label.setText(tr(language, "mr_audio_label"))
         self.acc_label.setText(tr(language, "acc_label"))
         self.output_label.setText(tr(language, "output_file"))
         self.output_edit.setPlaceholderText(tr(language, "output_name_hint"))
@@ -259,7 +259,7 @@ class MrPage(PageScrollArea):
     def _select_song(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
             self,
-            tr(self.language, "song_label"),
+            tr(self.language, "mr_audio_label"),
             filter="Audio (*.wav *.flac *.mp3 *.m4a *.ogg *.opus)",
         )
         if path:
