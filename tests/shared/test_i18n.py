@@ -38,6 +38,16 @@ def test_english_mr_terms_match_product_workflows():
     assert tr("en_us", "nav_full_stage") == "Full Stage Vocal Isolation"
 
 
+def test_japanese_and_korean_mr_terms_are_unambiguous():
+    assert tr("ja_jp", "nav_mr") == "ライブボーカル抽出"
+    assert tr("ja_jp", "stage_clip_enabled") == "処理"
+    assert tr("ja_jp", "stage_unmatched_label") == "トーク / 広告 / 空き時間"
+
+    assert tr("ko_kr", "nav_mr") == "라이브 보컬 추출"
+    assert tr("ko_kr", "stage_clip_enabled") == "처리"
+    assert tr("ko_kr", "stage_confidence") == "매칭 신뢰도"
+
+
 def _literal_tr_keys() -> set[str]:
     keys: set[str] = set()
     for path in Path("src").rglob("*.py"):
