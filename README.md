@@ -147,8 +147,8 @@ uv run --locked audio-station ai "歌曲.wav" --output-dir "输出目录" --mode
 
 ## 致谢与许可
 
-AI 处理流程参考
-[Ultimate Vocal Remover GUI](https://github.com/Anjok07/ultimatevocalremovergui) 的 MDX-Net 管线，模型来自
-[TRvlvr/model_repo](https://github.com/TRvlvr/model_repo)。模型许可与致谢要求以各自发布页为准。
+- [Vocal-Extractor](https://github.com/IamYei/Vocal-Extractor)：为频域人声提取方向提供启发。
+- [Ultimate Vocal Remover GUI](https://github.com/Anjok07/ultimatevocalremovergui)：AI 处理流程参考其 MDX-Net 管线。
+- [TRvlvr/model_repo](https://github.com/TRvlvr/model_repo)：提供 MDX-Net 模型文件；模型许可与致谢要求以各发布页为准。
 
 本项目以 [AGPL-3.0-or-later](LICENSE) 发布。PySide6-Fluent-Widgets 开源版本使用 GPLv3，商业使用前请确认其上游许可。
