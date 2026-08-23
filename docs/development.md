@@ -26,6 +26,9 @@ uv sync --locked --group deploy
 - 可变参数少的任务模型优先使用 `frozen=True, slots=True` 数据类，固定字符串集合使用 `StrEnum`。
 - 公共基础设施放在 `shared`；功能专属页面、模型和处理逻辑放在对应 `features/<功能>/`。
 - 跨功能编排放在 `app`，不要为了复用而让功能包互相导入。
+- 被多个功能消费的数据模型应下沉到 `shared`；只在单个功能内部使用的模型不得为了方便从别的功能重导出。
+- Qt 后台任务统一由 `app/job_presenter.py` 协调页面状态，再交给 `app/job_runner.py` 管理线程；页面和业务管线不得自行创建线程。
+- 页面中的独立交互控件拆成同功能包内的小模块，例如试听跳转控件位于 `reference_removal/preview.py`。
 - 长音频使用 `create_pcm_audio` 与分块循环，不要把整个文件复制到普通内存数组。
 - 可取消循环必须定期调用 `CancellationToken.raise_if_cancelled()`，且不得吞掉取消异常。
 - 输出使用 `write_wav_atomic`，不要直接覆盖目标文件。
@@ -60,6 +63,8 @@ src/resources/i18n/ko_kr.json
 3. `pysidedeploy.spec` 的 `include-package` 或相应包含项。
 
 遗漏任一清单都可能造成开发环境正常、wheel 或独立程序缺文件。
+`tests/test_packaging.py` 会自动比较所有 `src/**/*.py` 与 `[tool.pyside6-project].files`，并拒绝遗漏或失效条目；
+新增顶层包时仍需人工确认 wheel 与 Nuitka 的包清单。
 
 ## 测试门禁
 
@@ -89,7 +94,14 @@ QT_QPA_PLATFORM=offscreen uv run --locked pytest tests/benchmarks --runslow
 - 完整舞台匹配、时间线与分段渲染；
 - MDX-Net 分块重叠相加和模型管线；
 - CLI 参数、GUI 导航、设置与统计显示；
-- 分层导入边界和三语翻译键一致性。
+- 分层导入边界、发布清单和四种语言的翻译键一致性。
+
+测试文件按被测源码归属放置。功能内部算法放在 `tests/features/<功能>/`；同时组合多个功能的应用编排放在
+`tests/app/`；公共音频、任务协议和控件放在 `tests/shared/`。Pytest 使用 `importlib` 导入模式，允许不同目录使用
+贴合源码的相同测试文件名而不发生模块碰撞。这样测试目录本身也能暴露越层依赖。
+
+`tests/test_documentation.py` 检查 README 与 `docs/` 中的内部链接，并确保所有技术文档都能从项目首页到达。
+重命名文档时应同步修改索引和引用，而不是依赖失效链接留待人工发现。
 
 ## Python 包构建
 
@@ -97,7 +109,8 @@ QT_QPA_PLATFORM=offscreen uv run --locked pytest tests/benchmarks --runslow
 uv build
 ```
 
-产物写入 `dist/`。ONNX 权重位于忽略列表，不会进入 wheel 或源码包。构建后应通过 uv 的临时隔离环境安装 wheel 并验证（路径中的版本号按实际产物调整）：
+产物写入 `dist/`。版本号以 `src/app/version.py` 为唯一来源，由 Hatch 在构建时读取。ONNX 权重位于忽略列表，
+不会进入 wheel 或源码包。构建后应通过 uv 的临时隔离环境安装 wheel 并验证（路径中的版本号按实际产物调整）：
 
 ```bash
 uvx --from ./dist/audio_station-1.0.0-py3-none-any.whl audio-station --version

@@ -28,19 +28,19 @@ Invariants enforced by `tests/test_architecture.py`: `shared` must never import 
 
 **Neural pipeline** (`features/neural_separation/processing.py`): resample song to 44.1 kHz → `ensure_model` (search: `--models-dir` override → `MR_REMOVER_MODELS` env → system app-data dir → repo `models/`; download from TRvlvr releases with SHA-256 verify) → `MdxNet.separate` (chunked overlap-add, hanning divider accumulation) → writes `<stem>_vocal.wav` + `<stem>_background.wav` (background = song − vocal).
 
-**Concurrency**: pages define Qt `Signal()`s (`start_requested`, `cancel_requested`); `MainWindow` builds a job dataclass and spawns a `QThread` with `ProcessingWorker` (QObject adapter, `src/app/worker.py`) running `partial(run_*_job, job)`; worker emits `progress`/`succeeded`/`failed`/`cancelled`/`finished`. Cancellation is cooperative via `CancellationToken.raise_if_cancelled()` (`src/shared/processing.py`). CLI runs the same jobs synchronously with SIGINT → token cancel.
+**Concurrency**: pages define Qt `Signal()`s (`start_requested`, `cancel_requested`); `MainWindow` builds a job dataclass and hands it to `JobPresenter`, which owns page state/result UI and delegates execution to `JobRunner`. The runner owns the `QThread` and `ProcessingWorker` lifecycle and emits `progress`/`succeeded`/`failed`/`cancelled`/`finished`. Cancellation is cooperative via `CancellationToken.raise_if_cancelled()` (`src/shared/processing.py`). CLI runs the same jobs synchronously with SIGINT → token cancel.
 
 ## Key Directories
 
 | Path | Purpose |
 |---|---|
 | `src/entrypoints/` | `cli.py` (argparse: `mr`, `ai`, `--selftest`), `gui.py`, `__main__.py` (`python -m entrypoints`) |
-| `src/app/` | `main_window.py` (FluentWindow shell, 4 pages, worker orchestration), `worker.py` (QThread adapter), `version.py` |
+| `src/app/` | `main_window.py` (FluentWindow shell), `job_presenter.py` (page state/results), `job_runner.py`/`worker.py` (QThread lifecycle and adapter), cross-feature orchestration, `version.py` |
 | `src/features/reference_removal/` | MR pipeline: `dsp/algorithms.py` (reference-mask cancellation), `dsp/alignment.py`, `finder.py` (auto accompaniment match), `processing.py`, `page.py`, `models.py` |
 | `src/features/full_stage/` | Multi-source fingerprint matching, timeline models, and the full-stage page |
 | `src/features/neural_separation/` | AI pipeline: `inference.py` (MdxNet ONNX wrapper), `model_store.py` (search/download/verify), `catalog.py` (4 shipped model entries), `processing.py`, `page.py` |
 | `src/features/home/`, `src/features/settings/` | HomePage (brand + entry cards), SettingsPage (language/theme/log level) |
-| `src/shared/audio/` | `io.py`: `AudioData` planar float32 (np.memmap temp files), `read_audio`, `resample_audio` (soxr), `write_wav_atomic` (temp + `os.replace`) |
+| `src/shared/audio/` | `io.py`: mapped audio I/O/resampling/atomic writes; `analysis.py`: shared `AudioStats`, block copy, peak/RMS analysis |
 | `src/shared/dsp/` | `spectral.py`: librosa-compatible `stft`/`istft`, `n_fft=2048`, `hop=512` |
 | `src/shared/ui/` | `combo_box.py` (`SmoothComboBox`, qfw slide animation disabled), `cards.py` (FormCard rows) |
 | `src/shared/` | `config.py` (QConfig), `i18n.py` (`tr()`), `logging.py` (single-line formatter), `processing.py` (token/progress types) |
@@ -94,7 +94,7 @@ Language keys: `zh_cn`, `en_us`, `ja_jp`, `ko_kr`.
 | `pysidedeploy.spec` | Nuitka standalone build (dir mode, `deployment/main.py` → `dist/`) |
 | `src/entrypoints/cli.py` | `audio-station` entry point (`main`); mr/ai subcommands, `--selftest` |
 | `src/app/main_window.py` | FluentWindow shell: navigation, i18n/theme, worker orchestration, auto-find |
-| `src/app/worker.py` | `ProcessingWorker` QObject adapter (QThread lifecycle + signals) |
+| `src/app/job_runner.py` / `worker.py` | Single-job QThread lifecycle and QObject operation adapter |
 | `src/shared/processing.py` | `CancellationToken`, `ProcessingCancelled`, `ProgressEvent`, `ProcessingResult`, `ProgressCallback` |
 | `src/shared/audio/io.py` | memmap audio loading, soxr resample, atomic WAV write (16/24-bit) |
 | `src/shared/config.py` / `i18n.py` / `logging.py` | settings persistence, `tr()`, single-line log format |

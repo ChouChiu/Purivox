@@ -8,14 +8,15 @@ Audio Station 将界面、功能实现和公共基础设施分开。GUI 与 CLI 
 
 ```text
 src/entrypoints/                 程序入口，只负责启动 GUI 或解析 CLI
-└── src/app/                     主窗口、后台线程和跨功能编排
-    ├── src/features/            各功能自包含的页面、模型与处理逻辑
-    │   ├── reference_removal/   单曲参考对消
-    │   ├── full_stage/          完整舞台分析与时间线模型
-    │   ├── neural_separation/   MDX-Net 模型与推理
-    │   ├── home/                首页
-    │   └── settings/            设置页
-    └── src/shared/              音频、频谱、配置、日志、任务协议和通用控件
+src/app/                         主窗口、任务运行器和跨功能编排
+src/features/                    各功能自包含的页面、模型与处理逻辑
+├── reference_removal/           单曲参考对消、试听控件与 DSP
+├── full_stage/                  完整舞台分析与时间线模型
+├── neural_separation/           MDX-Net 模型、模型仓库与推理
+├── home/                        首页
+└── settings/                    设置页
+src/shared/                      音频、频谱、配置、日志、任务协议和通用控件
+src/resources/                   翻译和模型规格等只读资源
 ```
 
 依赖方向为：
@@ -30,20 +31,30 @@ flowchart LR
 
 `tests/test_architecture.py` 通过抽象语法树检查以下边界：
 
-- `shared` 不得导入 `app` 或任何 `features`。
-- 一个功能包不得直接导入另一个功能包。
+- `shared` 不得导入 `app`、`entrypoints` 或任何 `features`。
+- 功能包不得导入 `app`、`entrypoints` 或其他功能包。
+- `app` 不得反向导入 `entrypoints`。
 - 需要联合多个功能的逻辑放在 `app`。例如完整舞台渲染同时使用时间线分析与参考对消，因此位于 `src/app/full_stage_processing.py`。
+
+公共数据模型按“由谁消费”归属，而不是按最早出现的位置归属。例如 `AudioStats` 同时用于单曲和完整舞台，定义在
+`shared.audio`；`ReferenceJob` 只服务单曲参考对消，保留在 `features/reference_removal`。功能模块之间不通过
+重导出公共类型建立隐式依赖。
 
 ## 任务执行模型
 
-每个页面只发出开始和取消信号，不直接控制线程。`MainWindow` 根据页面参数建立不可变任务对象，再创建
-`QThread` 和 `ProcessingWorker`。工作线程运行处理函数，并发出进度、成功、失败、取消和结束信号。
+每个页面只发出开始和取消信号，不直接控制线程。`MainWindow` 根据页面参数建立不可变任务对象，并把处理函数交给
+`JobPresenter`。协调器负责页面 running 状态、进度提示与结果展示，并把后台执行交给 `JobRunner`。运行器独占
+`QThread` 和 `ProcessingWorker` 的生命周期，保证同一窗口一次只有一个任务；`ProcessingWorker` 只负责把普通
+Python 调用适配为 Qt 信号。运行器只在线程对象完成 deferred delete 后发出自己的 `finished`，避免窗口关闭或测试
+作用域退出与 Qt 对象析构竞态。主窗口因此只保留导航、任务参数构造和关闭协调。
 
 ```mermaid
 flowchart LR
     page["GUI 页面"] -->|参数| job["不可变任务对象"]
     job --> window["MainWindow"]
-    window -->|创建| worker["QThread + ProcessingWorker"]
+    window --> presenter["JobPresenter<br/>页面状态与结果展示"]
+    presenter --> runner["JobRunner"]
+    runner -->|拥有| worker["QThread + ProcessingWorker"]
     worker --> pipeline["处理函数"]
     cli["CLI"] -->|同步调用| pipeline
     pipeline --> result["处理结果"]
@@ -64,6 +75,9 @@ CLI 创建相同的任务数据类并同步调用同一处理函数。`SIGINT` �
 - 重采样使用 soxr 的高质量流式接口。
 - 单声道输入会扩展为双声道；多于两个声道时处理前取前两个声道。
 - 临时音频通过 `cleanup()` 关闭并删除；长循环可调用 `release_pages()` 释放已处理映射页。
+
+`shared.audio.analysis` 提供分块复制、峰值/RMS 统计和跨工作流共用的 `AudioStats`。这些操作使用相同的
+262,144 帧块大小并响应取消，避免每条管线各自维护一套容易漂移的实现。
 
 WAV 写出先生成同目录临时文件，成功后使用 `os.replace` 原子替换目标。取消或异常不会留下半写入的正式输出。
 
@@ -111,6 +125,7 @@ flowchart TB
 - 翻译文件位于 `src/resources/i18n/`，采用扁平键；中文、英文、日文、韩文的键集合必须完全一致。
 - 日志使用单行格式 `日期 时间 [级别] 模块: 消息`，Qt 与 FFmpeg 消息也会进入统一日志系统。
 - GUI 切换语言时，各页面通过 `retranslate()` 更新控件文本和下拉列表。
+- 各处理管线通过 `shared.progress.report_progress()` 统一翻译并生成 `ProgressEvent`，避免每个功能重复拼装进度协议。
 
 ## 错误边界
 
