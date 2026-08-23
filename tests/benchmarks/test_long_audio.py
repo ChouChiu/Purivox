@@ -6,6 +6,7 @@ import numpy as np
 import pytest
 
 from features.reference_removal.dsp import process_audio
+from features.reference_removal.dsp.algorithms import _processing_layout
 from shared.audio import create_pcm_audio
 from shared.processing import CancellationToken
 
@@ -42,14 +43,17 @@ def test_fifteen_minute_stereo_rss_length_and_seams():
         assert result is output.samples
         assert result.shape == (2, frames)
         assert np.isfinite(result[:, ::sample_rate]).all()
-        # sigma=8 uses a 16-second block with four seconds of overlap.
-        step = 12 * sample_rate
+        # The 2 GiB working-set budget permits about 45-second blocks at 44.1 kHz.
+        # The four-second overlap still supplies the full sigma context.
+        block, _workers = _processing_layout(sample_rate, 8, frames)
+        overlap = min(round(0.5 * 8 * sample_rate), block // 3)
+        step = block - overlap
         seams = np.arange(step, frames, step)
         jumps = np.abs(result[0, seams] - result[0, seams - 1])
         assert float(np.max(jumps, initial=0.0)) < 0.05
         peak_rss_kib = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
         print(f"15-minute benchmark peak RSS: {peak_rss_kib / 1024:.1f} MiB")
-        assert peak_rss_kib <= 1.5 * 1024 * 1024
+        assert peak_rss_kib <= 2 * 1024 * 1024
     finally:
         output.cleanup()
         reference.cleanup()

@@ -1,3 +1,5 @@
+from threading import Barrier, Lock, get_ident
+
 import numpy as np
 import pytest
 from scipy.signal import fftconvolve
@@ -327,6 +329,51 @@ def test_process_audio_writes_supplied_disk_buffer(scene):
         assert np.isfinite(output).all()
     finally:
         target.cleanup()
+
+
+def test_processing_block_uses_two_gib_working_set_budget():
+    from features.reference_removal.dsp.algorithms import _processing_block_frames
+
+    block_44k = _processing_block_frames(44_100, 8)
+    block_96k = _processing_block_frames(96_000, 8)
+
+    assert 44 * 44_100 <= block_44k <= 46 * 44_100
+    assert 20 * 96_000 <= block_96k <= 22 * 96_000
+
+
+def test_long_processing_uses_two_spectral_workers(monkeypatch):
+    sample_rate = 44_100
+    length = 40 * sample_rate
+    mixture = np.zeros((2, length), dtype=np.float32)
+    reference = np.zeros_like(mixture)
+    worker_ids = set()
+    rendezvous = Barrier(2)
+    call_lock = Lock()
+    calls = 0
+    monkeypatch.setattr(
+        "features.reference_removal.dsp.algorithms._MAX_PROCESSING_WORKERS",
+        2,
+    )
+
+    def passthrough(song, *_args):
+        nonlocal calls
+        worker_ids.add(get_ident())
+        with call_lock:
+            call_index = calls
+            calls += 1
+        if call_index < 2:
+            rendezvous.wait(timeout=5)
+        return song.copy()
+
+    monkeypatch.setattr(
+        "features.reference_removal.dsp.algorithms._reference_mask_cancel",
+        passthrough,
+    )
+
+    output = process_audio(mixture, reference, sample_rate, 1.0, 8)
+
+    assert len(worker_ids) == 2
+    assert np.array_equal(output, mixture)
 
 
 def test_process_audio_uses_reference_mask_cancellation(monkeypatch):
