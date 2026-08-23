@@ -6,7 +6,7 @@
 
 ## Design Goals
 
-Audio Station separates its interface, feature implementations, and shared infrastructure. The
+Purivox separates its interface, feature implementations, and shared infrastructure. The
 GUI and CLI only collect parameters, report progress, and present results; independently callable
 task functions perform the actual processing. This lets the desktop application and command line
 reuse the same implementation and makes it possible to test audio pipelines without starting the

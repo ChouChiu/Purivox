@@ -1,13 +1,13 @@
-# Audio Station
+# Purivox
 
 <p align="left">
   <a href="README.md">简体中文</a> · <strong>English</strong>
 </p>
 
-Audio Station is a desktop vocal isolation tool for stage and live recordings, built with
+Purivox is a desktop vocal isolation tool for stage and live recordings, built with
 Python, PySide6, and PySide6-Fluent-Widgets. Its core MR Remove feature provides two workflows:
 
-- **Single**: provide a stage/live recording and the corresponding song source. Audio Station
+- **Single**: provide a stage/live recording and the corresponding song source. Purivox
   automatically synchronizes them and isolates the live vocals.
 - **Full Stage**: provide a continuous stage/live recording and multiple song sources. Audio
   Station identifies where each song occurs and isolates the live vocals in each matched segment.
@@ -50,7 +50,7 @@ uv sync --locked
 Start the graphical interface:
 
 ```bash
-uv run --locked audio-station
+uv run --locked purivox
 ```
 
 You can also start it from the source entry point:
@@ -110,23 +110,23 @@ The tool creates:
 Display the version and help:
 
 ```bash
-uv run --locked audio-station --version
-uv run --locked audio-station --help
-uv run --locked audio-station mr --help
-uv run --locked audio-station ai --help
+uv run --locked purivox --version
+uv run --locked purivox --help
+uv run --locked purivox mr --help
+uv run --locked purivox ai --help
 ```
 
 Run reference cancellation with the default settings:
 
 ```bash
-uv run --locked audio-station mr "live-recording.wav" "song-source.wav" "live-vocal.wav"
+uv run --locked purivox mr "live-recording.wav" "song-source.wav" "live-vocal.wav"
 ```
 
 The CLI also lets you set the removal strength and statistical window, or enable center-focused
 processing:
 
 ```bash
-uv run --locked audio-station mr "live-recording.wav" "song-source.wav" "live-vocal.wav" \
+uv run --locked purivox mr "live-recording.wav" "song-source.wav" "live-vocal.wav" \
   --strength 75 --sigma 8 --align \
   --center-extraction --weak-vocal-protection
 ```
@@ -145,12 +145,13 @@ Common reference-cancellation options:
 Run the AI separation tool independently:
 
 ```bash
-uv run --locked audio-station ai "song.wav" --output-dir "output" --model mdxnet_1
+uv run --locked purivox ai "song.wav" --output-dir "output" --model mdxnet_1
 ```
 
 Available models are `mdxnet_1`, `mdxnet_main`, `kim_vocal`, and `kuielab_b`. Use `--models-dir`
-to specify a weights directory, or set the `MR_REMOVER_MODELS` environment variable for a shared
-model directory.
+to specify a weights directory, or set the `PURIVOX_MODELS` environment variable for a shared
+model directory. The legacy `MR_REMOVER_MODELS` variable remains available as a compatibility
+fallback.
 
 ## Input, Output, and Important Notes
 

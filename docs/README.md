@@ -1,10 +1,10 @@
-# Audio Station 技术文档
+# Purivox 技术文档
 
 <p align="left">
   <strong>简体中文</strong> · <a href="en/README.md">English</a>
 </p>
 
-本目录记录 Audio Station 的内部设计、信号处理方法和开发流程。面向普通用户的安装与操作说明请阅读
+本目录记录 Purivox 的内部设计、信号处理方法和开发流程。面向普通用户的安装与操作说明请阅读
 [项目首页](../README.md)。流程和依赖关系使用 Mermaid 表达，数学模型使用 LaTeX 表达。
 
 ## 文档索引

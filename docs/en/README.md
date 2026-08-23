@@ -1,10 +1,10 @@
-# Audio Station Technical Documentation
+# Purivox Technical Documentation
 
 <p align="left">
   <a href="../README.md">简体中文</a> · <strong>English</strong>
 </p>
 
-This directory documents Audio Station's internal design, signal-processing methods, and
+This directory documents Purivox's internal design, signal-processing methods, and
 development workflow. For installation and usage instructions intended for general users, see
 the [project README](../../README_EN.md). Mermaid diagrams describe flows and dependencies, while
 LaTeX is used for mathematical models.

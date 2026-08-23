@@ -79,7 +79,7 @@ Qt 测试必须使用离屏平台：
 uv run --locked ruff check src tests
 uv run --locked ruff format --check src tests
 QT_QPA_PLATFORM=offscreen uv run --locked pytest
-QT_QPA_PLATFORM=offscreen uv run --locked audio-station --selftest
+QT_QPA_PLATFORM=offscreen uv run --locked purivox --selftest
 uv build
 ```
 
@@ -119,9 +119,9 @@ uv build
 不会进入 wheel 或源码包。构建后应通过 uv 的临时隔离环境安装 wheel 并验证（路径中的版本号按实际产物调整）：
 
 ```bash
-uvx --from ./dist/audio_station-1.0.0-py3-none-any.whl audio-station --version
-QT_QPA_PLATFORM=offscreen uvx --from ./dist/audio_station-1.0.0-py3-none-any.whl \
-  audio-station --selftest
+uvx --from ./dist/purivox-1.0.0-py3-none-any.whl purivox --version
+QT_QPA_PLATFORM=offscreen uvx --from ./dist/purivox-1.0.0-py3-none-any.whl \
+  purivox --selftest
 ```
 
 ## Linux 独立程序

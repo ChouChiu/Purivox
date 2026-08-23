@@ -100,7 +100,7 @@ Qt tests must use the offscreen platform:
 uv run --locked ruff check src tests
 uv run --locked ruff format --check src tests
 QT_QPA_PLATFORM=offscreen uv run --locked pytest
-QT_QPA_PLATFORM=offscreen uv run --locked audio-station --selftest
+QT_QPA_PLATFORM=offscreen uv run --locked purivox --selftest
 uv build
 ```
 
@@ -148,9 +148,9 @@ or source distribution. After building, install the wheel in a temporary uv envi
 verify it; adjust the version in the path to match the actual artifact:
 
 ```bash
-uvx --from ./dist/audio_station-1.0.0-py3-none-any.whl audio-station --version
-QT_QPA_PLATFORM=offscreen uvx --from ./dist/audio_station-1.0.0-py3-none-any.whl \
-  audio-station --selftest
+uvx --from ./dist/purivox-1.0.0-py3-none-any.whl purivox --version
+QT_QPA_PLATFORM=offscreen uvx --from ./dist/purivox-1.0.0-py3-none-any.whl \
+  purivox --selftest
 ```
 
 ## Linux Standalone Application

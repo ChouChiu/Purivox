@@ -1,10 +1,10 @@
-# Audio Station
+# Purivox
 
 <p align="left">
   <strong>简体中文</strong> · <a href="README_EN.md">English</a>
 </p>
 
-Audio Station 是一款面向舞台和现场录音的桌面垫音消除工具，使用 Python、PySide6 和
+Purivox 是一款面向舞台和现场录音的桌面垫音消除工具，使用 Python、PySide6 和
 PySide6-Fluent-Widgets 构建。核心 MR Remove 功能提供两种处理方式：
 
 - **单曲垫音消除**：输入舞台 / 现场音频和对应歌曲音源，自动同步并消除垫音。
@@ -42,7 +42,7 @@ uv sync --locked
 启动图形界面：
 
 ```bash
-uv run --locked audio-station
+uv run --locked purivox
 ```
 
 也可以从源码入口启动：
@@ -91,22 +91,22 @@ AI 音轨分离面向普通的两轨分离需求，不使用歌曲音源，也�
 查看版本和帮助：
 
 ```bash
-uv run --locked audio-station --version
-uv run --locked audio-station --help
-uv run --locked audio-station mr --help
-uv run --locked audio-station ai --help
+uv run --locked purivox --version
+uv run --locked purivox --help
+uv run --locked purivox mr --help
+uv run --locked purivox ai --help
 ```
 
 使用默认参数进行参考对消：
 
 ```bash
-uv run --locked audio-station mr "现场录音.wav" "歌曲音源.wav" "现场人声.wav"
+uv run --locked purivox mr "现场录音.wav" "歌曲音源.wav" "现场人声.wav"
 ```
 
 命令行可进一步指定强度、统计窗口并开启中置处理：
 
 ```bash
-uv run --locked audio-station mr "现场录音.wav" "歌曲音源.wav" "现场人声.wav" \
+uv run --locked purivox mr "现场录音.wav" "歌曲音源.wav" "现场人声.wav" \
   --strength 75 --sigma 8 --align \
   --center-extraction --weak-vocal-protection
 ```
@@ -125,11 +125,12 @@ uv run --locked audio-station mr "现场录音.wav" "歌曲音源.wav" "现场�
 独立运行 AI 分离工具：
 
 ```bash
-uv run --locked audio-station ai "歌曲.wav" --output-dir "输出目录" --model mdxnet_1
+uv run --locked purivox ai "歌曲.wav" --output-dir "输出目录" --model mdxnet_1
 ```
 
 可用模型为 `mdxnet_1`、`mdxnet_main`、`kim_vocal` 和 `kuielab_b`。可用
-`--models-dir` 指定权重目录，也可通过 `MR_REMOVER_MODELS` 环境变量设置公共模型目录。
+`--models-dir` 指定权重目录，也可通过 `PURIVOX_MODELS` 环境变量设置公共模型目录。
+旧版的 `MR_REMOVER_MODELS` 变量仍可作为兼容回退。
 
 ## 输入、输出与注意事项
 

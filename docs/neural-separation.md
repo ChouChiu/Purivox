@@ -41,7 +41,7 @@ flowchart LR
 模型按以下顺序查找：
 
 1. 任务参数 `--models-dir` 指定的目录；
-2. `MR_REMOVER_MODELS` 环境变量；
+2. `PURIVOX_MODELS` 环境变量（旧版 `MR_REMOVER_MODELS` 仍作为兼容回退）；
 3. 系统应用数据目录中的 `models/`；
 4. 开发仓库根目录的 `models/`。
 

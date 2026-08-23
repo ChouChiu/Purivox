@@ -90,7 +90,7 @@ jobs:
 
       - name: Run self-test
         id: self-test
-        run: uv run --locked audio-station --selftest 2>&1 | tee logs/self-test.log
+        run: uv run --locked purivox --selftest 2>&1 | tee logs/self-test.log
 
       - name: Check test report
         id: test-report
@@ -228,14 +228,14 @@ jobs:
 
       - name: Archive standalone
         run: |
-          tar -C dist -czf dist/audio-station-linux-x86_64.tar.gz "Audio Station.dist" \
+          tar -C dist -czf dist/purivox-linux-x86_64.tar.gz "Purivox.dist" \
             2>&1 | tee logs/standalone.log
 
       - name: Generate checksums
         run: |
-          sha256sum dist/audio_station-*.whl dist/audio_station-*.tar.gz \
+          sha256sum dist/purivox-*.whl dist/purivox-*.tar.gz \
             | tee dist/SHA256SUMS-python logs/checksums.log
-          sha256sum dist/audio-station-linux-x86_64.tar.gz \
+          sha256sum dist/purivox-linux-x86_64.tar.gz \
             | tee dist/SHA256SUMS-linux | tee -a logs/checksums.log
 
       - name: Upload distributions
@@ -244,8 +244,8 @@ jobs:
         with:
           name: python-distributions-${{ github.run_id }}
           path: |
-            dist/audio_station-*.whl
-            dist/audio_station-*.tar.gz
+            dist/purivox-*.whl
+            dist/purivox-*.tar.gz
             dist/SHA256SUMS-python
           if-no-files-found: error
           retention-days: 14
@@ -257,7 +257,7 @@ jobs:
         with:
           name: linux-standalone-${{ github.run_id }}
           path: |
-            dist/audio-station-linux-x86_64.tar.gz
+            dist/purivox-linux-x86_64.tar.gz
             dist/SHA256SUMS-linux
           if-no-files-found: error
           retention-days: 14
