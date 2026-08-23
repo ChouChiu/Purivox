@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import math
 import mmap
+import os
+from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
 from scipy.ndimage import gaussian_filter, gaussian_filter1d, uniform_filter1d
@@ -15,6 +17,10 @@ _CONFIDENCE_HIGH = 0.35
 _DECISION_MEMORY = 0.8
 _SPECTRAL_OVERSUBTRACTION = 1.5
 _FAST_CONFIDENCE_SECONDS = 0.12
+_SPECTRAL_CELL_BUDGET = 4_000_000
+_MAX_PROCESSING_BLOCK_SECONDS = 48
+_MAX_PROCESSING_WORKERS = min(5, os.cpu_count() or 1)
+_MAX_PARALLEL_SPECTRAL_CELLS = 9_000_000
 
 
 def _release_mapped_pages(values: np.ndarray) -> None:
@@ -65,10 +71,14 @@ def _spectral_smooth(
 
 def _weighted_smooth(
     values: np.ndarray,
-    weights: np.ndarray,
+    weights: np.ndarray | None,
     sigma_time: float,
+    denominator: np.ndarray | None = None,
 ) -> np.ndarray:
-    denominator = _spectral_smooth(weights, sigma_time) + 1e-12
+    if weights is None:
+        return _spectral_smooth(values, sigma_time)
+    if denominator is None:
+        denominator = _spectral_smooth(weights, sigma_time) + 1e-12
     numerator = _spectral_smooth(values * weights, sigma_time)
     return numerator / denominator
 
@@ -186,6 +196,51 @@ def _analysis_fft_size(sample_rate: int) -> int:
     return int(np.clip(2**exponent, 512, 4096))
 
 
+def _processing_block_frames(
+    sample_rate: int,
+    sigma: float,
+    spectral_cell_budget: int = _SPECTRAL_CELL_BUDGET,
+) -> int:
+    """Use the 2 GiB working-set budget to reduce repeated overlap analysis."""
+    context_frames = max(
+        round((1.5 * float(sigma) + 4.0) * sample_rate),
+        12 * sample_rate,
+    )
+    n_fft = _analysis_fft_size(sample_rate)
+    hop = n_fft // 4
+    bins = n_fft // 2 + 1
+    # A spectral cell expands into several complex and real work arrays.  Four
+    # million cells keeps measured peak RSS below 2 GiB while allowing roughly
+    # 45 seconds per block at 44.1 kHz instead of the previous 16 seconds.
+    budget_stft_frames = max(spectral_cell_budget // bins, 2)
+    budget_audio_frames = max((budget_stft_frames - 2) * hop, 1)
+    throughput_frames = min(
+        _MAX_PROCESSING_BLOCK_SECONDS * sample_rate,
+        budget_audio_frames,
+    )
+    return max(context_frames, throughput_frames)
+
+
+def _processing_workers(sample_rate: int, sigma: float, length: int) -> int:
+    context_frames = max(
+        round((1.5 * float(sigma) + 4.0) * sample_rate),
+        12 * sample_rate,
+    )
+    n_fft = _analysis_fft_size(sample_rate)
+    context_stft_frames = math.ceil(context_frames / (n_fft // 4)) + 2
+    context_cells = context_stft_frames * (n_fft // 2 + 1)
+    if length < 2 * context_frames:
+        return 1
+    memory_limited_workers = _MAX_PARALLEL_SPECTRAL_CELLS // context_cells
+    return max(1, min(_MAX_PROCESSING_WORKERS, memory_limited_workers))
+
+
+def _processing_layout(sample_rate: int, sigma: float, length: int) -> tuple[int, int]:
+    workers = _processing_workers(sample_rate, sigma, length)
+    block = _processing_block_frames(sample_rate, sigma, _SPECTRAL_CELL_BUDGET // workers)
+    return block, workers
+
+
 def _predict_reference_spectra(
     song_spectra: list[np.ndarray],
     reference_spectra: list[np.ndarray],
@@ -196,11 +251,12 @@ def _predict_reference_spectra(
     """Predict reference-correlated spectra without subtracting them from the mix."""
     epsilon = 1e-12
     x0, x1 = reference_spectra[:2]
-    if weights is None:
-        weights = np.ones(x0.shape, dtype=np.float32)
-    r00 = _weighted_smooth(np.abs(x0) ** 2, weights, sigma_frames).real
-    r11 = _weighted_smooth(np.abs(x1) ** 2, weights, sigma_frames).real
-    r01 = _weighted_smooth(x0 * np.conj(x1), weights, sigma_frames)
+    denominator = None
+    if weights is not None:
+        denominator = _spectral_smooth(weights, sigma_frames) + 1e-12
+    r00 = _weighted_smooth(np.abs(x0) ** 2, weights, sigma_frames, denominator).real
+    r11 = _weighted_smooth(np.abs(x1) ** 2, weights, sigma_frames, denominator).real
+    r01 = _weighted_smooth(x0 * np.conj(x1), weights, sigma_frames, denominator)
     loading = 2e-4 * 0.5 * (r00 + r11) + epsilon
     r00 += loading
     r11 += loading
@@ -208,8 +264,8 @@ def _predict_reference_spectra(
     predicted: list[np.ndarray] = []
     for channel in song_spectra:
         token.raise_if_cancelled()
-        ry0 = _weighted_smooth(channel * np.conj(x0), weights, sigma_frames)
-        ry1 = _weighted_smooth(channel * np.conj(x1), weights, sigma_frames)
+        ry0 = _weighted_smooth(channel * np.conj(x0), weights, sigma_frames, denominator)
+        ry1 = _weighted_smooth(channel * np.conj(x1), weights, sigma_frames, denominator)
         h0 = (ry0 * r11 - ry1 * np.conj(r01)) / determinant
         h1 = (ry1 * r00 - ry0 * r01) / determinant
         row_gain = np.abs(h0) + np.abs(h1)
@@ -234,15 +290,13 @@ def _reference_mask_cancel(
     polarity subtraction.
     """
     length = min(song.shape[1], reference.shape[1])
-    mix = np.asarray(song[:, :length], dtype=np.float64)
-    accompaniment = np.asarray(reference[:, :length], dtype=np.float64)
+    mix = np.asarray(song[:, :length], dtype=np.float32)
+    accompaniment = np.asarray(reference[:, :length], dtype=np.float32)
     n_fft = _analysis_fft_size(sample_rate)
     hop = n_fft // 4
-    song_spectra = [stft(channel, n_fft=n_fft, hop=hop).astype(np.complex64) for channel in mix]
+    song_spectra = [stft(channel, n_fft=n_fft, hop=hop) for channel in mix]
     token.raise_if_cancelled()
-    reference_spectra = [
-        stft(channel, n_fft=n_fft, hop=hop).astype(np.complex64) for channel in accompaniment[:2]
-    ]
+    reference_spectra = [stft(channel, n_fft=n_fft, hop=hop) for channel in accompaniment[:2]]
     if not reference_spectra:
         return mix.copy()
     if len(reference_spectra) == 1:
@@ -360,7 +414,7 @@ def _reference_mask_cancel(
     token.raise_if_cancelled()
     return np.asarray(
         [istft(channel * effective_mask, hop=hop, length=length) for channel in song_spectra],
-        dtype=np.float64,
+        dtype=np.float32,
     )
 
 
@@ -393,20 +447,17 @@ def process_audio(
     if strength == 0:
         result[:] = mix
         return result
-    # Keep enough samples for the slow transfer estimate without holding a
-    # fixed 30-second collection of complex spectra for every sigma setting.
-    # The common sigma=3/8 modes use 12/16-second blocks; sigma=16 uses 28.
-    block = max(
-        round((1.5 * float(sigma) + 4.0) * sample_rate),
-        12 * sample_rate,
-    )
+    # Long recordings scale across independent spectral workers.  The layout
+    # divides the working-set budget; large contexts automatically use fewer.
+    block, workers = _processing_layout(sample_rate, sigma, length)
     overlap = min(
         max(round(0.5 * float(sigma) * sample_rate), 2 * sample_rate),
         block // 3,
     )
     step = block - overlap
     starts = list(range(0, length, step))
-    for index, start in enumerate(starts):
+
+    def process_block(index: int, start: int) -> tuple[int, int, int, np.ndarray]:
         cancel.raise_if_cancelled()
         end = min(start + block, length)
         reference_end = min(end, accompaniment.shape[1])
@@ -443,20 +494,28 @@ def process_audio(
                 open_mic_focus,
                 cancel,
             )
-        fade = min(overlap, end - start) if index > 0 else 0
-        if fade:
-            phase = np.linspace(0, np.pi / 2, fade, dtype=np.float64)
-            old_weight = np.cos(phase) ** 2
-            new_weight = np.sin(phase) ** 2
-            result[:, start : start + fade] = (
-                result[:, start : start + fade] * old_weight + processed[:, :fade] * new_weight
-            )
-        result[:, start + fade : end] = processed[:, fade : end - start]
-        _release_mapped_pages(mix)
-        _release_mapped_pages(accompaniment)
-        _release_mapped_pages(result)
-        if end == length:
-            break
+        return index, start, end, processed
+
+    with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="purivox-dsp") as executor:
+        indexed_starts = list(enumerate(starts))
+        for batch_start in range(0, len(indexed_starts), workers):
+            batch = indexed_starts[batch_start : batch_start + workers]
+            futures = [executor.submit(process_block, index, start) for index, start in batch]
+            for future in futures:
+                index, start, end, processed = future.result()
+                fade = min(overlap, end - start) if index > 0 else 0
+                if fade:
+                    phase = np.linspace(0, np.pi / 2, fade, dtype=np.float32)
+                    old_weight = np.cos(phase) ** 2
+                    new_weight = np.sin(phase) ** 2
+                    result[:, start : start + fade] = (
+                        result[:, start : start + fade] * old_weight
+                        + processed[:, :fade] * new_weight
+                    )
+                result[:, start + fade : end] = processed[:, fade : end - start]
+            _release_mapped_pages(mix)
+            _release_mapped_pages(accompaniment)
+            _release_mapped_pages(result)
     peak = 0.0
     cleanup_block = 262_144
     for start in range(0, length, cleanup_block):
