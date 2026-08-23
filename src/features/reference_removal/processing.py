@@ -80,12 +80,12 @@ def run_reference_job(
             except BaseException:
                 alignment.cleanup()
                 raise
-        length = min(song.frames, reference.frames)
+        length = song.frames
         processed_audio = create_pcm_audio(song.channels, length, song.sample_rate)
         report_progress(progress, 32, job.language, "processing")
         process_audio(
-            song.samples[:, :length],
-            reference.samples[:, :length],
+            song.samples,
+            reference.samples,
             song.sample_rate,
             job.strength / 100.0,
             job.sigma,

@@ -14,6 +14,7 @@ _CONFIDENCE_LOW = 0.03
 _CONFIDENCE_HIGH = 0.35
 _DECISION_MEMORY = 0.8
 _SPECTRAL_OVERSUBTRACTION = 1.5
+_FAST_CONFIDENCE_SECONDS = 0.12
 
 
 def _release_mapped_pages(values: np.ndarray) -> None:
@@ -75,6 +76,42 @@ def _weighted_smooth(
 def _smoothstep(low: float, high: float, values: np.ndarray) -> np.ndarray:
     scaled = np.clip((values - low) / (high - low), 0.0, 1.0)
     return scaled * scaled * (3.0 - 2.0 * scaled)
+
+
+def _erb_weighted_confidence(
+    confidence: np.ndarray,
+    reference_power: np.ndarray,
+    frequencies: np.ndarray,
+) -> np.ndarray:
+    """Stabilize per-bin confidence in approximately one-ERB auditory bands.
+
+    The band estimate is weighted by predicted reference power, so a narrow
+    accompaniment partial is not diluted by neighbouring empty FFT bins. This
+    rejects isolated coherence spikes while retaining the fine-bin mask needed
+    to avoid suppressing unrelated vocals in the same broad frequency region.
+    """
+    if confidence.shape != reference_power.shape or confidence.shape[1] != frequencies.size:
+        raise ValueError("confidence, reference power and frequencies must share FFT bins")
+    erb_number = 21.4 * np.log10(1.0 + 0.00437 * frequencies)
+    band_count = max(round(float(erb_number[-1])), 1)
+    band_index = np.minimum(
+        np.floor(erb_number * band_count / max(float(erb_number[-1]), 1e-12)).astype(int),
+        band_count - 1,
+    )
+    stabilized = np.empty_like(confidence)
+    for band in range(band_count):
+        bins = band_index == band
+        if not np.any(bins):
+            continue
+        weights = reference_power[:, bins]
+        numerator = np.sum(confidence[:, bins] * weights, axis=1, keepdims=True)
+        denominator = np.sum(weights, axis=1, keepdims=True)
+        stabilized[:, bins] = np.divide(
+            numerator,
+            denominator + 1e-12,
+            out=np.zeros_like(numerator),
+        )
+    return stabilized
 
 
 def _phantom_center_enhance(
@@ -238,6 +275,11 @@ def _reference_mask_cancel(
     removable_power = np.zeros_like(mixture_power)
     predicted_power = np.zeros_like(mixture_power)
     confidence_sigma = max(sigma_frames / 2.0, 1.0)
+    fast_confidence_sigma = max(
+        _FAST_CONFIDENCE_SECONDS * sample_rate / hop / 6.0,
+        1.0,
+    )
+    frequencies = fft_frequencies(sample_rate, n_fft)
     for mixture_channel, predicted_channel in zip(song_spectra, predicted, strict=True):
         channel_power = np.abs(mixture_channel) ** 2
         reference_power = np.abs(predicted_channel) ** 2
@@ -252,7 +294,24 @@ def _reference_mask_cancel(
             0.0,
             1.0,
         )
-        confidence = _smoothstep(_CONFIDENCE_LOW, _CONFIDENCE_HIGH, coherence)
+        fast_mix = _spectral_smooth(channel_power, fast_confidence_sigma, 0.5)
+        fast_reference = _spectral_smooth(reference_power, fast_confidence_sigma, 0.5)
+        fast_cross = _spectral_smooth(
+            mixture_channel * np.conj(predicted_channel),
+            fast_confidence_sigma,
+            0.5,
+        )
+        fast_coherence = np.clip(
+            np.abs(fast_cross) ** 2 / (fast_mix * fast_reference + 1e-12),
+            0.0,
+            1.0,
+        )
+        slow_confidence = _smoothstep(_CONFIDENCE_LOW, _CONFIDENCE_HIGH, coherence)
+        fast_confidence = _smoothstep(0.02, 0.30, fast_coherence)
+        confidence = slow_confidence * (0.2 + 0.8 * fast_confidence)
+        confidence = np.sqrt(
+            confidence * _erb_weighted_confidence(confidence, reference_power, frequencies)
+        )
         mixture_power += channel_power
         predicted_power += reference_power
         removable_power += confidence * reference_power
@@ -323,8 +382,8 @@ def process_audio(
     if mix.ndim != 2 or accompaniment.ndim != 2 or sample_rate <= 0:
         raise ValueError("audio must have shape [channels, frames] and a positive sample rate")
     strength = float(np.clip(strength, 0.0, 1.0))
-    length = min(mix.shape[1], accompaniment.shape[1])
-    mix, accompaniment = mix[:, :length], accompaniment[:, :length]
+    length = mix.shape[1]
+    mix = mix[:, :length]
     if output is None:
         result = np.empty((mix.shape[0], length), dtype=np.float32)
     else:
@@ -334,16 +393,39 @@ def process_audio(
     if strength == 0:
         result[:] = mix
         return result
-    block = 30 * sample_rate
-    overlap = min(2 * sample_rate, block // 4)
+    # Keep enough samples for the slow transfer estimate without holding a
+    # fixed 30-second collection of complex spectra for every sigma setting.
+    # The common sigma=3/8 modes use 12/16-second blocks; sigma=16 uses 28.
+    block = max(
+        round((1.5 * float(sigma) + 4.0) * sample_rate),
+        12 * sample_rate,
+    )
+    overlap = min(
+        max(round(0.5 * float(sigma) * sample_rate), 2 * sample_rate),
+        block // 3,
+    )
     step = block - overlap
     starts = list(range(0, length, step))
     for index, start in enumerate(starts):
         cancel.raise_if_cancelled()
         end = min(start + block, length)
+        reference_end = min(end, accompaniment.shape[1])
+        if start >= reference_end:
+            reference_block = np.zeros(
+                (accompaniment.shape[0], end - start),
+                dtype=np.float32,
+            )
+        elif reference_end < end:
+            reference_block = np.zeros(
+                (accompaniment.shape[0], end - start),
+                dtype=np.float32,
+            )
+            reference_block[:, : reference_end - start] = accompaniment[:, start:reference_end]
+        else:
+            reference_block = accompaniment[:, start:end]
         processed = _reference_mask_cancel(
             mix[:, start:end],
-            accompaniment[:, start:end],
+            reference_block,
             sample_rate,
             strength,
             sigma,
