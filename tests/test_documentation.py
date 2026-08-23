@@ -8,7 +8,11 @@ MARKDOWN_LINK = re.compile(r"\[[^]]+]\(([^)]+)\)")
 
 
 def test_internal_markdown_links_resolve():
-    documents = (ROOT / "README.md", *(ROOT / "docs").glob("*.md"))
+    documents = (
+        ROOT / "README.md",
+        ROOT / "README_EN.md",
+        *(ROOT / "docs").glob("*.md"),
+    )
     broken: list[str] = []
     for document in documents:
         for target in MARKDOWN_LINK.findall(document.read_text(encoding="utf-8")):
@@ -28,3 +32,11 @@ def test_readme_links_every_technical_document():
         if path.name != "README.md" and f"docs/{path.name}" not in readme
     ]
     assert not missing, f"technical documents not linked from README.md: {missing}"
+
+
+def test_readmes_link_to_each_other():
+    chinese_readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    english_readme = (ROOT / "README_EN.md").read_text(encoding="utf-8")
+
+    assert 'href="README_EN.md"' in chinese_readme
+    assert 'href="README.md"' in english_readme

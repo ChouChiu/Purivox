@@ -30,6 +30,14 @@ def test_unknown_language_falls_back_to_zh_cn():
     assert tr("xx_yy", "params") == tr("zh_cn", "params")
 
 
+def test_english_mr_terms_match_product_workflows():
+    assert tr("en_us", "nav_mr") == "Vocal Isolation"
+    assert tr("en_us", "mr_tab_single") == "Single"
+    assert tr("en_us", "mr_tab_full_stage") == "Full Stage"
+    assert tr("en_us", "mr_single_title") == "Single Vocal Isolation"
+    assert tr("en_us", "nav_full_stage") == "Full Stage Vocal Isolation"
+
+
 def _literal_tr_keys() -> set[str]:
     keys: set[str] = set()
     for path in Path("src").rglob("*.py"):

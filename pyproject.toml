@@ -55,6 +55,7 @@ include = [
   "deployment",
   "docs",
   "README.md",
+  "README_EN.md",
   "LICENSE",
   "pyproject.toml",
   "pysidedeploy.spec",

@@ -1,5 +1,9 @@
 # Audio Station
 
+<p align="center">
+  <strong>简体中文</strong> · <a href="README_EN.md">English</a>
+</p>
+
 Audio Station 是一款面向舞台和现场录音的桌面垫音消除工具，使用 Python、PySide6 和
 PySide6-Fluent-Widgets 构建。核心 MR Remove 功能提供两种处理方式：
 
