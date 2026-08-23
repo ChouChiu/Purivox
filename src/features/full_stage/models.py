@@ -72,7 +72,7 @@ class FullStageJob:
     include_fragments: bool = True
     auto_align: bool = True
     center_extraction: bool = False
-    weak_vocal_protection: bool = False
+    open_mic_focus: bool = False
 
     def __post_init__(self) -> None:
         if not self.sources:
@@ -81,8 +81,8 @@ class FullStageJob:
             raise ValueError("strength must be in [0, 100]")
         if self.sigma not in {1, 3, 8, 16}:
             raise ValueError("sigma must be one of 1, 3, 8, 16")
-        if self.weak_vocal_protection and not self.center_extraction:
-            raise ValueError("weak vocal protection requires center extraction")
+        if self.open_mic_focus and not self.center_extraction:
+            raise ValueError("open-mic focus requires center extraction")
         resolved_stage = self.stage.expanduser().resolve()
         resolved_output = self.output.expanduser().resolve()
         resolved_sources = tuple(source.expanduser().resolve() for source in self.sources)

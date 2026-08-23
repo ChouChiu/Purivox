@@ -95,12 +95,12 @@ def run_full_stage_job(
 ) -> FullStageResult:
     logger.info(
         "full-stage render settings: strength=%d sigma=%d auto_align=%s "
-        "center_extraction=%s weak_vocal_protection=%s include_fragments=%s",
+        "center_extraction=%s open_mic_focus=%s include_fragments=%s",
         job.strength,
         job.sigma,
         job.auto_align,
         job.center_extraction,
-        job.weak_vocal_protection,
+        job.open_mic_focus,
         job.include_fragments,
     )
     if analysis is None:
@@ -201,7 +201,7 @@ def run_full_stage_job(
                     token,
                     processed_audio.samples,
                     center_extraction=job.center_extraction,
-                    weak_vocal_protection=job.weak_vocal_protection,
+                    open_mic_focus=job.open_mic_focus,
                 )
                 _blend_segment(
                     output.samples[:, stage_start:stage_end],

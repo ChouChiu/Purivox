@@ -87,7 +87,6 @@ files = [
   "src/app/version.py",
   "src/app/worker.py",
   "src/entrypoints/__init__.py",
-  "src/entrypoints/__main__.py",
   "src/entrypoints/cli.py",
   "src/entrypoints/gui.py",
   "src/features/__init__.py",

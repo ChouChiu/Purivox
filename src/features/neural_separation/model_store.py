@@ -22,25 +22,13 @@ def default_models_dir() -> Path:
     return Path(root or Path.home() / ".local/share/purivox") / "models"
 
 
-def _legacy_models_dirs() -> tuple[Path, ...]:
-    generic = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.GenericDataLocation)
-    root = Path(generic or Path.home() / ".local/share")
-    return (
-        root / "Audio Station" / "Audio Station" / "models",
-        root / "audio-station" / "models",
-    )
-
-
 def candidate_model_dirs(override: Path | None = None) -> tuple[Path, ...]:
     candidates: list[Path] = []
     if override:
         candidates.append(override.expanduser())
     if env := os.environ.get("PURIVOX_MODELS"):
         candidates.append(Path(env).expanduser())
-    elif legacy_env := os.environ.get("MR_REMOVER_MODELS"):
-        candidates.append(Path(legacy_env).expanduser())
     candidates.append(default_models_dir())
-    candidates.extend(_legacy_models_dirs())
     repository_models = Path(__file__).resolve().parents[3] / "models"
     candidates.append(repository_models)
     return tuple(dict.fromkeys(path.resolve() for path in candidates))

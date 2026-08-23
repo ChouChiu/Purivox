@@ -73,16 +73,16 @@ class MrPage(PageScrollArea):
         self.strength.setValue(75)
         self.center_extraction_label, self.center_extraction = BodyLabel(), SwitchButton()
         self.center_extraction.setChecked(bool(cfg.center_extraction.value))
-        self.weak_vocal_protection_label, self.weak_vocal_protection = (
+        self.open_mic_focus_label, self.open_mic_focus = (
             BodyLabel(),
             SwitchButton(),
         )
-        self.weak_vocal_protection.setChecked(
-            bool(cfg.weak_vocal_protection.value) and self.center_extraction.isChecked()
+        self.open_mic_focus.setChecked(
+            bool(cfg.open_mic_focus.value) and self.center_extraction.isChecked()
         )
         self.parameters.add_row(self.strength_label, self.strength, self.strength_value)
         self.parameters.add_row(self.center_extraction_label, self.center_extraction)
-        self.parameters.add_row(self.weak_vocal_protection_label, self.weak_vocal_protection)
+        self.parameters.add_row(self.open_mic_focus_label, self.open_mic_focus)
         self.layout.addWidget(self.parameters)
 
         self.status_card = FormCard()
@@ -207,18 +207,18 @@ class MrPage(PageScrollArea):
         self.output_edit.setPlaceholderText(tr(language, "output_name_hint"))
         self.strength_label.setText(tr(language, "strength"))
         self.center_extraction_label.setText(tr(language, "center_extraction"))
-        self.weak_vocal_protection_label.setText(tr(language, "weak_vocal_protection"))
+        self.open_mic_focus_label.setText(tr(language, "open_mic_focus"))
         for button in (self.song_button, self.acc_button, self.output_button):
             button.setText(tr(language, "browse"))
         self.auto_find.setOnText(tr(language, "auto_find_on"))
         self.auto_find.setOffText(tr(language, "auto_find_off"))
-        for switch in (self.center_extraction, self.weak_vocal_protection):
+        for switch in (self.center_extraction, self.open_mic_focus):
             switch.setOnText(tr(language, "switch_on"))
             switch.setOffText(tr(language, "switch_off"))
         self.center_extraction.setToolTip(tr(language, "center_extraction_tip"))
         self.center_extraction_label.setToolTip(tr(language, "center_extraction_tip"))
-        self.weak_vocal_protection.setToolTip(tr(language, "weak_vocal_protection_tip"))
-        self.weak_vocal_protection_label.setToolTip(tr(language, "weak_vocal_protection_tip"))
+        self.open_mic_focus.setToolTip(tr(language, "open_mic_focus_tip"))
+        self.open_mic_focus_label.setToolTip(tr(language, "open_mic_focus_tip"))
         self.cancel_button.setText(tr(language, "cancel"))
         self.start_button.setText(tr(language, "start"))
         self.preview_stop.setText(tr(language, "preview_stop"))
@@ -236,8 +236,8 @@ class MrPage(PageScrollArea):
     def _sync_enhancement_controls(self, _checked: bool | None = None) -> None:
         center_enabled = self.center_extraction.isChecked()
         if not center_enabled:
-            self.weak_vocal_protection.setChecked(False)
-        self.weak_vocal_protection.setEnabled(center_enabled)
+            self.open_mic_focus.setChecked(False)
+        self.open_mic_focus.setEnabled(center_enabled)
 
     def set_running(self, running: bool) -> None:
         self.start_button.setEnabled(not running)
@@ -250,7 +250,7 @@ class MrPage(PageScrollArea):
             self.strength,
             self.auto_find,
             self.center_extraction,
-            self.weak_vocal_protection,
+            self.open_mic_focus,
         ):
             control.setEnabled(not running)
         if not running:

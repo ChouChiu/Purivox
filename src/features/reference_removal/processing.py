@@ -37,11 +37,11 @@ def run_reference_job(
     progress: ProgressCallback = lambda _event: None,
 ) -> ProcessingResult:
     logger.info(
-        "starting reference job: song=%s accompaniment=%s center=%s protection=%s",
+        "starting reference job: song=%s accompaniment=%s center=%s open_mic_focus=%s",
         job.song,
         job.accompaniment,
         job.center_extraction,
-        job.weak_vocal_protection,
+        job.open_mic_focus,
     )
     _validate_reference_paths(job.song, job.accompaniment, job.output)
     song = reference = processed_audio = hi_res_audio = None
@@ -92,7 +92,7 @@ def run_reference_job(
             token,
             processed_audio.samples,
             center_extraction=job.center_extraction,
-            weak_vocal_protection=job.weak_vocal_protection,
+            open_mic_focus=job.open_mic_focus,
         )
         report_progress(progress, 84, job.language, "preparing_hi_res")
         hi_res_audio = prepare_hi_res_output(processed_audio, token)

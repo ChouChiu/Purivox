@@ -118,7 +118,7 @@ def _phantom_center_enhance(
     audio: np.ndarray,
     sample_rate: int,
     amount: float,
-    weak_vocal_protection: bool,
+    open_mic_focus: bool,
     token: CancellationToken,
 ) -> np.ndarray:
     """Apply the confirmed Audition/PhantomCenter-style vocal enhancement."""
@@ -169,7 +169,7 @@ def _phantom_center_enhance(
     focused = []
     for channel in spectra:
         full_target = side_floor * channel + (center_gain - side_floor) * center
-        if weak_vocal_protection:
+        if open_mic_focus:
             full_target += (1.0 - side_floor) * (1.0 - center_presence) * fallback_center
         target = channel + mix * (full_target - channel)
         focused.append(channel + vocal_band[None, :] * (target - channel))
@@ -374,7 +374,7 @@ def process_audio(
     output: np.ndarray | None = None,
     *,
     center_extraction: bool = False,
-    weak_vocal_protection: bool = False,
+    open_mic_focus: bool = False,
 ) -> np.ndarray:
     cancel = token or CancellationToken()
     mix = np.asarray(song, dtype=np.float32)
@@ -440,7 +440,7 @@ def process_audio(
                 processed,
                 sample_rate,
                 center_amount,
-                weak_vocal_protection,
+                open_mic_focus,
                 cancel,
             )
         fade = min(overlap, end - start) if index > 0 else 0

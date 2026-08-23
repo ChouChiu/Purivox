@@ -46,10 +46,10 @@ def build_parser() -> argparse.ArgumentParser:
         help="apply phantom-center vocal extraction after reference cancellation",
     )
     reference.add_argument(
-        "--weak-vocal-protection",
+        "--open-mic-focus",
         action=argparse.BooleanOptionalAction,
         default=False,
-        help="protect a quiet center vocal; requires --center-extraction",
+        help="preserve a quiet open mic while suppressing closed-mic sections; requires --center-extraction",
     )
     reference.add_argument("--lang", choices=("zh_cn", "en_us", "ja_jp", "ko_kr"), default="zh_cn")
 
@@ -100,7 +100,7 @@ def main(argv: list[str] | None = None) -> int:
                 auto_align=args.align,
                 language=args.lang,
                 center_extraction=args.center_extraction,
-                weak_vocal_protection=args.weak_vocal_protection,
+                open_mic_focus=args.open_mic_focus,
             )
             result = run_reference_job(job, token, _print_progress)
         else:

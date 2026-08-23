@@ -177,14 +177,14 @@ class MainWindow(FluentWindow):
                 auto_align=True,
                 language=self.language,
                 center_extraction=self.mr.center_extraction.isChecked(),
-                weak_vocal_protection=self.mr.weak_vocal_protection.isChecked(),
+                open_mic_focus=self.mr.open_mic_focus.isChecked(),
             )
         except (ValueError, TypeError):
             self._warning("warn_invalid_parameters")
             return
         cfg.set(cfg.auto_find, self.mr.auto_find.isChecked())
         cfg.set(cfg.center_extraction, job.center_extraction)
-        cfg.set(cfg.weak_vocal_protection, job.weak_vocal_protection)
+        cfg.set(cfg.open_mic_focus, job.open_mic_focus)
         self.mr.clear_result()
         self._start_worker(self.mr, partial(run_reference_job, job))
 
@@ -228,13 +228,13 @@ class MainWindow(FluentWindow):
                 include_fragments=self.full_stage.include_fragments.isChecked(),
                 auto_align=True,
                 center_extraction=self.full_stage.center_extraction.isChecked(),
-                weak_vocal_protection=self.full_stage.weak_vocal_protection.isChecked(),
+                open_mic_focus=self.full_stage.open_mic_focus.isChecked(),
             )
         except (TypeError, ValueError):
             self._warning("warn_output_conflict")
             return None
         cfg.set(cfg.center_extraction, job.center_extraction)
-        cfg.set(cfg.weak_vocal_protection, job.weak_vocal_protection)
+        cfg.set(cfg.open_mic_focus, job.open_mic_focus)
         return job
 
     def analyze_full_stage(self) -> None:

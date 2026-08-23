@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import shutil
 from pathlib import Path
 
 from PySide6.QtCore import QStandardPaths
@@ -32,7 +31,7 @@ class AppConfig(QConfig):
     )
     auto_find = ConfigItem("Reference", "AutoFind", True, BoolValidator())
     center_extraction = ConfigItem("Reference", "CenterExtraction", False, BoolValidator())
-    weak_vocal_protection = ConfigItem("Reference", "WeakVocalProtection", False, BoolValidator())
+    open_mic_focus = ConfigItem("Reference", "OpenMicFocus", False, BoolValidator())
     model = OptionsConfigItem(
         "Neural",
         "Model",
@@ -45,28 +44,8 @@ class AppConfig(QConfig):
 cfg = AppConfig()
 
 
-def _legacy_config_paths() -> tuple[Path, ...]:
-    generic = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.GenericConfigLocation)
-    root = Path(generic or Path.home() / ".config")
-    return (
-        root / "Audio Station" / "Audio Station" / "config.json",
-        root / "audio-station" / "config.json",
-    )
-
-
 def load_config() -> None:
     directory = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppConfigLocation)
     path = Path(directory or Path.home() / ".config/purivox") / "config.json"
     path.parent.mkdir(parents=True, exist_ok=True)
-    if (
-        not path.exists()
-        and path.parent.name == "Purivox"
-        and (
-            legacy := next(
-                (candidate for candidate in _legacy_config_paths() if candidate.is_file()), None
-            )
-        )
-        is not None
-    ):
-        shutil.copy2(legacy, path)
     qconfig.load(str(path), cfg)
