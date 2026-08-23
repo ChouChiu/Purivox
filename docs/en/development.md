@@ -47,6 +47,8 @@ environment. This project specifically uses `PySide6-Fluent-Widgets[full]`.
 - Cancellable loops must call `CancellationToken.raise_if_cancelled()` periodically and must not
   swallow cancellation exceptions.
 - Use `write_wav_atomic` for output instead of overwriting the destination directly.
+- Every product pipeline uses `prepare_hi_res_output` before writing, ensuring PCM WAV output at
+  96 kHz / 24-bit or higher. Upsampling must never be described as creating new audio detail.
 - Log through `logging.getLogger(__name__)`; a local failure may be ignored only on an explicitly
   documented fallback path.
 
@@ -114,6 +116,7 @@ output duration, seams, and peak resident memory, with a 1.5 GiB memory limit.
 The test tree mirrors the source structure and primarily covers:
 
 - Shared audio I/O, resampling, atomic output, short-time Fourier transforms, and logging;
+- The 96 kHz / 24-bit-or-higher Hi-Res export contract across all three product pipelines;
 - Reference cancellation, time alignment, stereo matrices, regression scenarios, and end-to-end
   jobs;
 - Full Stage matching, timeline models, and segmented rendering;

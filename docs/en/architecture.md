@@ -112,9 +112,9 @@ flowchart TB
     choice -->|Single| mr["Align song source<br/>reference-mask cancellation"]
     choice -->|Full Stage| stage["Multi-source matching<br/>timeline-based cancellation"]
     choice -->|AI Track Separation| ai["Chunked model inference<br/>calculate vocals and background"]
-    mr --> mrout["24-bit vocal WAV"]
-    stage --> stageout["24-bit Full Stage WAV"]
-    ai --> aiout["Two 16-bit WAV files"]
+    mr --> mrout["Vocal WAV<br/>at least 96 kHz / 24-bit"]
+    stage --> stageout["Full Stage WAV<br/>at least 96 kHz / 24-bit"]
+    ai --> aiout["Two 96 kHz / 24-bit WAV files"]
 ```
 
 ### Single
@@ -124,8 +124,9 @@ Read both files → convert to stereo → resample the song source → optional 
 → reference cancellation → analysis → atomic output
 ```
 
-The output length is the duration shared by the input audio and aligned song source, and the
-result is written as a 24-bit WAV.
+The output length is the duration shared by the input audio and aligned song source. A result below
+96 kHz is upsampled to 96 kHz before being written as a 24-bit WAV; a higher original sample rate
+is preserved.
 
 ### Full Stage
 
@@ -137,13 +138,20 @@ Extract fingerprints from the full recording and sources → match independently
 
 Unmatched ranges come from the copy of the original full recording, so failed identification does
 not introduce silence or shorten the output.
+Internal Full Stage processing retains the stage/live audio sample rate, while final output also
+uses PCM WAV at 96 kHz / 24-bit or higher.
 
 ### AI Track Separation
 
 ```text
 Read and convert to stereo → resample to 44.1 kHz → find or download the model
-→ chunked MDX-Net inference → background = mix - vocals → write two 16-bit WAV files
+→ chunked MDX-Net inference → background = mix - vocals
+→ upsample to 96 kHz → write two 24-bit WAV files
 ```
+
+Here, Hi-Res describes the output file's sample rate and bit depth. It does not mean that a
+low-rate input or 44.1 kHz model inference gains new high-frequency information, and it is not a
+claim of Hi-Res Audio Logo certification.
 
 ## Configuration, Translation, and Logging
 

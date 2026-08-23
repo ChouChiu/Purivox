@@ -50,7 +50,7 @@ flowchart LR
     center -->|yes| focus["Center focus<br/>optional weak-vocal protection"]
     center -->|no| protect["Peak protection"]
     focus --> protect
-    protect --> output["24-bit WAV"]
+    protect --> output["At least 96 kHz / 24-bit WAV"]
 ```
 
 ## Time Alignment
@@ -146,7 +146,9 @@ whether to enable them by comparing the same source material through listening.
 ## Output Protection and Validation
 
 After processing, non-finite values are replaced with finite values and peaks are kept within
-range when necessary. Reference cancellation writes 24-bit PCM WAV.
+range when necessary. Results below 96 kHz are resampled to 96 kHz with high-quality soxr, while
+higher original rates are preserved, and output is written as 24-bit PCM WAV. This resampling
+standardizes the export format but cannot restore high-frequency detail absent from the input.
 
 Algorithm tests cover time offsets, local drift, inverted polarity, frequency-dependent room
 transfer, unrelated sources, rejection of source-only replacement lyrics, matrix crosstalk, block

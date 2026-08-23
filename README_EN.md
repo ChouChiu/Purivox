@@ -33,6 +33,7 @@ Vocal Isolation, and their results should not be compared directly.
   recordings
 - Four optional MDX-Net separation models, downloaded on demand and verified with SHA-256
 - Chunked long-audio processing, task cancellation, and atomic output writes
+- All results exported as PCM WAV at 96 kHz / 24-bit or higher
 - In-app result preview and audio statistics
 - GUI and CLI reuse the corresponding MR Remove and AI separation task pipelines
 
@@ -155,9 +156,14 @@ model directory.
 
 - libsndfile natively supports formats including WAV, FLAC, and OGG. Other formats supported by
   the system decoder are read through Qt Multimedia when possible.
-- MR Remove writes a 24-bit WAV at the sample rate of the stage/live audio.
-- The separate AI tool always writes 44.1 kHz, 16-bit stereo WAV files. These outputs are not
-  equivalent to an MR Remove result.
+- MR Remove and Full Stage process at the stage/live audio's original sample rate. Results below
+  96 kHz are resampled with high-quality soxr before export; rates above 96 kHz are preserved.
+- The separate AI tool still performs model inference at 44.1 kHz, then exports 96 kHz, 24-bit
+  stereo WAV files. These outputs are not equivalent to an MR Remove result.
+- Every output is PCM WAV at 96 kHz / 24-bit or higher, using the numerical floor in the
+  [Japan Audio Society's Hi-Res Audio digital format definition](https://www.jas-audio.or.jp/english/hi-res-logo-en).
+  Upsampling cannot create spectral detail absent from the input or model, and this project does
+  not claim Hi-Res Audio Logo certification.
 - An output path cannot overwrite an input file. Press `Ctrl+C` to cancel a CLI task.
 - Model weights are not included in the Python package or standalone application.
 - Synthetic tests only indicate that the implementation has no obvious regression. Judge final

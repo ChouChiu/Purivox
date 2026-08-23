@@ -36,6 +36,7 @@ uv sync --locked --group deploy
 - 长音频使用 `create_pcm_audio` 与分块循环，不要把整个文件复制到普通内存数组。
 - 可取消循环必须定期调用 `CancellationToken.raise_if_cancelled()`，且不得吞掉取消异常。
 - 输出使用 `write_wav_atomic`，不要直接覆盖目标文件。
+- 所有产品管线在写出前使用 `prepare_hi_res_output`，确保输出为至少 96 kHz、24-bit PCM WAV；不得把升采样描述为新增音频细节。
 - 日志通过 `logging.getLogger(__name__)` 写入；只允许有明确记录的降级路径忽略局部失败。
 
 Ruff 行宽为 100，启用 E、F、I、UP、B、SIM 和 RUF 规则，E501 由格式化与评审控制。
@@ -94,6 +95,7 @@ QT_QPA_PLATFORM=offscreen uv run --locked pytest tests/benchmarks --runslow
 测试目录按源码结构镜像，主要覆盖：
 
 - 公共音频读写、重采样、原子写出、短时傅里叶变换和日志；
+- 三条产品管线的至少 96 kHz、24-bit Hi-Res 导出契约；
 - 参考对消算法、时间对齐、立体声矩阵、回归场景和端到端任务；
 - 完整舞台匹配、时间线与分段渲染；
 - MDX-Net 分块重叠相加和模型管线；

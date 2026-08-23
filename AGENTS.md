@@ -24,9 +24,9 @@ src/entrypoints (cli.py, gui.py)          — startup only
 
 Invariants enforced by `tests/test_architecture.py`: `shared` must never import `app` or `features.*`; feature packages must never import one another. Adding a feature = one new `src/features/<feature>/` dir; it may import `shared` freely and must not be imported by other features.
 
-**Reference pipeline** (`features/reference_removal/processing.py`): `read_audio` (SoundFile, Qt Multimedia fallback) → upmix to stereo → resample accompaniment to song rate (soxr) → optional `align_audio` (GCC-PHAT coarse lag + Lanczos warp) → `process_audio` (blocks of 30 s × sample rate, 2 s overlap, cos²/sin² crossfade) → audio stats (peak/RMS dBFS) → atomic 24-bit WAV write.
+**Reference pipeline** (`features/reference_removal/processing.py`): `read_audio` (SoundFile, Qt Multimedia fallback) → upmix to stereo → resample song source to stage rate (soxr) → optional `align_audio` (GCC-PHAT coarse lag + Lanczos warp) → `process_audio` (blocks of 30 s × sample rate, 2 s overlap, cos²/sin² crossfade) → resample to the 96 kHz Hi-Res export floor when needed → audio stats (peak/RMS dBFS) → atomic 24-bit WAV write.
 
-**Neural pipeline** (`features/neural_separation/processing.py`): resample song to 44.1 kHz → `ensure_model` (search: `--models-dir` override → `MR_REMOVER_MODELS` env → system app-data dir → repo `models/`; download from TRvlvr releases with SHA-256 verify) → `MdxNet.separate` (chunked overlap-add, hanning divider accumulation) → writes `<stem>_vocal.wav` + `<stem>_background.wav` (background = song − vocal).
+**Neural pipeline** (`features/neural_separation/processing.py`): resample input to 44.1 kHz → `ensure_model` (search: `--models-dir` override → `MR_REMOVER_MODELS` env → system app-data dir → repo `models/`; download from TRvlvr releases with SHA-256 verify) → `MdxNet.separate` (chunked overlap-add, hanning divider accumulation) → background = mix − vocal → resample both stems to 96 kHz → write 24-bit `<stem>_vocal.wav` + `<stem>_background.wav`.
 
 **Concurrency**: pages define Qt `Signal()`s (`start_requested`, `cancel_requested`); `MainWindow` builds a job dataclass and hands it to `JobPresenter`, which owns page state/result UI and delegates execution to `JobRunner`. The runner owns the `QThread` and `ProcessingWorker` lifecycle and emits `progress`/`succeeded`/`failed`/`cancelled`/`finished`. Cancellation is cooperative via `CancellationToken.raise_if_cancelled()` (`src/shared/processing.py`). CLI runs the same jobs synchronously with SIGINT → token cancel.
 
@@ -96,7 +96,7 @@ Language keys: `zh_cn`, `en_us`, `ja_jp`, `ko_kr`.
 | `src/app/main_window.py` | FluentWindow shell: navigation, i18n/theme, worker orchestration, auto-find |
 | `src/app/job_runner.py` / `worker.py` | Single-job QThread lifecycle and QObject operation adapter |
 | `src/shared/processing.py` | `CancellationToken`, `ProcessingCancelled`, `ProgressEvent`, `ProcessingResult`, `ProgressCallback` |
-| `src/shared/audio/io.py` | memmap audio loading, soxr resample, atomic WAV write (16/24-bit) |
+| `src/shared/audio/io.py` | memmap audio loading, soxr resample, ≥96 kHz / 24-bit Hi-Res preparation, atomic WAV write |
 | `src/shared/config.py` / `i18n.py` / `logging.py` | settings persistence, `tr()`, single-line log format |
 | `src/features/reference_removal/dsp/algorithms.py` | Reference-mask cancellation, optional center focus, and linked peak protection |
 | `src/features/reference_removal/dsp/alignment.py` | GCC-PHAT coarse alignment + local drift tracking + Lanczos warp |

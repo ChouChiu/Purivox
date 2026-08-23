@@ -97,9 +97,9 @@ entry. Sources that were not detected are listed separately for manual review.
 
 ## Segmented Rendering
 
-Rendering first creates a 24-bit output with the same duration as the full recording and copies
-the original audio in full. It then processes each enabled full song and optional short
-fragment:
+Rendering first creates a floating-point buffer with the same duration and sample rate as the full
+recording and copies the original audio in full. It then processes each enabled full song and
+optional short fragment:
 
 1. Read the source and resample it to the Full Stage sample rate.
 2. Slice the stage and source ranges specified by the timeline.
@@ -109,6 +109,11 @@ fragment:
 5. Process the segment with reference-mask cancellation. Reconstruction uses only the original
    stage mix and never mixes the source waveform into the result.
 6. Blend the result into the full-recording copy with fades of up to 50 ms at both boundaries.
+
+After all segments are complete, a Full Stage result below 96 kHz is resampled to 96 kHz with
+high-quality soxr; a higher original rate is preserved. The result is then written atomically as
+24-bit PCM WAV. Upsampling changes the export format but does not add spectral detail absent from
+the original recording.
 
 Explanatory quality is calculated by fitting small $2\times2$ direct models in multiple windows,
 measuring their residual ratios, and taking the median so that one abnormal window cannot dominate

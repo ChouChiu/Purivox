@@ -18,7 +18,7 @@ $$
 \widehat{\mathbf b}=\mathbf y-\widehat{\mathbf v}
 $$
 
-最终写出 `<歌曲名>_vocal.wav` 与 `<歌曲名>_background.wav` 两个 16-bit 双声道 WAV。
+模型计算仍保持 44.1 kHz。完成后，人声与背景分别使用 soxr 高质量重采样到 96 kHz，最终写出 `<歌曲名>_vocal.wav` 与 `<歌曲名>_background.wav` 两个 24-bit 双声道 WAV。
 
 ```mermaid
 flowchart LR
@@ -30,8 +30,10 @@ flowchart LR
     infer --> vocal["预测人声"]
     stereo --> subtract["混音减预测人声"]
     vocal --> subtract
-    vocal --> vocalout["人声 WAV"]
-    subtract --> background["背景 WAV"]
+    vocal --> hires["重采样到 96 kHz<br/>写出 24-bit WAV"]
+    subtract --> hires
+    hires --> vocalout["人声 WAV"]
+    hires --> background["背景 WAV"]
 ```
 
 ## 模型目录与下载
@@ -87,3 +89,4 @@ $$
 - 推理循环和最终归一化循环都响应协作式取消。
 - 所有模型共享同一处理管线，但训练目标和音色偏好不同；模型名称不代表对所有素材的固定排名。
 - 背景是“原混音减预测人声”，并非第二个独立模型输出，因此人声预测误差会直接反映在背景中。
+- 96 kHz、24-bit 是导出文件规格；模型推理仍为 44.1 kHz，升采样不会生成模型没有预测出的高频细节。

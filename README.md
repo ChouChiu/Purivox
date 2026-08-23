@@ -26,6 +26,7 @@ MR Remove，其结果也不应与 MR Remove 的垫音消除效果直接比较。
 - 整场录音歌曲识别、重复片段识别和可编辑处理范围
 - 独立附带 4 个可选 MDX-Net 分离模型，缺失时自动下载并校验 SHA-256
 - 长音频分块处理、任务取消和原子写出
+- 所有结果导出为至少 96 kHz、24-bit PCM WAV
 - 处理完成后可在应用内试听并查看音频统计信息
 - GUI 与命令行分别复用对应的 MR Remove 与 AI 分离任务管线
 
@@ -133,8 +134,9 @@ uv run --locked audio-station ai "歌曲.wav" --output-dir "输出目录" --mode
 ## 输入、输出与注意事项
 
 - libsndfile 原生支持 WAV、FLAC、OGG 等格式；其他系统可解码格式会尝试通过 Qt Multimedia 读取。
-- MR Remove 以舞台 / 现场音频的采样率输出 24-bit WAV。
-- 独立 AI 分离工具固定输出 44.1 kHz、16-bit 双声道 WAV，其输出不等同于 MR Remove 结果。
+- MR Remove 与整场处理在舞台 / 现场音频的原始采样率下工作；低于 96 kHz 的结果在导出前使用 soxr 高质量重采样，高于 96 kHz 时保留原采样率。
+- 独立 AI 分离工具仍按模型要求在 44.1 kHz 下推理，随后导出 96 kHz、24-bit 双声道 WAV；其输出不等同于 MR Remove 结果。
+- 所有导出均为至少 96 kHz、24-bit PCM WAV，采用[日本音频协会 Hi-Res Audio 数字格式定义](https://www.jas-audio.or.jp/english/hi-res-logo-en)中的常用数值门槛。升采样不会产生输入或模型中原本不存在的频谱细节，本项目也不宣称获得 Hi-Res Audio Logo 认证。
 - 输出路径不能覆盖任何输入文件。按 `Ctrl+C` 可取消命令行任务。
 - 模型权重不会包含在 Python 包或独立程序中。
 - 合成测试只能说明实现没有明显回归，最终效果应以同一素材的试听对比为准。
