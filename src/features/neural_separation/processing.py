@@ -14,16 +14,10 @@ from shared.processing import (
     ProcessingCancelled,
     ProcessingResult,
     ProgressCallback,
-    ProgressEvent,
 )
+from shared.progress import report_progress
 
 logger = logging.getLogger(__name__)
-
-
-def _emit(
-    callback: ProgressCallback, value: int, language: str, key: str, **values: object
-) -> None:
-    callback(ProgressEvent(value, tr(language, key, **values)))
 
 
 def _validate_distinct(*paths: Path) -> None:
@@ -45,26 +39,26 @@ def run_neural_job(
     _validate_distinct(job.song, vocal_path, background_path)
     song = vocal_audio = background_audio = None
     try:
-        _emit(progress, 0, job.language, "loading_song")
+        report_progress(progress, 0, job.language, "loading_song")
         song = read_audio(job.song, token).stereo()
         if song.sample_rate != 44_100:
-            _emit(progress, 10, job.language, "ai_resampling")
+            report_progress(progress, 10, job.language, "ai_resampling")
             resampled = resample_audio(song, 44_100, token)
             song.cleanup()
             song = resampled
         model_path = ensure_model(entry, job.models_dir, job.language, token, progress)
-        _emit(progress, 25, job.language, "ai_loading_model")
+        report_progress(progress, 25, job.language, "ai_loading_model")
         try:
             network = MdxNet(model_path)
         except ProcessingCancelled:
             raise
         except Exception as error:
             raise RuntimeError(tr(job.language, "ai_err_model_load", msg=error)) from error
-        _emit(progress, 27, job.language, "ai_inferring")
+        report_progress(progress, 27, job.language, "ai_inferring")
 
         def model_progress(current: int, total: int) -> None:
             value = 27 + int(58 * current / max(total, 1))
-            _emit(progress, value, job.language, "ai_inferring")
+            report_progress(progress, value, job.language, "ai_inferring")
 
         vocal_audio = create_pcm_audio(2, song.frames, 44_100)
         try:
@@ -81,11 +75,18 @@ def run_neural_job(
             background_audio.samples[:, start:end] = (
                 song.samples[:, start:end] - vocal_audio.samples[:, start:end]
             )
-        _emit(progress, 87, job.language, "ai_saving")
+        report_progress(progress, 87, job.language, "ai_saving")
         write_wav_atomic(vocal_path, vocal_audio, 16, token)
-        _emit(progress, 94, job.language, "ai_saving")
+        report_progress(progress, 94, job.language, "ai_saving")
         write_wav_atomic(background_path, background_audio, 16, token)
-        _emit(progress, 100, job.language, "ai_done", vocal=vocal_path, background=background_path)
+        report_progress(
+            progress,
+            100,
+            job.language,
+            "ai_done",
+            vocal=vocal_path,
+            background=background_path,
+        )
         logger.info("neural job completed: vocal=%s background=%s", vocal_path, background_path)
         return ProcessingResult((vocal_path, background_path))
     finally:

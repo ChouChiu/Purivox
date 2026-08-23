@@ -1,59 +1,22 @@
 from __future__ import annotations
 
 import logging
-import math
 from dataclasses import replace
 from pathlib import Path
 
-import numpy as np
-
 from features.reference_removal.dsp import align_audio, process_audio
-from features.reference_removal.models import AudioStats, ReferenceJob
+from features.reference_removal.models import ReferenceJob
 from shared.audio import (
-    AudioData,
+    analyze_audio,
     create_pcm_audio,
     read_audio,
     resample_audio,
     write_wav_atomic,
 )
-from shared.i18n import tr
-from shared.processing import CancellationToken, ProcessingResult, ProgressCallback, ProgressEvent
+from shared.processing import CancellationToken, ProcessingResult, ProgressCallback
+from shared.progress import report_progress
 
 logger = logging.getLogger(__name__)
-
-
-def _dbfs(amplitude: float) -> float:
-    return 20.0 * math.log10(amplitude) if amplitude > 0 else -math.inf
-
-
-def _audio_stats(audio: AudioData, bit_depth: int, token: CancellationToken) -> AudioStats:
-    peak = 0.0
-    square_sum = 0.0
-    sample_count = 0
-    block_size = 262_144
-    for start in range(0, audio.frames, block_size):
-        token.raise_if_cancelled()
-        end = min(start + block_size, audio.frames)
-        values = np.asarray(audio.samples[:, start:end], dtype=np.float64)
-        peak = max(peak, float(np.max(np.abs(values), initial=0.0)))
-        square_sum += float(np.sum(values * values))
-        sample_count += values.size
-    rms = math.sqrt(square_sum / max(sample_count, 1))
-    return AudioStats(
-        duration_seconds=audio.frames / audio.sample_rate,
-        sample_rate=audio.sample_rate,
-        channels=audio.channels,
-        bit_depth=bit_depth,
-        peak_dbfs=_dbfs(peak),
-        rms_dbfs=_dbfs(rms),
-        file_size=0,
-    )
-
-
-def _emit(
-    callback: ProgressCallback, value: int, language: str, key: str, **values: object
-) -> None:
-    callback(ProgressEvent(value, tr(language, key, **values)))
 
 
 def _validate_reference_paths(song: Path, accompaniment: Path, output: Path) -> None:
@@ -81,19 +44,19 @@ def run_reference_job(
     _validate_reference_paths(job.song, job.accompaniment, job.output)
     song = reference = processed_audio = None
     try:
-        _emit(progress, 0, job.language, "loading_song")
+        report_progress(progress, 0, job.language, "loading_song")
         song = read_audio(job.song, token).stereo()
         token.raise_if_cancelled()
-        _emit(progress, 10, job.language, "loading_acc")
+        report_progress(progress, 10, job.language, "loading_acc")
         reference = read_audio(job.accompaniment, token).stereo()
         if reference.sample_rate != song.sample_rate:
-            _emit(progress, 18, job.language, "resampling")
+            report_progress(progress, 18, job.language, "resampling")
             resampled = resample_audio(reference, song.sample_rate, token)
             reference.cleanup()
             reference = resampled
         token.raise_if_cancelled()
         if job.auto_align:
-            _emit(progress, 25, job.language, "aligning")
+            report_progress(progress, 25, job.language, "aligning")
             alignment = create_pcm_audio(reference.channels, song.frames, song.sample_rate)
             try:
                 aligned = align_audio(
@@ -111,13 +74,13 @@ def run_reference_job(
             except (ArithmeticError, ValueError) as error:
                 alignment.cleanup()
                 logger.warning("alignment failed; using original timeline: %s", error)
-                _emit(progress, 28, job.language, "align_fail")
+                report_progress(progress, 28, job.language, "align_fail")
             except BaseException:
                 alignment.cleanup()
                 raise
         length = min(song.frames, reference.frames)
         processed_audio = create_pcm_audio(song.channels, length, song.sample_rate)
-        _emit(progress, 32, job.language, "processing")
+        report_progress(progress, 32, job.language, "processing")
         process_audio(
             song.samples[:, :length],
             reference.samples[:, :length],
@@ -130,12 +93,12 @@ def run_reference_job(
             weak_vocal_protection=job.weak_vocal_protection,
         )
         bit_depth = 24
-        _emit(progress, 86, job.language, "analyzing_output")
-        stats = _audio_stats(processed_audio, bit_depth, token)
-        _emit(progress, 90, job.language, "saving")
+        report_progress(progress, 86, job.language, "analyzing_output")
+        stats = analyze_audio(processed_audio, bit_depth, token)
+        report_progress(progress, 90, job.language, "saving")
         write_wav_atomic(job.output, processed_audio, bit_depth, token)
         stats = replace(stats, file_size=job.output.stat().st_size)
-        _emit(progress, 100, job.language, "done_status", path=job.output)
+        report_progress(progress, 100, job.language, "done_status", path=job.output)
         logger.info("reference job completed: %s", job.output.resolve())
         return ProcessingResult((job.output.resolve(),), (stats,))
     finally:

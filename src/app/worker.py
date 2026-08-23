@@ -1,11 +1,15 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable
 
 from PySide6.QtCore import QObject, Signal, Slot
 
-from shared.processing import CancellationToken, ProcessingCancelled, ProgressEvent
+from shared.processing import (
+    CancellationToken,
+    ProcessingCancelled,
+    ProcessingOperation,
+    ProgressEvent,
+)
 
 
 class ProcessingWorker(QObject):
@@ -15,7 +19,7 @@ class ProcessingWorker(QObject):
     cancelled = Signal()
     finished = Signal()
 
-    def __init__(self, operation: Callable):
+    def __init__(self, operation: ProcessingOperation):
         super().__init__()
         self.operation = operation
         self.token = CancellationToken()

@@ -16,8 +16,8 @@ from features.full_stage.models import (
     TimelineClip,
 )
 from shared.audio import AudioData, read_audio
-from shared.i18n import tr
-from shared.processing import CancellationToken, ProgressCallback, ProgressEvent
+from shared.processing import CancellationToken, ProgressCallback
+from shared.progress import report_progress
 
 logger = logging.getLogger(__name__)
 
@@ -50,12 +50,6 @@ class _Candidate:
         values = sorted((hit.score for hit in self.hits), reverse=True)
         useful = values[: max(1, self.votes)]
         return float(np.clip(np.mean(useful), 0.0, 1.0))
-
-
-def _emit(
-    callback: ProgressCallback, value: int, language: str, key: str, **values: object
-) -> None:
-    callback(ProgressEvent(value, tr(language, key, **values)))
 
 
 def _proxy(audio: AudioData, token: CancellationToken) -> np.ndarray:
@@ -416,10 +410,10 @@ def analyze_full_stage(
 ) -> FullStageAnalysis:
     stage_audio = None
     try:
-        _emit(progress, 0, job.language, "stage_loading")
+        report_progress(progress, 0, job.language, "stage_loading")
         stage_audio = read_audio(job.stage, token)
         duration = stage_audio.frames / stage_audio.sample_rate
-        _emit(progress, 8, job.language, "stage_fingerprinting")
+        report_progress(progress, 8, job.language, "stage_fingerprinting")
         stage_proxy = _proxy(stage_audio, token)
         stage_features = _features(stage_proxy)
         stage_audio.cleanup()
@@ -431,7 +425,7 @@ def analyze_full_stage(
         for index, source in enumerate(source_paths):
             token.raise_if_cancelled()
             value = 12 + round(70 * index / max(len(source_paths), 1))
-            _emit(
+            report_progress(
                 progress,
                 value,
                 job.language,
@@ -475,7 +469,7 @@ def analyze_full_stage(
         occupied = songs + fragments
         gaps = _unmatched_clips(duration, occupied)
         clips = tuple(sorted(occupied + gaps, key=lambda clip: (clip.stage_start, clip.kind.value)))
-        _emit(progress, 100, job.language, "stage_analysis_done", count=len(songs))
+        report_progress(progress, 100, job.language, "stage_analysis_done", count=len(songs))
         logger.info(
             "full-stage analysis completed: stage=%s songs=%d fragments=%d missing=%d",
             job.stage,

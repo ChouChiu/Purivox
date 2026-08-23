@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-import math
 from dataclasses import replace
 
 import numpy as np
@@ -14,18 +13,18 @@ from features.full_stage import (
     analyze_full_stage,
 )
 from features.reference_removal.dsp import align_audio, process_audio
-from features.reference_removal.models import AudioStats
-from shared.audio import create_pcm_audio, read_audio, resample_audio, write_wav_atomic
-from shared.i18n import tr
+from shared.audio import (
+    analyze_audio,
+    copy_audio,
+    create_pcm_audio,
+    read_audio,
+    resample_audio,
+    write_wav_atomic,
+)
 from shared.processing import CancellationToken, ProgressCallback, ProgressEvent
+from shared.progress import report_progress
 
 logger = logging.getLogger(__name__)
-
-
-def _emit(
-    callback: ProgressCallback, value: int, language: str, key: str, **values: object
-) -> None:
-    callback(ProgressEvent(value, tr(language, key, **values)))
 
 
 def _analysis_progress(callback: ProgressCallback, event: ProgressEvent) -> None:
@@ -38,39 +37,6 @@ def analyze_full_stage_job(
     progress: ProgressCallback = lambda _event: None,
 ) -> FullStageResult:
     return FullStageResult(analyze_full_stage(job, token, progress))
-
-
-def _dbfs(amplitude: float) -> float:
-    return 20.0 * math.log10(amplitude) if amplitude > 0 else -math.inf
-
-
-def _stats(audio, token: CancellationToken) -> AudioStats:
-    peak = 0.0
-    square_sum = 0.0
-    count = 0
-    for start in range(0, audio.frames, 262_144):
-        token.raise_if_cancelled()
-        values = np.asarray(audio.samples[:, start : start + 262_144], dtype=np.float64)
-        peak = max(peak, float(np.max(np.abs(values), initial=0.0)))
-        square_sum += float(np.sum(values * values))
-        count += values.size
-    rms = math.sqrt(square_sum / max(count, 1))
-    return AudioStats(
-        audio.frames / audio.sample_rate,
-        audio.sample_rate,
-        audio.channels,
-        24,
-        _dbfs(peak),
-        _dbfs(rms),
-        0,
-    )
-
-
-def _copy_audio(source, destination, token: CancellationToken) -> None:
-    for start in range(0, source.frames, 262_144):
-        token.raise_if_cancelled()
-        end = min(start + 262_144, source.frames)
-        destination.samples[:, start:end] = source.samples[:, start:end]
 
 
 def _alignment_quality(song: np.ndarray, reference: np.ndarray, sample_rate: int) -> float:
@@ -151,13 +117,13 @@ def run_full_stage_job(
 
     stage = output = None
     try:
-        _emit(progress, 31, job.language, "stage_render_loading")
+        report_progress(progress, 31, job.language, "stage_render_loading")
         stage = read_audio(job.stage, token).stereo()
         output = create_pcm_audio(stage.channels, stage.frames, stage.sample_rate)
-        _copy_audio(stage, output, token)
+        copy_audio(stage, output, token)
         for index, clip in enumerate(matched):
             token.raise_if_cancelled()
-            _emit(
+            report_progress(
                 progress,
                 35 + round(48 * index / max(len(matched), 1)),
                 job.language,
@@ -245,13 +211,13 @@ def run_full_stage_job(
                     if audio is not None:
                         audio.cleanup()
 
-        _emit(progress, 86, job.language, "analyzing_output")
-        stats = _stats(output, token)
+        report_progress(progress, 86, job.language, "analyzing_output")
+        stats = analyze_audio(output, 24, token)
         output.release_pages()
-        _emit(progress, 91, job.language, "saving")
+        report_progress(progress, 91, job.language, "saving")
         write_wav_atomic(job.output, output, 24, token)
         stats = replace(stats, file_size=job.output.stat().st_size)
-        _emit(progress, 100, job.language, "done_status", path=job.output)
+        report_progress(progress, 100, job.language, "done_status", path=job.output)
         logger.info("full-stage render completed: %s", job.output.resolve())
         return FullStageResult(analysis, (job.output.resolve(),), (stats,))
     finally:

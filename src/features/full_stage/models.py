@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
 
+from shared.audio import AudioStats
+
 
 class ClipKind(StrEnum):
     SONG = "song"
@@ -94,4 +96,4 @@ class FullStageJob:
 class FullStageResult:
     analysis: FullStageAnalysis
     outputs: tuple[Path, ...] = ()
-    audio_stats: tuple[object, ...] = ()
+    audio_stats: tuple[AudioStats, ...] = ()

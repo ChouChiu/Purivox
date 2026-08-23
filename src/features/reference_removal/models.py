@@ -23,14 +23,3 @@ class ReferenceJob:
             raise ValueError("sigma must be one of 1, 3, 8, 16")
         if self.weak_vocal_protection and not self.center_extraction:
             raise ValueError("weak vocal protection requires center extraction")
-
-
-@dataclass(frozen=True, slots=True)
-class AudioStats:
-    duration_seconds: float
-    sample_rate: int
-    channels: int
-    bit_depth: int
-    peak_dbfs: float
-    rms_dbfs: float
-    file_size: int

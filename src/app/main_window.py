@@ -3,7 +3,7 @@ from __future__ import annotations
 from functools import partial
 from pathlib import Path
 
-from PySide6.QtCore import QEvent, QThread
+from PySide6.QtCore import QEvent
 from PySide6.QtGui import QCloseEvent, QColor, QPalette
 from PySide6.QtWidgets import QApplication
 from qfluentwidgets import (
@@ -12,16 +12,15 @@ from qfluentwidgets import (
     InfoBar,
     InfoBarPosition,
     NavigationItemPosition,
-    StateToolTip,
     Theme,
     setTheme,
     setThemeColor,
 )
 
 from app.full_stage_processing import analyze_full_stage_job, run_full_stage_job
+from app.job_presenter import JobPresenter
 from app.mr_workspace import MrWorkspace
-from app.worker import ProcessingWorker
-from features.full_stage import FullStageJob, FullStageResult
+from features.full_stage import FullStageJob
 from features.full_stage.page import FullStagePage
 from features.home import HomePage
 from features.neural_separation import NeuralJob, get_model, run_neural_job
@@ -36,16 +35,14 @@ from features.settings import SettingsPage
 from shared.config import cfg
 from shared.i18n import tr
 from shared.logging import set_log_level
+from shared.processing import ProcessingOperation
 
 
 class MainWindow(FluentWindow):
     def __init__(self):
         super().__init__()
         self.language = str(cfg.language.value)
-        self.thread: QThread | None = None
-        self.worker: ProcessingWorker | None = None
-        self.active_page: MrPage | AiPage | FullStagePage | None = None
-        self.state_tip: StateToolTip | None = None
+        self.jobs = JobPresenter(self, lambda: self.language)
         self.close_pending = False
         self.home = HomePage(self)
         self.mr = MrPage()
@@ -82,6 +79,7 @@ class MainWindow(FluentWindow):
         cfg.language.valueChanged.connect(self._language_changed)
         cfg.theme.valueChanged.connect(lambda value: self._apply_theme(str(value)))
         cfg.log_level.valueChanged.connect(lambda value: set_log_level(str(value)))
+        self.jobs.finished.connect(self._job_finished)
 
     def _language_changed(self, value: object) -> None:
         self.language = str(value)
@@ -145,7 +143,7 @@ class MainWindow(FluentWindow):
             self.mr.status.setText(tr(self.language, "auto_not_found"))
 
     def start_reference(self) -> None:
-        if self.worker:
+        if self.jobs.running:
             return
         if not self.mr.song_edit.text():
             self._warning("warn_no_song")
@@ -189,7 +187,7 @@ class MainWindow(FluentWindow):
         self._start_worker(self.mr, partial(run_reference_job, job))
 
     def start_neural(self) -> None:
-        if self.worker:
+        if self.jobs.running:
             return
         if not self.ai.song_edit.text():
             self._warning("ai_need_song")
@@ -240,7 +238,7 @@ class MainWindow(FluentWindow):
         return job
 
     def analyze_full_stage(self) -> None:
-        if self.worker:
+        if self.jobs.running:
             return
         job = self._full_stage_job()
         if job is None:
@@ -249,7 +247,7 @@ class MainWindow(FluentWindow):
         self._start_worker(self.full_stage, partial(analyze_full_stage_job, job))
 
     def start_full_stage(self) -> None:
-        if self.worker:
+        if self.jobs.running:
             return
         job = self._full_stage_job()
         if job is None:
@@ -262,106 +260,26 @@ class MainWindow(FluentWindow):
             partial(run_full_stage_job, job, self.full_stage.analysis),
         )
 
-    def _start_worker(self, page: MrPage | AiPage | FullStagePage, operation) -> None:
-        thread = QThread(self)
-        worker = ProcessingWorker(operation)
-        worker.moveToThread(thread)
-        thread.started.connect(worker.run)
-        worker.progress.connect(self._progress)
-        worker.succeeded.connect(self._success)
-        worker.failed.connect(self._failure)
-        worker.cancelled.connect(self._cancelled)
-        worker.finished.connect(thread.quit)
-        worker.finished.connect(worker.deleteLater)
-        thread.finished.connect(thread.deleteLater)
-        thread.finished.connect(self._thread_finished)
-        self.thread, self.worker, self.active_page = thread, worker, page
-        page.progress.setValue(0)
-        page.set_running(True)
-        self.state_tip = StateToolTip(
-            tr(self.language, "processing"), tr(self.language, "loading_song"), self
-        )
-        self.state_tip.move(self.state_tip.getSuitablePos())
-        self.state_tip.show()
-        thread.start()
+    def _start_worker(
+        self,
+        page: MrPage | AiPage | FullStagePage,
+        operation: ProcessingOperation,
+    ) -> None:
+        self.jobs.start(page, operation)
 
-    def _progress(self, value: int, message: str) -> None:
-        if self.active_page:
-            self.active_page.progress.setValue(value)
-            self.active_page.status.setText(message)
-        if self.state_tip:
-            self.state_tip.setContent(message)
-
-    def _success(self, result) -> None:
-        if self.state_tip:
-            self.state_tip.setState(True)
-            self.state_tip = None
-        outputs = "\n".join(map(str, result.outputs))
-        if isinstance(self.active_page, MrPage) and result.outputs:
-            stats = result.audio_stats[0] if result.audio_stats else None
-            self.active_page.set_result(result.outputs[0], stats)
-        if isinstance(self.active_page, FullStagePage) and isinstance(result, FullStageResult):
-            self.active_page.set_analysis(result.analysis)
-            if result.outputs:
-                self.active_page.status.setText(
-                    tr(self.language, "done_status", path=result.outputs[0])
-                )
-            else:
-                outputs = tr(
-                    self.language,
-                    "stage_analysis_summary",
-                    songs=len(result.analysis.song_clips),
-                    fragments=sum(clip.kind.value == "fragment" for clip in result.analysis.clips),
-                    missing=len(result.analysis.missing_sources),
-                )
-        InfoBar.success(
-            tr(self.language, "done_title"),
-            outputs,
-            duration=5000,
-            position=InfoBarPosition.TOP_RIGHT,
-            parent=self,
-        )
-
-    def _failure(self, message: str) -> None:
-        if self.state_tip:
-            self.state_tip.deleteLater()
-            self.state_tip = None
-        if self.active_page:
-            self.active_page.status.setText(tr(self.language, "err_status", msg=message))
-        InfoBar.error(
-            tr(self.language, "err_title"),
-            message,
-            duration=6000,
-            position=InfoBarPosition.TOP_RIGHT,
-            parent=self,
-        )
-
-    def _cancelled(self) -> None:
-        if self.active_page:
-            self.active_page.status.setText(tr(self.language, "cancelled"))
-        if self.state_tip:
-            self.state_tip.deleteLater()
-            self.state_tip = None
-
-    def _thread_finished(self) -> None:
-        if self.active_page:
-            self.active_page.set_running(False)
-        self.thread = None
-        self.worker = None
-        self.active_page = None
+    def _job_finished(self) -> None:
         if self.close_pending:
             self.close_pending = False
             self.close()
 
     def cancel(self) -> None:
-        if self.worker:
-            self.worker.request_cancel()
+        self.jobs.cancel()
 
     def closeEvent(self, event: QCloseEvent) -> None:
         self.mr.stop_preview()
-        if self.worker:
+        if self.jobs.running:
             self.close_pending = True
-            self.worker.request_cancel()
+            self.jobs.cancel()
             event.ignore()
             return
         super().closeEvent(event)

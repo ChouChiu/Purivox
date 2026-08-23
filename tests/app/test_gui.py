@@ -14,8 +14,8 @@ from qfluentwidgets.components.widgets.menu import DummyMenuAnimationManager
 from app.main_window import MainWindow
 from features.full_stage import ClipKind, FullStageAnalysis, TimelineClip
 from features.full_stage.page import FullStagePage
-from features.reference_removal.models import AudioStats
 from features.reference_removal.page import MrPage
+from shared.audio import AudioStats
 from shared.config import cfg, load_config
 from shared.ui import SmoothComboBox, SmoothComboBoxMenu
 
