@@ -108,18 +108,23 @@ uses a fixed three-second statistical context that balances adaptation speed and
 instead of asking users to judge a low-level parameter whose effect is difficult to predict. The
 CLI retains `--sigma` values of 1, 3, 8, or 16 seconds for diagnosing unusual material.
 
-The predicted source contributes only to the power estimate. Coherence from 0.03 to 0.35 is
-smoothly mapped to confidence. Target power is updated from 80% history and 20% current value to
-reduce musical noise. Positive spectral flux that appears in the mix without a corresponding
-change in the predicted source raises the mask, protecting consonants, breaths, cheering, and
-other non-source transients. Both channels share a power-weighted mask, avoiding image jumps from
-independent channel gating.
+The predicted source contributes only to the power estimate. The algorithm combines short-term
+coherence over approximately 120 ms with long-term coherence controlled by `sigma`, increasing
+reference confidence only when local agreement and longer-term stability both hold. Confidence is
+then stabilized in roughly one-ERB auditory bands, weighted by predicted-source power. This
+suppresses isolated-bin flicker without applying broad-band attenuation directly to the vocal.
+Target power is updated from 80% history and 20% current value to further reduce musical noise.
+Positive spectral flux that appears in the mix without a corresponding change in the predicted
+source raises the mask, protecting consonants, breaths, cheering, and other non-source transients.
+Both channels share a power-weighted mask, avoiding image jumps from independent channel gating.
 
 A silent or unrelated song source produces low confidence and remains close to bypass. At zero
 strength, the STFT is skipped entirely and the input is copied sample for sample.
 
-The full recording is processed in 30-second blocks with two seconds of overlap. Adjacent blocks
-use squared-cosine and squared-sine crossfade weights:
+The full recording uses 12–28-second blocks selected from `sigma`, avoiding a fixed 30-second
+collection of complex spectra for a short statistical context. Adjacent blocks overlap by at least
+two seconds, increasing with `sigma` to half of the statistical context and capped at one third of
+the block length. They use squared-cosine and squared-sine crossfade weights:
 
 $$
 w_{\mathrm{old}}(\theta)=\cos^2\theta,\qquad
@@ -127,6 +132,14 @@ w_{\mathrm{new}}(\theta)=\sin^2\theta
 $$
 
 Their sum is always 1, reducing seams at block boundaries.
+
+### Research Basis and Boundaries
+
+- Gorlow, Ramona, and Pachet's [live accompaniment-cancellation study](https://arxiv.org/abs/1611.08905) compares adaptive noise cancellation, spectral subtraction, and short-time ERB-band Wiener filtering. The implementation therefore uses a short-time frequency-domain soft mask and ERB confidence stabilization rather than switching to time-domain LMS.
+- Boll's [classic spectral-subtraction paper](https://doi.org/10.1109/TASSP.1979.1163209) describes magnitude subtraction and residual-noise problems. This implementation retains a subtractive power target while adding reference-conditioned coherence, a mask floor, and transient protection instead of directly applying hard spectral subtraction.
+- Avery Lee's [Center Cut](https://www.virtualdub.org/blog2/entry_102.html) and ADRess-style methods depend on center imaging, inter-channel level differences, or phase differences. They apply only to the explicit optional center processing below and are not part of this default reference-cancellation optimization.
+
+These papers provide algorithm structure and failure boundaries; they do not guarantee an improvement on every real performance. Matched-segment, loudness-matched A/B listening remains the acceptance criterion.
 
 ## Optional Center-Focused Processing
 

@@ -124,7 +124,8 @@ Read both files → convert to stereo → resample the song source → optional 
 → reference cancellation → analysis → atomic output
 ```
 
-The output length is the duration shared by the input audio and aligned song source. A result below
+The output always retains the complete input-audio duration. If the song source is shorter, its
+remaining region is treated as a silent reference and the original input tail is preserved. A result below
 96 kHz is upsampled to 96 kHz before being written as a 24-bit WAV; a higher original sample rate
 is preserved.
 
