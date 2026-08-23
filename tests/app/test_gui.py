@@ -33,6 +33,8 @@ def test_main_window_has_mr_workspace_with_two_subpages(qtbot):
     window.mr_workspace.show_single()
     assert window.mr_workspace.stack.currentWidget() is window.mr
     assert not hasattr(window.mr, "algorithm")
+    assert not hasattr(window.mr, "sigma")
+    assert not hasattr(window.full_stage, "sigma")
     window.mr.center_extraction.setChecked(False)
     assert not window.mr.weak_vocal_protection.isEnabled()
     window.mr.center_extraction.setChecked(True)
@@ -124,6 +126,7 @@ def test_full_stage_job_forwards_normal_mr_parameters(qtbot, tmp_path: Path):
     job = window._full_stage_job()
 
     assert job is not None
+    assert job.sigma == 3
     assert not job.auto_align
     assert job.center_extraction
     assert job.weak_vocal_protection
@@ -206,6 +209,7 @@ def test_reference_start_forwards_explicit_enhancement_switches(qtbot, tmp_path:
 
     assert len(started) == 1
     job = started[0].args[0]
+    assert job.sigma == 3
     assert job.center_extraction
     assert job.weak_vocal_protection
 

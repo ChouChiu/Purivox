@@ -37,6 +37,8 @@ from shared.i18n import tr
 from shared.logging import set_log_level
 from shared.processing import ProcessingOperation
 
+_GUI_REFERENCE_SIGMA_SECONDS = 3
+
 
 class MainWindow(FluentWindow):
     def __init__(self):
@@ -169,7 +171,7 @@ class MainWindow(FluentWindow):
                 accompaniment=accompaniment,
                 output=output,
                 strength=self.mr.strength.value(),
-                sigma=int(self.mr.sigma.currentData()),
+                sigma=_GUI_REFERENCE_SIGMA_SECONDS,
                 auto_align=self.mr.align.isChecked(),
                 language=self.language,
                 center_extraction=self.mr.center_extraction.isChecked(),
@@ -178,7 +180,6 @@ class MainWindow(FluentWindow):
         except (ValueError, TypeError):
             self._warning("warn_invalid_parameters")
             return
-        cfg.set(cfg.sigma, job.sigma)
         cfg.set(cfg.auto_align, job.auto_align)
         cfg.set(cfg.auto_find, self.mr.auto_find.isChecked())
         cfg.set(cfg.center_extraction, job.center_extraction)
@@ -221,7 +222,7 @@ class MainWindow(FluentWindow):
                 sources=sources,
                 output=output,
                 strength=self.full_stage.strength.value(),
-                sigma=int(self.full_stage.sigma.currentData()),
+                sigma=_GUI_REFERENCE_SIGMA_SECONDS,
                 language=self.language,
                 include_fragments=self.full_stage.include_fragments.isChecked(),
                 auto_align=self.full_stage.align.isChecked(),
@@ -231,7 +232,6 @@ class MainWindow(FluentWindow):
         except (TypeError, ValueError):
             self._warning("warn_output_conflict")
             return None
-        cfg.set(cfg.sigma, job.sigma)
         cfg.set(cfg.auto_align, job.auto_align)
         cfg.set(cfg.center_extraction, job.center_extraction)
         cfg.set(cfg.weak_vocal_protection, job.weak_vocal_protection)

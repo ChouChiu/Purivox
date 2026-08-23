@@ -37,7 +37,7 @@ def build_parser() -> argparse.ArgumentParser:
     reference.add_argument(
         "--strength", type=int, choices=range(0, 101), default=75, metavar="0..100"
     )
-    reference.add_argument("--sigma", type=int, choices=(1, 3, 8, 16), default=8)
+    reference.add_argument("--sigma", type=int, choices=(1, 3, 8, 16), default=3)
     reference.add_argument("--align", action=argparse.BooleanOptionalAction, default=True)
     reference.add_argument(
         "--center-extraction",

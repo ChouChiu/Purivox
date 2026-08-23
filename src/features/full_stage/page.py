@@ -30,7 +30,7 @@ from qfluentwidgets import (
 from features.full_stage.models import ClipKind, FullStageAnalysis
 from shared.config import cfg
 from shared.i18n import tr
-from shared.ui import FormCard, PageScrollArea, SmoothComboBox
+from shared.ui import FormCard, PageScrollArea
 
 
 class FullStagePage(PageScrollArea):
@@ -82,7 +82,6 @@ class FullStagePage(PageScrollArea):
         self.strength = Slider(Qt.Orientation.Horizontal)
         self.strength.setRange(0, 100)
         self.strength.setValue(75)
-        self.sigma_label, self.sigma = BodyLabel(), SmoothComboBox()
         self.align_label, self.align = BodyLabel(), SwitchButton()
         self.align.setChecked(bool(cfg.auto_align.value))
         self.center_extraction_label, self.center_extraction = BodyLabel(), SwitchButton()
@@ -97,7 +96,6 @@ class FullStagePage(PageScrollArea):
         self.include_fragments_label, self.include_fragments = BodyLabel(), SwitchButton()
         self.include_fragments.setChecked(True)
         self.parameters.add_row(self.strength_label, self.strength, self.strength_value)
-        self.parameters.add_row(self.sigma_label, self.sigma)
         self.parameters.add_row(self.align_label, self.align)
         self.parameters.add_row(self.center_extraction_label, self.center_extraction)
         self.parameters.add_row(self.weak_vocal_protection_label, self.weak_vocal_protection)
@@ -174,7 +172,6 @@ class FullStagePage(PageScrollArea):
         self.remove_source.setText(tr(language, "stage_remove_source"))
         self.parameters.title_label.setText(tr(language, "params"))
         self.strength_label.setText(tr(language, "strength"))
-        self.sigma_label.setText(tr(language, "reverb_label"))
         self.align_label.setText(tr(language, "auto_align"))
         self.center_extraction_label.setText(tr(language, "center_extraction"))
         self.weak_vocal_protection_label.setText(tr(language, "weak_vocal_protection"))
@@ -190,11 +187,6 @@ class FullStagePage(PageScrollArea):
         self.align.setToolTip(tr(language, "auto_align_tip"))
         self.center_extraction.setToolTip(tr(language, "center_extraction_tip"))
         self.weak_vocal_protection.setToolTip(tr(language, "weak_vocal_protection_tip"))
-        previous_sigma = self.sigma.currentData() or cfg.sigma.value
-        self.sigma.clear()
-        for value, key in ((1, "sigma_0"), (3, "sigma_1"), (8, "sigma_2"), (16, "sigma_3")):
-            self.sigma.addItem(tr(language, key), userData=value)
-        self.sigma.setCurrentIndex(max(0, self.sigma.findData(previous_sigma)))
         self.timeline_card.title_label.setText(tr(language, "stage_timeline"))
         self.timeline_hint.setText(tr(language, "stage_timeline_hint"))
         self.timeline.setHorizontalHeaderLabels(
@@ -259,7 +251,6 @@ class FullStagePage(PageScrollArea):
             self.remove_source,
             self.sources,
             self.strength,
-            self.sigma,
             self.align,
             self.center_extraction,
             self.weak_vocal_protection,

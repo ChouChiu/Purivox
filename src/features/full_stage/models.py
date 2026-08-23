@@ -67,7 +67,7 @@ class FullStageJob:
     sources: tuple[Path, ...]
     output: Path
     strength: int = 75
-    sigma: int = 8
+    sigma: int = 3
     language: str = "zh_cn"
     include_fragments: bool = True
     auto_align: bool = True

@@ -31,7 +31,7 @@ from features.reference_removal.preview import SeekSlider
 from shared.audio import AudioStats
 from shared.config import cfg
 from shared.i18n import tr
-from shared.ui import FormCard, PageScrollArea, SmoothComboBox
+from shared.ui import FormCard, PageScrollArea
 
 logger = logging.getLogger(__name__)
 
@@ -67,7 +67,6 @@ class MrPage(PageScrollArea):
         self.layout.addWidget(self.files)
 
         self.parameters = FormCard()
-        self.sigma_label, self.sigma = BodyLabel(), SmoothComboBox()
         self.strength_label, self.strength_value = BodyLabel(), BodyLabel("75%")
         self.strength = Slider(Qt.Orientation.Horizontal)
         self.strength.setRange(0, 100)
@@ -83,7 +82,6 @@ class MrPage(PageScrollArea):
         self.weak_vocal_protection.setChecked(
             bool(cfg.weak_vocal_protection.value) and self.center_extraction.isChecked()
         )
-        self.parameters.add_row(self.sigma_label, self.sigma)
         self.parameters.add_row(self.strength_label, self.strength, self.strength_value, self.align)
         self.parameters.add_row(self.center_extraction_label, self.center_extraction)
         self.parameters.add_row(self.weak_vocal_protection_label, self.weak_vocal_protection)
@@ -209,7 +207,6 @@ class MrPage(PageScrollArea):
         self.acc_label.setText(tr(language, "acc_label"))
         self.output_label.setText(tr(language, "output_file"))
         self.output_edit.setPlaceholderText(tr(language, "output_name_hint"))
-        self.sigma_label.setText(tr(language, "reverb_label"))
         self.strength_label.setText(tr(language, "strength"))
         self.center_extraction_label.setText(tr(language, "center_extraction"))
         self.weak_vocal_protection_label.setText(tr(language, "weak_vocal_protection"))
@@ -238,11 +235,6 @@ class MrPage(PageScrollArea):
             self.preview_status.setText(tr(language, "preview_empty"))
         if self.progress.value() == 0:
             self.status.setText(tr(language, "ready"))
-        previous_sigma = self.sigma.currentData() or cfg.sigma.value
-        self.sigma.clear()
-        for value, key in ((1, "sigma_0"), (3, "sigma_1"), (8, "sigma_2"), (16, "sigma_3")):
-            self.sigma.addItem(tr(language, key), userData=value)
-        self.sigma.setCurrentIndex(max(0, self.sigma.findData(previous_sigma)))
         self._sync_enhancement_controls()
 
     def _sync_enhancement_controls(self, _checked: bool | None = None) -> None:
@@ -259,7 +251,6 @@ class MrPage(PageScrollArea):
             self.acc_button,
             self.output_button,
             self.output_edit,
-            self.sigma,
             self.strength,
             self.align,
             self.auto_find,
