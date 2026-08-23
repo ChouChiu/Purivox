@@ -79,7 +79,7 @@ masters, edits, speeds, keys, or extra content will reduce removal quality.
 1. Select **Full Stage** under **Vocal Isolation**, then load the continuous stage/live
    recording.
 2. Add song sources that may occur in the recording. Their file order does not affect matching.
-3. Click **Find songs**, then inspect complete songs, short segments, unidentified ranges,
+3. Click **Find songs**, then inspect full songs, short segments, unidentified ranges,
    and match confidence.
 4. If necessary, double-click to edit recording times or source ranges, or clear the checkbox for
    a segment that should not be processed.
@@ -165,14 +165,14 @@ model directory.
 
 ## Technical Documentation
 
-Architecture, algorithms, testing, and release information are available in [docs/](docs/README.md).
-The technical documentation is currently written in Chinese:
+Architecture, algorithms, testing, and release information are available in
+[the technical documentation](docs/en/README.md):
 
-- [Architecture and Data Flow](docs/architecture.md)
-- [Reference Cancellation](docs/reference-removal.md)
-- [Full-Stage Processing](docs/full-stage.md)
-- [AI Vocal Separation](docs/neural-separation.md)
-- [Development, Testing, and Release](docs/development.md)
+- [Architecture and Data Flow](docs/en/architecture.md)
+- [Reference-Guided Vocal Isolation](docs/en/reference-removal.md)
+- [Full Stage Processing](docs/en/full-stage.md)
+- [AI Track Separation](docs/en/neural-separation.md)
+- [Development, Testing, and Release](docs/en/development.md)
 
 ## Acknowledgements and License
 

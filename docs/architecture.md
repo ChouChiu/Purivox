@@ -1,5 +1,9 @@
 # 架构与数据流
 
+<p align="center">
+  <strong>简体中文</strong> · <a href="en/architecture.md">English</a>
+</p>
+
 ## 设计目标
 
 Audio Station 将界面、功能实现和公共基础设施分开。GUI 与 CLI 只负责收集参数、报告进度和展示结果，实际处理由可独立调用的任务函数完成。这样可以让桌面端和命令行复用同一实现，也便于在不启动界面的情况下测试音频管线。
@@ -88,7 +92,7 @@ flowchart TB
     input["音频输入"] --> choice{"工作流"}
     choice -->|单曲参考对消| mr["对齐参考音源<br/>参考掩码对消"]
     choice -->|完整舞台| stage["多音源匹配<br/>按时间线分段对消"]
-    choice -->|AI 人声分离| ai["模型分块推理<br/>计算人声与背景"]
+    choice -->|AI 音轨分离| ai["模型分块推理<br/>计算人声与背景"]
     mr --> mrout["24-bit 人声 WAV"]
     stage --> stageout["24-bit 整场 WAV"]
     ai --> aiout["两个 16-bit WAV"]
@@ -112,7 +116,7 @@ flowchart TB
 
 未匹配区间来自整场原音的副本，因此不会因识别失败而补零或缩短。
 
-### AI 人声分离
+### AI 音轨分离
 
 ```text
 读取并双声道化 → 重采样到 44.1 kHz → 查找或下载模型

@@ -1,8 +1,12 @@
-# AI 人声分离实现
+# AI 音轨分离实现
+
+<p align="center">
+  <strong>简体中文</strong> · <a href="en/neural-separation.md">English</a>
+</p>
 
 ## 管线概览
 
-AI 工作流不需要参考伴奏。输入先转为双声道并重采样到 44.1 kHz，然后交给 MDX-Net ONNX 模型预测人声：
+AI 工作流不需要歌曲音源。输入先转为双声道并重采样到 44.1 kHz，然后交给 MDX-Net ONNX 模型预测人声：
 
 $$
 \widehat{\mathbf v}=f_{\theta}(\mathbf y)

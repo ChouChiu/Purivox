@@ -144,9 +144,9 @@ uv run --locked audio-station ai "歌曲.wav" --output-dir "输出目录" --mode
 算法、架构、测试和发布说明已移至 [docs/](docs/README.md)：
 
 - [架构与数据流](docs/architecture.md)
-- [参考对消实现](docs/reference-removal.md)
+- [参考引导人声提取](docs/reference-removal.md)
 - [完整舞台实现](docs/full-stage.md)
-- [AI 人声分离实现](docs/neural-separation.md)
+- [AI 音轨分离实现](docs/neural-separation.md)
 - [开发、测试与发布](docs/development.md)
 
 ## 致谢与许可

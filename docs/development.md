@@ -1,5 +1,9 @@
 # 开发、测试与发布
 
+<p align="center">
+  <strong>简体中文</strong> · <a href="en/development.md">English</a>
+</p>
+
 ## 开发环境
 
 项目使用 uv 管理 Python、隔离环境和锁文件。安装 uv 后，在仓库根目录同步锁定的运行时与默认开发依赖：
