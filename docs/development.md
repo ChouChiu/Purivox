@@ -90,7 +90,7 @@ QT_QPA_PLATFORM=offscreen uv run --locked pytest tests/benchmarks --runslow
 ```
 
 当前慢速门禁使用 15 分钟、44.1 kHz 双声道音频检查参考对消的输出长度、接缝和峰值常驻内存，内存上限为
-1.5 GiB。
+2 GiB。
 
 测试目录按源码结构镜像，主要覆盖：
 

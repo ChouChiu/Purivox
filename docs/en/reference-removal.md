@@ -121,10 +121,16 @@ Both channels share a power-weighted mask, avoiding image jumps from independent
 A silent or unrelated song source produces low confidence and remains close to bypass. At zero
 strength, the STFT is skipped entirely and the input is copied sample for sample.
 
-The full recording uses 12–28-second blocks selected from `sigma`, avoiding a fixed 30-second
-collection of complex spectra for a short statistical context. Adjacent blocks overlap by at least
-two seconds, increasing with `sigma` to half of the statistical context and capped at one third of
-the block length. They use squared-cosine and squared-sine crossfade weights:
+The full recording uses blocks calculated from the sample rate and spectral size. Serial processing
+uses a four-million-cell STFT working set. Sufficiently long material scales automatically with the
+CPU and statistical context up to five independent spectral threads, while limiting concurrent
+contexts to nine million cells so peak memory stays below 2 GiB. Short material and large contexts
+such as 96 kHz with high `sigma` use fewer threads or remain serial. The `float32` PCM fast path
+performs `complex64` STFT/ISTFT directly instead of promoting to double precision only to cast the
+result back. The minimum statistical context required by `sigma` is always retained. Weighted fits
+reuse one smoothed weight denominator, while parallel blocks reduce total wait time. Adjacent blocks
+overlap by at least two seconds, increasing with `sigma` to half of the statistical context and
+capped at one third of the block length. They use squared-cosine and squared-sine crossfade weights:
 
 $$
 w_{\mathrm{old}}(\theta)=\cos^2\theta,\qquad

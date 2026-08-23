@@ -111,7 +111,7 @@ QT_QPA_PLATFORM=offscreen uv run --locked pytest tests/benchmarks --runslow
 ```
 
 The current slow gate uses 15 minutes of 44.1 kHz stereo audio to check reference-cancellation
-output duration, seams, and peak resident memory, with a 1.5 GiB memory limit.
+output duration, seams, and peak resident memory, with a 2 GiB memory limit.
 
 The test tree mirrors the source structure and primarily covers:
 
