@@ -29,7 +29,6 @@ class AppConfig(QConfig):
         "INFO",
         OptionsValidator(["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]),
     )
-    auto_align = ConfigItem("Reference", "AutoAlign", True, BoolValidator())
     auto_find = ConfigItem("Reference", "AutoFind", True, BoolValidator())
     center_extraction = ConfigItem("Reference", "CenterExtraction", False, BoolValidator())
     weak_vocal_protection = ConfigItem("Reference", "WeakVocalProtection", False, BoolValidator())

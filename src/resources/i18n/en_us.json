@@ -16,8 +16,6 @@
   "weak_vocal_protection_tip": "With center extraction enabled, protects a quiet live vocal with a plain Mid fallback while sides stay attenuated",
   "switch_on": "On",
   "switch_off": "Off",
-  "auto_align": "Enable auto-alignment (required for reference-mask cancellation)",
-  "auto_align_tip": "Matches version differences by musical onsets first, then refines with cross-correlation and local drift tracking",
   "status_group": "Status",
   "preview_title": "Preview processed audio",
   "preview_empty": "The output can be previewed here after processing",

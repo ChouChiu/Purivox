@@ -38,3 +38,12 @@ def test_reference_enhancement_switches_default_off_and_can_be_enabled():
     )
     assert enabled.center_extraction
     assert enabled.weak_vocal_protection
+
+
+def test_reference_alignment_defaults_on_and_cli_can_disable_it():
+    parser = build_parser()
+    defaults = parser.parse_args(["mr", "song.wav", "reference.flac", "output.wav"])
+    disabled = parser.parse_args(["mr", "song.wav", "reference.flac", "output.wav", "--no-align"])
+
+    assert defaults.align
+    assert not disabled.align

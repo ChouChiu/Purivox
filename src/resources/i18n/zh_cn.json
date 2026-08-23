@@ -16,8 +16,6 @@
   "weak_vocal_protection_tip": "中置提取开启时，以普通 Mid 保护较弱的现场人声，同时继续削弱侧声",
   "switch_on": "开启",
   "switch_off": "关闭",
-  "auto_align": "启用自动对齐 (参考掩码对消必需)",
-  "auto_align_tip": "先用音乐起音匹配版本差异，再用互相关与局部漂移跟踪精细对齐",
   "status_group": "处理状态",
   "preview_title": "消音音频预览",
   "preview_empty": "处理完成后可在此预览输出音频",

@@ -35,6 +35,8 @@ def test_main_window_has_mr_workspace_with_two_subpages(qtbot):
     assert not hasattr(window.mr, "algorithm")
     assert not hasattr(window.mr, "sigma")
     assert not hasattr(window.full_stage, "sigma")
+    assert not hasattr(window.mr, "align")
+    assert not hasattr(window.full_stage, "align")
     window.mr.center_extraction.setChecked(False)
     assert not window.mr.weak_vocal_protection.isEnabled()
     window.mr.center_extraction.setChecked(True)
@@ -119,7 +121,6 @@ def test_full_stage_job_forwards_normal_mr_parameters(qtbot, tmp_path: Path):
     item = QListWidgetItem(source.name)
     item.setData(Qt.ItemDataRole.UserRole, str(source))
     window.full_stage.sources.addItem(item)
-    window.full_stage.align.setChecked(False)
     window.full_stage.center_extraction.setChecked(True)
     window.full_stage.weak_vocal_protection.setChecked(True)
 
@@ -127,7 +128,7 @@ def test_full_stage_job_forwards_normal_mr_parameters(qtbot, tmp_path: Path):
 
     assert job is not None
     assert job.sigma == 3
-    assert not job.auto_align
+    assert job.auto_align
     assert job.center_extraction
     assert job.weak_vocal_protection
 
@@ -210,6 +211,7 @@ def test_reference_start_forwards_explicit_enhancement_switches(qtbot, tmp_path:
     assert len(started) == 1
     job = started[0].args[0]
     assert job.sigma == 3
+    assert job.auto_align
     assert job.center_extraction
     assert job.weak_vocal_protection
 

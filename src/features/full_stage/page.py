@@ -82,8 +82,6 @@ class FullStagePage(PageScrollArea):
         self.strength = Slider(Qt.Orientation.Horizontal)
         self.strength.setRange(0, 100)
         self.strength.setValue(75)
-        self.align_label, self.align = BodyLabel(), SwitchButton()
-        self.align.setChecked(bool(cfg.auto_align.value))
         self.center_extraction_label, self.center_extraction = BodyLabel(), SwitchButton()
         self.center_extraction.setChecked(bool(cfg.center_extraction.value))
         self.weak_vocal_protection_label, self.weak_vocal_protection = (
@@ -96,7 +94,6 @@ class FullStagePage(PageScrollArea):
         self.include_fragments_label, self.include_fragments = BodyLabel(), SwitchButton()
         self.include_fragments.setChecked(True)
         self.parameters.add_row(self.strength_label, self.strength, self.strength_value)
-        self.parameters.add_row(self.align_label, self.align)
         self.parameters.add_row(self.center_extraction_label, self.center_extraction)
         self.parameters.add_row(self.weak_vocal_protection_label, self.weak_vocal_protection)
         self.parameters.add_row(self.include_fragments_label, self.include_fragments)
@@ -172,19 +169,16 @@ class FullStagePage(PageScrollArea):
         self.remove_source.setText(tr(language, "stage_remove_source"))
         self.parameters.title_label.setText(tr(language, "params"))
         self.strength_label.setText(tr(language, "strength"))
-        self.align_label.setText(tr(language, "auto_align"))
         self.center_extraction_label.setText(tr(language, "center_extraction"))
         self.weak_vocal_protection_label.setText(tr(language, "weak_vocal_protection"))
         self.include_fragments_label.setText(tr(language, "stage_include_fragments"))
         for switch in (
-            self.align,
             self.center_extraction,
             self.weak_vocal_protection,
             self.include_fragments,
         ):
             switch.setOnText(tr(language, "switch_on"))
             switch.setOffText(tr(language, "switch_off"))
-        self.align.setToolTip(tr(language, "auto_align_tip"))
         self.center_extraction.setToolTip(tr(language, "center_extraction_tip"))
         self.weak_vocal_protection.setToolTip(tr(language, "weak_vocal_protection_tip"))
         self.timeline_card.title_label.setText(tr(language, "stage_timeline"))
@@ -251,7 +245,6 @@ class FullStagePage(PageScrollArea):
             self.remove_source,
             self.sources,
             self.strength,
-            self.align,
             self.center_extraction,
             self.weak_vocal_protection,
             self.include_fragments,

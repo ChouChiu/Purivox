@@ -16,8 +16,6 @@
   "weak_vocal_protection_tip": "センター抽出時に通常の Mid で小さいライブボーカルを保護し、Side は引き続き抑えます",
   "switch_on": "オン",
   "switch_off": "オフ",
-  "auto_align": "自動アライメント有効 (参照マスクキャンセルに必要)",
-  "auto_align_tip": "音楽オンセットで版の違いを合わせ、相互相関と局所ドリフト追跡で精密に補正",
   "status_group": "処理状態",
   "preview_title": "処理済みオーディオのプレビュー",
   "preview_empty": "処理完了後、ここで出力を試聴できます",

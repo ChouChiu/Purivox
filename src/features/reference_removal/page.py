@@ -71,8 +71,6 @@ class MrPage(PageScrollArea):
         self.strength = Slider(Qt.Orientation.Horizontal)
         self.strength.setRange(0, 100)
         self.strength.setValue(75)
-        self.align = SwitchButton()
-        self.align.setChecked(bool(cfg.auto_align.value))
         self.center_extraction_label, self.center_extraction = BodyLabel(), SwitchButton()
         self.center_extraction.setChecked(bool(cfg.center_extraction.value))
         self.weak_vocal_protection_label, self.weak_vocal_protection = (
@@ -82,7 +80,7 @@ class MrPage(PageScrollArea):
         self.weak_vocal_protection.setChecked(
             bool(cfg.weak_vocal_protection.value) and self.center_extraction.isChecked()
         )
-        self.parameters.add_row(self.strength_label, self.strength, self.strength_value, self.align)
+        self.parameters.add_row(self.strength_label, self.strength, self.strength_value)
         self.parameters.add_row(self.center_extraction_label, self.center_extraction)
         self.parameters.add_row(self.weak_vocal_protection_label, self.weak_vocal_protection)
         self.layout.addWidget(self.parameters)
@@ -214,8 +212,6 @@ class MrPage(PageScrollArea):
             button.setText(tr(language, "browse"))
         self.auto_find.setOnText(tr(language, "auto_find_on"))
         self.auto_find.setOffText(tr(language, "auto_find_off"))
-        self.align.setOnText(tr(language, "auto_align"))
-        self.align.setOffText(tr(language, "auto_align"))
         for switch in (self.center_extraction, self.weak_vocal_protection):
             switch.setOnText(tr(language, "switch_on"))
             switch.setOffText(tr(language, "switch_off"))
@@ -252,7 +248,6 @@ class MrPage(PageScrollArea):
             self.output_button,
             self.output_edit,
             self.strength,
-            self.align,
             self.auto_find,
             self.center_extraction,
             self.weak_vocal_protection,
