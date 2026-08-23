@@ -24,7 +24,7 @@ from shared.processing import CancellationToken, ProcessingCancelled, ProgressEv
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="audio-station", description="Vocal and accompaniment separation"
+        prog="purivox", description="Vocal and accompaniment separation"
     )
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     parser.add_argument("--selftest", action="store_true", help=argparse.SUPPRESS)
@@ -80,8 +80,8 @@ def main(argv: list[str] | None = None) -> int:
 
         return run_gui(args.selftest)
     app = QCoreApplication.instance() or QCoreApplication(sys.argv[:1])
-    app.setApplicationName("Audio Station")
-    app.setOrganizationName("Audio Station")
+    app.setApplicationName("Purivox")
+    app.setOrganizationName("Purivox")
     with redirect_stdout(io.StringIO()):
         from shared.config import cfg, load_config
 

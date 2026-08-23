@@ -1,5 +1,5 @@
 {
-  "window_title": "Audio Station v1.0",
+  "window_title": "Purivox v1.0",
   "file_select": "오디오 선택",
   "song_label": "입력 오디오:",
   "mr_audio_label": "무대 / 라이브 오디오:",
@@ -71,7 +71,7 @@
   "mr_tab_full_stage": "전체 공연",
   "nav_ai": "AI 트랙 분리",
   "nav_settings": "설정",
-  "home_greeting": "Audio Station에 오신 것을 환영합니다",
+  "home_greeting": "Purivox에 오신 것을 환영합니다",
   "home_intro": "곡 음원으로 무대 / 라이브 오디오에서 라이브 보컬을 추출하거나, AI로 오디오 하나를 보컬과 배경음으로 분리합니다.",
   "home_choose_title": "처리 방식 선택",
   "home_choose_hint": "개별 곡은 ‘한 곡’, 연속된 공연 녹음은 ‘전체 공연’을 선택하세요. 두 모드 모두 해당 곡 음원이 필요합니다.",

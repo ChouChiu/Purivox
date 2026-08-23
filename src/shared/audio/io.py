@@ -87,7 +87,7 @@ def create_pcm_audio(channels: int, frames: int, sample_rate: int) -> AudioData:
     """Allocate a planar float32 audio buffer in a temporary disk mapping."""
     if channels <= 0 or frames <= 0 or sample_rate <= 0:
         raise ValueError("channels, frames and sample rate must be positive")
-    fd, name = tempfile.mkstemp(prefix="audio-station-", suffix=".float32.pcm")
+    fd, name = tempfile.mkstemp(prefix="purivox-", suffix=".float32.pcm")
     os.close(fd)
     path = Path(name)
     try:
@@ -133,7 +133,7 @@ def _read_with_qt(path: Path, token: CancellationToken) -> AudioData:
     decoder = QAudioDecoder()
     decoder.setSource(QUrl.fromLocalFile(str(path)))
     loop = QEventLoop()
-    fd, temporary_name = tempfile.mkstemp(prefix="audio-station-decoder-", suffix=".pcm")
+    fd, temporary_name = tempfile.mkstemp(prefix="purivox-decoder-", suffix=".pcm")
     raw_output = os.fdopen(fd, "wb")
     temporary_path = Path(temporary_name)
     frames = 0
@@ -247,7 +247,7 @@ def resample_audio(
     if audio.sample_rate == target_rate:
         return audio
     logger.info("resampling audio from %d Hz to %d Hz", audio.sample_rate, target_rate)
-    fd, temporary_name = tempfile.mkstemp(prefix="audio-station-resample-", suffix=".pcm")
+    fd, temporary_name = tempfile.mkstemp(prefix="purivox-resample-", suffix=".pcm")
     temporary = Path(temporary_name)
     output = os.fdopen(fd, "wb")
     stream = soxr.ResampleStream(

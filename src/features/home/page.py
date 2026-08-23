@@ -58,7 +58,7 @@ class HomePage(PageScrollArea):
         self.setObjectName("homePage")
         self.layout.setSpacing(20)
 
-        self.brand = CaptionLabel("AUDIO STATION")
+        self.brand = CaptionLabel("PURIVOX")
         self.title = TitleLabel()
         self.intro = BodyLabel()
         self.intro.setWordWrap(True)

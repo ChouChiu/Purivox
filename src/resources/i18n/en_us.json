@@ -1,5 +1,5 @@
 {
-  "window_title": "Audio Station v1.0",
+  "window_title": "Purivox v1.0",
   "file_select": "Choose audio",
   "song_label": "Input audio:",
   "mr_audio_label": "Stage / live audio:",
@@ -71,7 +71,7 @@
   "mr_tab_full_stage": "Full Stage",
   "nav_ai": "AI Track Separation",
   "nav_settings": "Settings",
-  "home_greeting": "Welcome to Audio Station",
+  "home_greeting": "Welcome to Purivox",
   "home_intro": "Use matching song sources to isolate live vocals from stage / live audio, or use AI to separate one audio file into vocals and background.",
   "home_choose_title": "Choose a workflow",
   "home_choose_hint": "Choose Single for one track or Full Stage for a continuous show. Both modes need matching song sources.",

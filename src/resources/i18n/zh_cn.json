@@ -1,5 +1,5 @@
 {
-  "window_title": "Audio Station v1.0",
+  "window_title": "Purivox v1.0",
   "file_select": "选择音频",
   "song_label": "输入音频:",
   "mr_audio_label": "舞台 / 现场音频:",
@@ -71,7 +71,7 @@
   "mr_tab_full_stage": "整场",
   "nav_ai": "AI 音轨分离",
   "nav_settings": "设置",
-  "home_greeting": "欢迎使用 Audio Station",
+  "home_greeting": "欢迎使用 Purivox",
   "home_intro": "使用歌曲音源消除舞台 / 现场音频中的垫音，或使用 AI 将一份音频分离为人声与背景。",
   "home_choose_title": "选择处理方式",
   "home_choose_hint": "处理单个舞台请选择单曲；处理连续整场录音请选择整场。两种模式都需要对应的歌曲音源。",

@@ -1,5 +1,5 @@
 {
-  "window_title": "Audio Station v1.0",
+  "window_title": "Purivox v1.0",
   "file_select": "オーディオを選択",
   "song_label": "入力オーディオ:",
   "mr_audio_label": "ステージ / ライブ音声:",
@@ -71,7 +71,7 @@
   "mr_tab_full_stage": "全編処理",
   "nav_ai": "AI トラック分離",
   "nav_settings": "設定",
-  "home_greeting": "Audio Station へようこそ",
+  "home_greeting": "Purivox へようこそ",
   "home_intro": "楽曲音源を使ってステージ / ライブ音声からライブボーカルを抽出するか、AI で一つの音声をボーカルと背景音に分離します。",
   "home_choose_title": "処理方法を選択",
   "home_choose_hint": "1 曲分を処理する場合は「単曲」、連続した公演録音は「全編処理」を選択してください。どちらも対応する楽曲音源が必要です。",

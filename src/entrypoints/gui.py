@@ -15,9 +15,9 @@ from shared.logging import configure_logging, set_log_level
 def run_gui(selftest: bool = False) -> int:
     configure_logging()
     app = QApplication.instance() or QApplication(sys.argv[:1])
-    app.setApplicationName("Audio Station")
+    app.setApplicationName("Purivox")
     app.setApplicationVersion(__version__)
-    app.setOrganizationName("Audio Station")
+    app.setOrganizationName("Purivox")
     # QFluentWidgets prints a Pro advertisement while its package is imported.
     # Keep stdout reserved for CLI result data even in standalone builds.
     with redirect_stdout(io.StringIO()):

@@ -1,5 +1,5 @@
 [app]
-title = Audio Station
+title = Purivox
 project_dir = .
 input_file = deployment/main.py
 exec_directory = dist
