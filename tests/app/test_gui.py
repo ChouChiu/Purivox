@@ -24,6 +24,8 @@ def test_main_window_has_mr_workspace_with_two_subpages(qtbot):
     load_config()
     window = MainWindow()
     qtbot.addWidget(window)
+    assert not window.windowIcon().isNull()
+    assert not window.windowIcon().pixmap(32, 32).isNull()
     pages = (window.home, window.mr_workspace, window.ai, window.settings)
     assert len({page.objectName() for page in pages}) == 4
     assert window.mr_workspace.stack.count() == 2
