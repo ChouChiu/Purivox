@@ -9,6 +9,7 @@ from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import QApplication
 
 from app.version import __version__
+from shared.branding import application_icon
 from shared.logging import configure_logging, set_log_level
 
 
@@ -18,6 +19,7 @@ def run_gui(selftest: bool = False) -> int:
     app.setApplicationName("Purivox")
     app.setApplicationVersion(__version__)
     app.setOrganizationName("Purivox")
+    app.setWindowIcon(application_icon())
     # QFluentWidgets prints a Pro advertisement while its package is imported.
     # Keep stdout reserved for CLI result data even in standalone builds.
     with redirect_stdout(io.StringIO()):

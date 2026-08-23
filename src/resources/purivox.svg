@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img">
+  <title>Purivox</title>
+  <desc>A rounded indigo tile with a white outlined letter P and a voice waveform.</desc>
+  <rect width="512" height="512" rx="112" fill="#5B5CE2"/>
+  <path
+    d="M160 392V120h116c83 0 140 43 140 116s-57 116-140 116h-56"
+    fill="none"
+    stroke="#FFFFFF"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    stroke-width="32"
+  />
+  <g fill="none" stroke="#FFFFFF" stroke-linecap="round" stroke-width="14">
+    <path d="M252 220v32"/>
+    <path d="M280 202v68"/>
+    <path d="M308 216v40"/>
+  </g>
+</svg>

@@ -32,6 +32,7 @@ from features.reference_removal import (
 )
 from features.reference_removal.page import MrPage
 from features.settings import SettingsPage
+from shared.branding import application_icon
 from shared.config import cfg
 from shared.i18n import tr
 from shared.logging import set_log_level
@@ -43,6 +44,7 @@ _GUI_REFERENCE_SIGMA_SECONDS = 3
 class MainWindow(FluentWindow):
     def __init__(self):
         super().__init__()
+        self.setWindowIcon(application_icon())
         self.language = str(cfg.language.value)
         self.jobs = JobPresenter(self, lambda: self.language)
         self.close_pending = False
