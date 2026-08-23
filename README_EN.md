@@ -28,7 +28,7 @@ Vocal Isolation, and their results should not be compared directly.
 - Fluent Design desktop interface with light, dark, and system themes
 - Instant switching among Chinese, English, Japanese, and Korean interfaces
 - Global time alignment, local clock-drift tracking, and reference-mask cancellation
-- Optional **Emphasize live vocals** and **Protect quiet live vocals** processing
+- Optional **Emphasize live vocals** and **Open-mic focus** processing
 - Song identification, repeated-segment detection, and editable processing ranges for full-stage
   recordings
 - Four optional MDX-Net separation models, downloaded on demand and verified with SHA-256
@@ -53,12 +53,6 @@ Start the graphical interface:
 uv run --locked purivox
 ```
 
-You can also start it from the source entry point:
-
-```bash
-uv run --locked python -m entrypoints
-```
-
 ## Using the Graphical Interface
 
 ### Single
@@ -69,8 +63,8 @@ uv run --locked python -m entrypoints
    interface uses a fixed statistical context.
 4. Preview the result before adjusting the strength. If you hear obvious pumping or thinning of
    the live vocal, reduce the strength or confirm that the song source is correct.
-5. **Emphasize live vocals** and **Protect quiet live vocals** are optional. The latter is
-   available only when vocal emphasis is enabled.
+5. **Emphasize live vocals** and **Open-mic focus** are optional. The latter is available only
+   when vocal emphasis is enabled.
 
 Use a song source that matches the version played at the venue as closely as possible. Different
 masters, edits, speeds, keys, or extra content will reduce removal quality.
@@ -128,7 +122,7 @@ processing:
 ```bash
 uv run --locked purivox mr "live-recording.wav" "song-source.wav" "live-vocal.wav" \
   --strength 75 --sigma 8 --align \
-  --center-extraction --weak-vocal-protection
+  --center-extraction --open-mic-focus
 ```
 
 Common reference-cancellation options:
@@ -139,7 +133,7 @@ Common reference-cancellation options:
 | `--sigma` | `1`, `3`, `8`, `16` | Advanced statistical window in seconds; default: `3`; the GUI always uses `3` |
 | `--align` / `--no-align` | on / off | Automatic alignment; enabled by default |
 | `--center-extraction` | flag | Further emphasize vocals located at the center of the stereo image |
-| `--weak-vocal-protection` | flag | Reduce attenuation of weaker vocals; requires center-focused processing |
+| `--open-mic-focus` | flag | Preserve more centered vocal in open-mic sections while continuing to attenuate closed-mic or backing-only sections; requires center-focused processing |
 | `--lang` | `zh_cn`, `en_us`, `ja_jp`, `ko_kr` | Language used for progress messages |
 
 Run the AI separation tool independently:
@@ -150,8 +144,7 @@ uv run --locked purivox ai "song.wav" --output-dir "output" --model mdxnet_1
 
 Available models are `mdxnet_1`, `mdxnet_main`, `kim_vocal`, and `kuielab_b`. Use `--models-dir`
 to specify a weights directory, or set the `PURIVOX_MODELS` environment variable for a shared
-model directory. The legacy `MR_REMOVER_MODELS` variable remains available as a compatibility
-fallback.
+model directory.
 
 ## Input, Output, and Important Notes
 

@@ -24,9 +24,9 @@ src/entrypoints (cli.py, gui.py)          — startup only
 
 Invariants enforced by `tests/test_architecture.py`: `shared` must never import `app` or `features.*`; feature packages must never import one another. Adding a feature = one new `src/features/<feature>/` dir; it may import `shared` freely and must not be imported by other features.
 
-**Reference pipeline** (`features/reference_removal/processing.py`): `read_audio` (SoundFile, Qt Multimedia fallback) → upmix to stereo → resample song source to stage rate (soxr) → optional `align_audio` (GCC-PHAT coarse lag + Lanczos warp) → `process_audio` (blocks of 30 s × sample rate, 2 s overlap, cos²/sin² crossfade) → resample to the 96 kHz Hi-Res export floor when needed → audio stats (peak/RMS dBFS) → atomic 24-bit WAV write.
+**Reference pipeline** (`features/reference_removal/processing.py`): `read_audio` (SoundFile, Qt Multimedia fallback) → upmix to stereo → resample song source to stage rate (soxr) → optional `align_audio` (GCC-PHAT coarse lag + Lanczos warp) → `process_audio` (12–28 s blocks selected from `sigma`, at least 2 s overlap, cos²/sin² crossfade) → resample to the 96 kHz Hi-Res export floor when needed → audio stats (peak/RMS dBFS) → atomic 24-bit WAV write.
 
-**Neural pipeline** (`features/neural_separation/processing.py`): resample input to 44.1 kHz → `ensure_model` (search: `--models-dir` override → `PURIVOX_MODELS` env → system app-data dir → repo `models/`; legacy `MR_REMOVER_MODELS` remains a fallback; download from TRvlvr releases with SHA-256 verify) → `MdxNet.separate` (chunked overlap-add, hanning divider accumulation) → background = mix − vocal → resample both stems to 96 kHz → write 24-bit `<stem>_vocal.wav` + `<stem>_background.wav`.
+**Neural pipeline** (`features/neural_separation/processing.py`): resample input to 44.1 kHz → `ensure_model` (search: `--models-dir` override → `PURIVOX_MODELS` env → system app-data dir → repo `models/`; download from TRvlvr releases with SHA-256 verify) → `MdxNet.separate` (chunked overlap-add, hanning divider accumulation) → background = mix − vocal → resample both stems to 96 kHz → write 24-bit `<stem>_vocal.wav` + `<stem>_background.wav`.
 
 **Concurrency**: pages define Qt `Signal()`s (`start_requested`, `cancel_requested`); `MainWindow` builds a job dataclass and hands it to `JobPresenter`, which owns page state/result UI and delegates execution to `JobRunner`. The runner owns the `QThread` and `ProcessingWorker` lifecycle and emits `progress`/`succeeded`/`failed`/`cancelled`/`finished`. Cancellation is cooperative via `CancellationToken.raise_if_cancelled()` (`src/shared/processing.py`). CLI runs the same jobs synchronously with SIGINT → token cancel.
 
@@ -34,7 +34,7 @@ Invariants enforced by `tests/test_architecture.py`: `shared` must never import 
 
 | Path | Purpose |
 |---|---|
-| `src/entrypoints/` | `cli.py` (argparse: `mr`, `ai`, `--selftest`), `gui.py`, `__main__.py` (`python -m entrypoints`) |
+| `src/entrypoints/` | `cli.py` (argparse: `mr`, `ai`, `--selftest`) and `gui.py` |
 | `src/app/` | `main_window.py` (FluentWindow shell), `job_presenter.py` (page state/results), `job_runner.py`/`worker.py` (QThread lifecycle and adapter), cross-feature orchestration, `version.py` |
 | `src/features/reference_removal/` | MR pipeline: `dsp/algorithms.py` (reference-mask cancellation), `dsp/alignment.py`, `finder.py` (auto accompaniment match), `processing.py`, `page.py`, `models.py` |
 | `src/features/full_stage/` | Multi-source fingerprint matching, timeline models, and the full-stage page |
@@ -56,7 +56,6 @@ uv sync --locked
 
 # run
 uv run --locked purivox                            # GUI
-uv run --locked python -m entrypoints              # GUI (same)
 uv run --locked purivox mr <song> <acc> <out.wav> --strength 75 --sigma 8 --align --lang zh_cn
 uv run --locked purivox ai <song> [--output-dir <dir>] [--model mdxnet_1] [--models-dir <dir>]
 uv run --locked purivox --selftest                 # self-test smoke (offscreen-safe)

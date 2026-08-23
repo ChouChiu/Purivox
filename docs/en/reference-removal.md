@@ -47,7 +47,7 @@ flowchart LR
     enabled -->|no| mask["Complex transfer estimate<br/>confidence-weighted Wiener mask"]
     warp --> mask
     mask --> center{"Center-focused processing?"}
-    center -->|yes| focus["Center focus<br/>optional weak-vocal protection"]
+    center -->|yes| focus["Center focus<br/>optional open-mic focus"]
     center -->|no| protect["Peak protection"]
     focus --> protect
     protect --> output["At least 96 kHz / 24-bit WAV"]
@@ -148,10 +148,10 @@ applies a short-time Fourier transform to the left and right channels, estimates
 share from left/right power, cross-spectral coherence, and phase difference, and primarily retains
 coherent center content between approximately 80 Hz and 14 kHz.
 
-**Protect quiet live vocals** is effective only when vocal emphasis is enabled. When center
-confidence is insufficient, it falls back to ordinary Mid content instead of restoring the full
-left and right channels. This protects quieter vocals where possible without bringing back the
-entire wide source-derived layer.
+**Open-mic focus** is effective only when vocal emphasis is enabled. In open-mic or vocal-active
+regions with low center confidence, it adds ordinary Mid content instead of restoring the full
+left and right channels. Closed-mic and backing-only regions retain Side attenuation. This helps
+preserve quiet live vocals without bringing back the entire wide source-derived layer.
 
 Both options alter spatial presentation and are outside the core reference-mask path. Decide
 whether to enable them by comparing the same source material through listening.
@@ -165,7 +165,7 @@ standardizes the export format but cannot restore high-frequency detail absent f
 
 Algorithm tests cover time offsets, local drift, inverted polarity, frequency-dependent room
 transfer, unrelated sources, rejection of source-only replacement lyrics, matrix crosstalk, block
-seams, center focus, and weak-vocal protection. Synthetic metrics only detect implementation
+seams, center focus, and open-mic focus. Synthetic metrics only detect implementation
 regressions. Real material must still be exported with identical input and settings for direct
 comparison, listening closely to vocal level, sibilance, breathing, harmonies, reverb tails, and
 audience sound.

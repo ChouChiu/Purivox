@@ -44,7 +44,7 @@ flowchart LR
 Models are searched in this order:
 
 1. The directory supplied through the `--models-dir` job option;
-2. The `PURIVOX_MODELS` environment variable (legacy `MR_REMOVER_MODELS` remains a fallback);
+2. The `PURIVOX_MODELS` environment variable;
 3. The `models/` directory under the system application-data directory;
 4. The `models/` directory at the development repository root.
 

@@ -22,7 +22,7 @@ MR Remove，其结果也不应与 MR Remove 的垫音消除效果直接比较。
 - Fluent Design 桌面界面，支持浅色、深色和跟随系统主题
 - 中文、英文、日语和韩语界面即时切换
 - 全局时间对齐、局部时钟漂移跟踪和参考掩码对消
-- 可选的“突出人声”和“保护较弱人声”处理
+- 可选的“突出人声”和“开麦聚焦”处理
 - 整场录音歌曲识别、重复片段识别和可编辑处理范围
 - 独立附带 4 个可选 MDX-Net 分离模型，缺失时自动下载并校验 SHA-256
 - 长音频分块处理、任务取消和原子写出
@@ -45,12 +45,6 @@ uv sync --locked
 uv run --locked purivox
 ```
 
-也可以从源码入口启动：
-
-```bash
-uv run --locked python -m entrypoints
-```
-
 ## 图形界面使用方法
 
 ### 单曲垫音消除
@@ -59,7 +53,7 @@ uv run --locked python -m entrypoints
 2. 选择待处理的舞台 / 现场音频，以及与其内容对应的歌曲音源。
 3. 程序会自动执行对齐；先使用默认的 75% 强度处理，图形界面会采用固定的统计上下文。
 4. 试听结果后再调整强度。声音出现明显抽吸或人声变薄时，应降低强度或确认歌曲音源是否正确。
-5. “突出人声”和“保护较弱人声”是可选处理；后者只能在前者开启时使用。
+5. “突出人声”和“开麦聚焦”是可选处理；后者只能在前者开启时使用。
 
 歌曲音源应尽量与现场使用的版本一致。不同母带、剪辑、变速、升降调或额外内容都会降低消除效果。
 
@@ -108,7 +102,7 @@ uv run --locked purivox mr "现场录音.wav" "歌曲音源.wav" "现场人声.w
 ```bash
 uv run --locked purivox mr "现场录音.wav" "歌曲音源.wav" "现场人声.wav" \
   --strength 75 --sigma 8 --align \
-  --center-extraction --weak-vocal-protection
+  --center-extraction --open-mic-focus
 ```
 
 常用参考对消参数：
@@ -119,7 +113,7 @@ uv run --locked purivox mr "现场录音.wav" "歌曲音源.wav" "现场人声.w
 | `--sigma` | `1`、`3`、`8`、`16` | 高级统计窗口秒数，默认 `3`；图形界面固定使用 `3` |
 | `--align` / `--no-align` | 开 / 关 | 是否自动对齐，默认开启 |
 | `--center-extraction` | 开关 | 进一步突出位于左右声道中央的人声 |
-| `--weak-vocal-protection` | 开关 | 减少较弱人声被一并削弱，依赖中置处理 |
+| `--open-mic-focus` | 开关 | 开麦处保留更多中置人声、未开麦或只有垫音处继续压低，依赖中置处理 |
 | `--lang` | `zh_cn`、`en_us`、`ja_jp`、`ko_kr` | 进度信息语言 |
 
 独立运行 AI 分离工具：
@@ -130,7 +124,6 @@ uv run --locked purivox ai "歌曲.wav" --output-dir "输出目录" --model mdxn
 
 可用模型为 `mdxnet_1`、`mdxnet_main`、`kim_vocal` 和 `kuielab_b`。可用
 `--models-dir` 指定权重目录，也可通过 `PURIVOX_MODELS` 环境变量设置公共模型目录。
-旧版的 `MR_REMOVER_MODELS` 变量仍可作为兼容回退。
 
 ## 输入、输出与注意事项
 
