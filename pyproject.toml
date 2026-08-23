@@ -120,6 +120,7 @@ files = [
   "src/shared/audio/__init__.py",
   "src/shared/audio/analysis.py",
   "src/shared/audio/io.py",
+  "src/shared/branding.py",
   "src/shared/config.py",
   "src/shared/dsp/__init__.py",
   "src/shared/dsp/spectral.py",

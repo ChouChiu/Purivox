@@ -4,7 +4,7 @@ project_dir = .
 input_file = deployment/main.py
 exec_directory = dist
 project_file = pyproject.toml
-icon =
+icon = src/resources/purivox.svg
 
 [python]
 python_path =
@@ -14,7 +14,7 @@ android_packages =
 [qt]
 qml_files = 
 excluded_qml_plugins = 
-modules = Concurrent,Core,DBus,Gui,Multimedia,Network,Widgets
+modules = Concurrent,Core,DBus,Gui,Multimedia,Network,Svg,Widgets
 plugins = platforms,multimedia
 
 [android]
