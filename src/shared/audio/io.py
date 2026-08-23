@@ -15,6 +15,9 @@ from shared.processing import CancellationToken
 
 logger = logging.getLogger(__name__)
 
+HI_RES_SAMPLE_RATE = 96_000
+HI_RES_BIT_DEPTH = 24
+
 
 @dataclass(frozen=True, slots=True)
 class AudioData:
@@ -272,6 +275,11 @@ def resample_audio(
             output.close()
         temporary.unlink(missing_ok=True)
         raise
+
+
+def prepare_hi_res_output(audio: AudioData, token: CancellationToken | None = None) -> AudioData:
+    """Return audio at the original rate or the 96 kHz Hi-Res export floor."""
+    return resample_audio(audio, max(audio.sample_rate, HI_RES_SAMPLE_RATE), token)
 
 
 def write_wav_atomic(

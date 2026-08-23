@@ -5,11 +5,14 @@ import numpy as np
 import soundfile as sf
 
 from shared.audio import (
+    HI_RES_BIT_DEPTH,
+    HI_RES_SAMPLE_RATE,
     AudioData,
     AudioStats,
     analyze_audio,
     copy_audio,
     create_pcm_audio,
+    prepare_hi_res_output,
     read_audio,
     resample_audio,
     write_wav_atomic,
@@ -58,6 +61,24 @@ def test_wav_roundtrip_and_resample(tmp_path: Path):
         backing = decoded.backing_path
         decoded.cleanup()
         assert backing is not None and not backing.exists()
+
+
+def test_hi_res_output_uses_96_khz_24_bit_floor(tmp_path: Path):
+    source = AudioData(np.zeros((2, 8_000), dtype=np.float32), 8_000)
+    prepared = prepare_hi_res_output(source)
+    path = tmp_path / "hi-res.wav"
+    try:
+        assert prepared.sample_rate == HI_RES_SAMPLE_RATE
+        assert prepared.frames == HI_RES_SAMPLE_RATE
+        write_wav_atomic(path, prepared, HI_RES_BIT_DEPTH)
+        info = sf.info(path)
+        assert info.samplerate == HI_RES_SAMPLE_RATE
+        assert info.subtype == "PCM_24"
+    finally:
+        prepared.cleanup()
+
+    higher_rate = AudioData(np.zeros((2, 192), dtype=np.float32), 192_000)
+    assert prepare_hi_res_output(higher_rate) is higher_rate
 
 
 def test_temporary_pcm_is_disk_backed_and_removable():
