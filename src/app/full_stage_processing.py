@@ -14,9 +14,11 @@ from features.full_stage import (
 )
 from features.reference_removal.dsp import align_audio, process_audio
 from shared.audio import (
+    HI_RES_BIT_DEPTH,
     analyze_audio,
     copy_audio,
     create_pcm_audio,
+    prepare_hi_res_output,
     read_audio,
     resample_audio,
     write_wav_atomic,
@@ -115,7 +117,7 @@ def run_full_stage_job(
     if not matched:
         raise ValueError("no source could be matched to the stage audio")
 
-    stage = output = None
+    stage = output = hi_res_output = None
     try:
         report_progress(progress, 31, job.language, "stage_render_loading")
         stage = read_audio(job.stage, token).stereo()
@@ -211,16 +213,20 @@ def run_full_stage_job(
                     if audio is not None:
                         audio.cleanup()
 
+        report_progress(progress, 84, job.language, "preparing_hi_res")
+        hi_res_output = prepare_hi_res_output(output, token)
         report_progress(progress, 86, job.language, "analyzing_output")
-        stats = analyze_audio(output, 24, token)
+        stats = analyze_audio(hi_res_output, HI_RES_BIT_DEPTH, token)
         output.release_pages()
         report_progress(progress, 91, job.language, "saving")
-        write_wav_atomic(job.output, output, 24, token)
+        write_wav_atomic(job.output, hi_res_output, HI_RES_BIT_DEPTH, token)
         stats = replace(stats, file_size=job.output.stat().st_size)
         report_progress(progress, 100, job.language, "done_status", path=job.output)
         logger.info("full-stage render completed: %s", job.output.resolve())
         return FullStageResult(analysis, (job.output.resolve(),), (stats,))
     finally:
-        for audio in (output, stage):
+        if hi_res_output is output:
+            hi_res_output = None
+        for audio in (hi_res_output, output, stage):
             if audio is not None:
                 audio.cleanup()

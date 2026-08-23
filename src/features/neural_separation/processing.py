@@ -7,7 +7,14 @@ from features.neural_separation.catalog import get_model
 from features.neural_separation.inference import MdxNet
 from features.neural_separation.model_store import ensure_model
 from features.neural_separation.models import NeuralJob
-from shared.audio import create_pcm_audio, read_audio, resample_audio, write_wav_atomic
+from shared.audio import (
+    HI_RES_BIT_DEPTH,
+    create_pcm_audio,
+    prepare_hi_res_output,
+    read_audio,
+    resample_audio,
+    write_wav_atomic,
+)
 from shared.i18n import tr
 from shared.processing import (
     CancellationToken,
@@ -37,7 +44,7 @@ def run_neural_job(
     vocal_path = Path(str(base) + "_vocal.wav")
     background_path = Path(str(base) + "_background.wav")
     _validate_distinct(job.song, vocal_path, background_path)
-    song = vocal_audio = background_audio = None
+    song = vocal_audio = background_audio = hi_res_vocal = hi_res_background = None
     try:
         report_progress(progress, 0, job.language, "loading_song")
         song = read_audio(job.song, token).stereo()
@@ -75,10 +82,14 @@ def run_neural_job(
             background_audio.samples[:, start:end] = (
                 song.samples[:, start:end] - vocal_audio.samples[:, start:end]
             )
-        report_progress(progress, 87, job.language, "ai_saving")
-        write_wav_atomic(vocal_path, vocal_audio, 16, token)
-        report_progress(progress, 94, job.language, "ai_saving")
-        write_wav_atomic(background_path, background_audio, 16, token)
+        report_progress(progress, 86, job.language, "preparing_hi_res")
+        hi_res_vocal = prepare_hi_res_output(vocal_audio, token)
+        report_progress(progress, 90, job.language, "ai_saving")
+        write_wav_atomic(vocal_path, hi_res_vocal, HI_RES_BIT_DEPTH, token)
+        report_progress(progress, 93, job.language, "preparing_hi_res")
+        hi_res_background = prepare_hi_res_output(background_audio, token)
+        report_progress(progress, 96, job.language, "ai_saving")
+        write_wav_atomic(background_path, hi_res_background, HI_RES_BIT_DEPTH, token)
         report_progress(
             progress,
             100,
@@ -90,6 +101,10 @@ def run_neural_job(
         logger.info("neural job completed: vocal=%s background=%s", vocal_path, background_path)
         return ProcessingResult((vocal_path, background_path))
     finally:
-        for audio in (background_audio, vocal_audio, song):
+        if hi_res_vocal is vocal_audio:
+            hi_res_vocal = None
+        if hi_res_background is background_audio:
+            hi_res_background = None
+        for audio in (hi_res_background, hi_res_vocal, background_audio, vocal_audio, song):
             if audio is not None:
                 audio.cleanup()

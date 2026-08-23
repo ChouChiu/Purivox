@@ -7,8 +7,10 @@ from pathlib import Path
 from features.reference_removal.dsp import align_audio, process_audio
 from features.reference_removal.models import ReferenceJob
 from shared.audio import (
+    HI_RES_BIT_DEPTH,
     analyze_audio,
     create_pcm_audio,
+    prepare_hi_res_output,
     read_audio,
     resample_audio,
     write_wav_atomic,
@@ -42,7 +44,7 @@ def run_reference_job(
         job.weak_vocal_protection,
     )
     _validate_reference_paths(job.song, job.accompaniment, job.output)
-    song = reference = processed_audio = None
+    song = reference = processed_audio = hi_res_audio = None
     try:
         report_progress(progress, 0, job.language, "loading_song")
         song = read_audio(job.song, token).stereo()
@@ -92,16 +94,20 @@ def run_reference_job(
             center_extraction=job.center_extraction,
             weak_vocal_protection=job.weak_vocal_protection,
         )
-        bit_depth = 24
+        report_progress(progress, 84, job.language, "preparing_hi_res")
+        hi_res_audio = prepare_hi_res_output(processed_audio, token)
+        bit_depth = HI_RES_BIT_DEPTH
         report_progress(progress, 86, job.language, "analyzing_output")
-        stats = analyze_audio(processed_audio, bit_depth, token)
+        stats = analyze_audio(hi_res_audio, bit_depth, token)
         report_progress(progress, 90, job.language, "saving")
-        write_wav_atomic(job.output, processed_audio, bit_depth, token)
+        write_wav_atomic(job.output, hi_res_audio, bit_depth, token)
         stats = replace(stats, file_size=job.output.stat().st_size)
         report_progress(progress, 100, job.language, "done_status", path=job.output)
         logger.info("reference job completed: %s", job.output.resolve())
         return ProcessingResult((job.output.resolve(),), (stats,))
     finally:
-        for audio in (processed_audio, reference, song):
+        if hi_res_audio is processed_audio:
+            hi_res_audio = None
+        for audio in (hi_res_audio, processed_audio, reference, song):
             if audio is not None:
                 audio.cleanup()

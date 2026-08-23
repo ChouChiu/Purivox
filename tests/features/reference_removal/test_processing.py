@@ -6,6 +6,7 @@ import soundfile as sf
 
 from features.reference_removal.models import ReferenceJob
 from features.reference_removal.processing import run_reference_job
+from shared.audio import HI_RES_SAMPLE_RATE
 from shared.processing import CancellationToken
 
 
@@ -29,7 +30,7 @@ def test_reference_pipeline_end_to_end(tmp_path: Path):
     assert len(result.audio_stats) == 1
     stats = result.audio_stats[0]
     assert stats.duration_seconds == 1
-    assert stats.sample_rate == sample_rate
+    assert stats.sample_rate == HI_RES_SAMPLE_RATE
     assert stats.channels == 2
     assert stats.bit_depth == 24
     assert stats.peak_dbfs <= 0
@@ -37,7 +38,8 @@ def test_reference_pipeline_end_to_end(tmp_path: Path):
     assert stats.file_size == output.stat().st_size
     assert output.is_file()
     data, rate = sf.read(output, always_2d=True)
-    assert rate == sample_rate and data.shape == (sample_rate, 2)
+    assert rate == HI_RES_SAMPLE_RATE and data.shape == (HI_RES_SAMPLE_RATE, 2)
+    assert sf.info(output).subtype == "PCM_24"
     assert events[-1].value == 100
 
 
