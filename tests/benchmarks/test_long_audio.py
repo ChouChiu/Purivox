@@ -42,7 +42,8 @@ def test_fifteen_minute_stereo_rss_length_and_seams():
         assert result is output.samples
         assert result.shape == (2, frames)
         assert np.isfinite(result[:, ::sample_rate]).all()
-        step = 28 * sample_rate
+        # sigma=8 uses a 16-second block with four seconds of overlap.
+        step = 12 * sample_rate
         seams = np.arange(step, frames, step)
         jumps = np.abs(result[0, seams] - result[0, seams - 1])
         assert float(np.max(jumps, initial=0.0)) < 0.05

@@ -458,3 +458,28 @@ def test_reference_mask_handles_frequency_dependent_room_transfer():
     spectral_error = np.sqrt(np.mean((spectral - vocal) ** 2))
     assert spectral_error < 0.05
     assert corr(spectral.ravel(), vocal.ravel()) > 0.9
+
+
+def test_reference_mask_keeps_the_song_tail_after_a_short_reference():
+    sample_rate = 8_000
+    song_length = sample_rate * 4
+    reference_length = sample_rate * 2
+    time = np.arange(song_length) / sample_rate
+    vocal = 0.24 * np.sin(2 * np.pi * 431 * time)
+    reference = 0.18 * np.sin(2 * np.pi * 127 * np.arange(reference_length) / sample_rate)
+    padded_reference = np.pad(reference, (0, song_length - reference_length))
+    mixture = np.stack([vocal + padded_reference, 0.95 * vocal + padded_reference])
+
+    output = process_audio(
+        mixture,
+        np.stack([reference, reference]),
+        sample_rate,
+        1.0,
+        8,
+    )
+
+    # Exclude the final STFT synthesis window, whose zero-padding changes only
+    # the last few milliseconds while retaining the complete output duration.
+    tail = slice(3 * sample_rate, song_length - sample_rate // 10)
+    assert output.shape == mixture.shape
+    assert np.allclose(output[:, tail], mixture[:, tail], atol=2e-4)
