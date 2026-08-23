@@ -21,6 +21,8 @@ def test_pyside_project_lists_every_python_source():
 
 def test_distribution_includes_runtime_packages_and_documentation():
     config = _project_config()
+    assert config["project"]["name"] == "purivox"
+    assert config["project"]["scripts"] == {"purivox": "entrypoints.cli:main"}
     assert config["project"]["dynamic"] == ["version"]
     assert config["tool"]["hatch"]["version"]["path"] == "src/app/version.py"
     wheel_packages = set(config["tool"]["hatch"]["build"]["targets"]["wheel"]["packages"])

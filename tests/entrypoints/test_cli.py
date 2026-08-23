@@ -5,6 +5,7 @@ from entrypoints.cli import build_parser
 
 def test_reference_command_has_no_algorithm_option():
     parser = build_parser()
+    assert parser.prog == "purivox"
     defaults = parser.parse_args(["mr", "song.wav", "reference.flac", "output.wav"])
 
     assert not hasattr(defaults, "algorithm")

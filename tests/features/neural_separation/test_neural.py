@@ -5,10 +5,29 @@ import soundfile as sf
 
 from features.neural_separation.catalog import DEFAULT_MODEL_ID, get_model, model_catalog
 from features.neural_separation.inference import MdxNetSpec, demix_chunks
+from features.neural_separation.model_store import candidate_model_dirs
 from features.neural_separation.models import NeuralJob
 from features.neural_separation.processing import run_neural_job
 from shared.audio import HI_RES_SAMPLE_RATE, create_pcm_audio
 from shared.processing import CancellationToken
+
+
+def test_model_directory_uses_purivox_environment_variable(monkeypatch, tmp_path: Path):
+    preferred = tmp_path / "preferred"
+    legacy = tmp_path / "legacy"
+    monkeypatch.setenv("PURIVOX_MODELS", str(preferred))
+    monkeypatch.setenv("MR_REMOVER_MODELS", str(legacy))
+
+    assert candidate_model_dirs()[0] == preferred.resolve()
+    assert legacy.resolve() not in candidate_model_dirs()
+
+
+def test_legacy_model_environment_variable_remains_supported(monkeypatch, tmp_path: Path):
+    legacy = tmp_path / "legacy"
+    monkeypatch.delenv("PURIVOX_MODELS", raising=False)
+    monkeypatch.setenv("MR_REMOVER_MODELS", str(legacy))
+
+    assert candidate_model_dirs()[0] == legacy.resolve()
 
 
 def test_catalog_is_unique_and_has_hashes():
