@@ -11,7 +11,7 @@ def test_internal_markdown_links_resolve():
     documents = (
         ROOT / "README.md",
         ROOT / "README_EN.md",
-        *(ROOT / "docs").glob("*.md"),
+        *(ROOT / "docs").rglob("*.md"),
     )
     broken: list[str] = []
     for document in documents:
@@ -25,13 +25,18 @@ def test_internal_markdown_links_resolve():
 
 
 def test_readme_links_every_technical_document():
-    readme = (ROOT / "README.md").read_text(encoding="utf-8")
-    missing = [
-        path.name
-        for path in (ROOT / "docs").glob("*.md")
-        if path.name != "README.md" and f"docs/{path.name}" not in readme
-    ]
-    assert not missing, f"technical documents not linked from README.md: {missing}"
+    readmes = {
+        ROOT / "README.md": ROOT / "docs",
+        ROOT / "README_EN.md": ROOT / "docs" / "en",
+    }
+    for readme_path, docs_dir in readmes.items():
+        readme = readme_path.read_text(encoding="utf-8")
+        missing = [
+            path.name
+            for path in docs_dir.glob("*.md")
+            if path.name != "README.md" and str(path.relative_to(ROOT)) not in readme
+        ]
+        assert not missing, f"technical documents not linked from {readme_path.name}: {missing}"
 
 
 def test_readmes_link_to_each_other():
@@ -40,3 +45,20 @@ def test_readmes_link_to_each_other():
 
     assert 'href="README_EN.md"' in chinese_readme
     assert 'href="README.md"' in english_readme
+
+
+def test_technical_document_translations_have_matching_files():
+    chinese = {path.name for path in (ROOT / "docs").glob("*.md")}
+    english = {path.name for path in (ROOT / "docs" / "en").glob("*.md")}
+
+    assert english == chinese
+
+
+def test_technical_document_translations_link_to_each_other():
+    for chinese_path in (ROOT / "docs").glob("*.md"):
+        english_path = ROOT / "docs" / "en" / chinese_path.name
+        chinese = chinese_path.read_text(encoding="utf-8")
+        english = english_path.read_text(encoding="utf-8")
+
+        assert f'href="en/{chinese_path.name}"' in chinese
+        assert f'href="../{chinese_path.name}"' in english
