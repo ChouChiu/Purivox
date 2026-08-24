@@ -14,9 +14,7 @@ from shared.processing import CancellationToken
 _MASK_FLOOR = 0.05
 _CONFIDENCE_LOW = 0.03
 _CONFIDENCE_HIGH = 0.35
-_DECISION_MEMORY = 0.8
 _SPECTRAL_OVERSUBTRACTION = 1.5
-_FAST_CONFIDENCE_SECONDS = 0.12
 _SPECTRAL_CELL_BUDGET = 4_000_000
 _MAX_PROCESSING_BLOCK_SECONDS = 48
 _MAX_PROCESSING_WORKERS = min(5, os.cpu_count() or 1)
@@ -86,42 +84,6 @@ def _weighted_smooth(
 def _smoothstep(low: float, high: float, values: np.ndarray) -> np.ndarray:
     scaled = np.clip((values - low) / (high - low), 0.0, 1.0)
     return scaled * scaled * (3.0 - 2.0 * scaled)
-
-
-def _erb_weighted_confidence(
-    confidence: np.ndarray,
-    reference_power: np.ndarray,
-    frequencies: np.ndarray,
-) -> np.ndarray:
-    """Stabilize per-bin confidence in approximately one-ERB auditory bands.
-
-    The band estimate is weighted by predicted reference power, so a narrow
-    accompaniment partial is not diluted by neighbouring empty FFT bins. This
-    rejects isolated coherence spikes while retaining the fine-bin mask needed
-    to avoid suppressing unrelated vocals in the same broad frequency region.
-    """
-    if confidence.shape != reference_power.shape or confidence.shape[1] != frequencies.size:
-        raise ValueError("confidence, reference power and frequencies must share FFT bins")
-    erb_number = 21.4 * np.log10(1.0 + 0.00437 * frequencies)
-    band_count = max(round(float(erb_number[-1])), 1)
-    band_index = np.minimum(
-        np.floor(erb_number * band_count / max(float(erb_number[-1]), 1e-12)).astype(int),
-        band_count - 1,
-    )
-    stabilized = np.empty_like(confidence)
-    for band in range(band_count):
-        bins = band_index == band
-        if not np.any(bins):
-            continue
-        weights = reference_power[:, bins]
-        numerator = np.sum(confidence[:, bins] * weights, axis=1, keepdims=True)
-        denominator = np.sum(weights, axis=1, keepdims=True)
-        stabilized[:, bins] = np.divide(
-            numerator,
-            denominator + 1e-12,
-            out=np.zeros_like(numerator),
-        )
-    return stabilized
 
 
 def _phantom_center_enhance(
@@ -327,13 +289,7 @@ def _reference_mask_cancel(
 
     mixture_power = np.zeros(song_spectra[0].shape, dtype=np.float32)
     removable_power = np.zeros_like(mixture_power)
-    predicted_power = np.zeros_like(mixture_power)
     confidence_sigma = max(sigma_frames / 2.0, 1.0)
-    fast_confidence_sigma = max(
-        _FAST_CONFIDENCE_SECONDS * sample_rate / hop / 6.0,
-        1.0,
-    )
-    frequencies = fft_frequencies(sample_rate, n_fft)
     for mixture_channel, predicted_channel in zip(song_spectra, predicted, strict=True):
         channel_power = np.abs(mixture_channel) ** 2
         reference_power = np.abs(predicted_channel) ** 2
@@ -348,68 +304,18 @@ def _reference_mask_cancel(
             0.0,
             1.0,
         )
-        fast_mix = _spectral_smooth(channel_power, fast_confidence_sigma, 0.5)
-        fast_reference = _spectral_smooth(reference_power, fast_confidence_sigma, 0.5)
-        fast_cross = _spectral_smooth(
-            mixture_channel * np.conj(predicted_channel),
-            fast_confidence_sigma,
-            0.5,
-        )
-        fast_coherence = np.clip(
-            np.abs(fast_cross) ** 2 / (fast_mix * fast_reference + 1e-12),
-            0.0,
-            1.0,
-        )
-        slow_confidence = _smoothstep(_CONFIDENCE_LOW, _CONFIDENCE_HIGH, coherence)
-        fast_confidence = _smoothstep(0.02, 0.30, fast_coherence)
-        confidence = slow_confidence * (0.2 + 0.8 * fast_confidence)
-        confidence = np.sqrt(
-            confidence * _erb_weighted_confidence(confidence, reference_power, frequencies)
-        )
+        confidence = _smoothstep(_CONFIDENCE_LOW, _CONFIDENCE_HIGH, coherence)
         mixture_power += channel_power
-        predicted_power += reference_power
         removable_power += confidence * reference_power
 
-    instantaneous = np.maximum(
+    remaining_power = np.maximum(
         mixture_power - _SPECTRAL_OVERSUBTRACTION * removable_power,
         (_MASK_FLOOR**2) * mixture_power,
     )
-    directed = np.empty_like(instantaneous)
-    directed[0] = instantaneous[0]
-    for frame in range(1, instantaneous.shape[0]):
-        if frame % 256 == 0:
-            token.raise_if_cancelled()
-        directed[frame] = (
-            _DECISION_MEMORY * directed[frame - 1] + (1.0 - _DECISION_MEMORY) * instantaneous[frame]
-        )
-    mask = np.sqrt(np.clip(directed / (mixture_power + 1e-12), _MASK_FLOOR**2, 1.0))
-    # Keep frequency smoothing narrow: a full-bin blur refills tonal notches from
-    # their untouched neighbours and leaves clearly audible reference harmonics.
+    mask = np.sqrt(np.clip(remaining_power / (mixture_power + 1e-12), _MASK_FLOOR**2, 1.0))
+    # A single narrow smoothing pass prevents isolated-bin musical noise without
+    # refilling tonal notches from untouched neighbours.
     mask = gaussian_filter(mask, sigma=(0.75, 0.35), mode="reflect")
-
-    mixture_magnitude = np.sqrt(mixture_power)
-    reference_magnitude = np.sqrt(predicted_power)
-    mixture_flux = np.maximum(
-        np.diff(mixture_magnitude, axis=0, prepend=mixture_magnitude[:1]), 0.0
-    )
-    reference_flux = np.maximum(
-        np.diff(reference_magnitude, axis=0, prepend=reference_magnitude[:1]),
-        0.0,
-    )
-    novelty = np.clip(
-        (mixture_flux - reference_flux) / (mixture_flux + 1e-12),
-        0.0,
-        1.0,
-    )
-    flux_activity = np.clip(mixture_flux / (mixture_magnitude + 1e-12), 0.0, 1.0)
-    novelty *= _smoothstep(0.02, 0.2, flux_activity)
-    reference_confidence = np.clip(
-        removable_power / (predicted_power + 1e-12),
-        0.0,
-        1.0,
-    )
-    novelty *= 1.0 - _smoothstep(0.5, 0.9, reference_confidence)
-    mask = np.maximum(mask, _smoothstep(0.15, 0.75, novelty))
     effective_mask = 1.0 - strength * (1.0 - np.clip(mask, _MASK_FLOOR, 1.0))
     token.raise_if_cancelled()
     return np.asarray(
