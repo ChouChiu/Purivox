@@ -294,3 +294,115 @@ jobs:
           - Linux standalone: ${{ steps.standalone-artifact.outputs.artifact-url || 'Not uploaded' }}
           - Build logs: ${{ steps.logs-artifact.outputs.artifact-url || 'Not uploaded' }}
           MARKDOWN
+
+  build-windows:
+    name: Build Windows standalone
+    needs: quality
+    runs-on: windows-2025
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Setup uv
+        id: setup-uv
+        uses: astral-sh/setup-uv@v10.0.1
+        with:
+          version: "0.12.2"
+          python-version: "3.14"
+          enable-cache: true
+          cache-python: true
+          cache-dependency-glob: |
+            pyproject.toml
+            uv.lock
+
+      - name: Prepare logs
+        run: mkdir -p logs
+
+      - name: Restore compiler cache
+        id: compiler-cache
+        uses: actions/cache@v6
+        with:
+          path: ~/AppData/Local/Nuitka/Nuitka/Cache
+          key: >-
+            nuitka-${{ runner.os }}-py3.14-${{ hashFiles('uv.lock', 'pysidedeploy.spec',
+            'src/**/*.py', 'deployment/**/*.py') }}
+          restore-keys: |
+            nuitka-${{ runner.os }}-py3.14-
+
+      - name: Sync dependencies
+        run: uv sync --locked --no-dev --group deploy 2>&1 | tee logs/sync.log
+
+      - name: Prepare deploy spec
+        run: |
+          # pyside6-deploy carries a single icon key and hands it to Nuitka as
+          # --windows-icon-from-ico, which will not accept the SVG the Linux
+          # build uses.  --assume-yes-for-downloads keeps Nuitka from prompting
+          # when it fetches its own ccache, which would hang the runner.
+          sed -e 's|^icon = .*|icon = deployment/purivox.ico|' \
+              -e 's|^extra_args = |extra_args = --assume-yes-for-downloads |' \
+              pysidedeploy.spec > pysidedeploy-windows.spec
+          tee logs/deploy-spec.log < pysidedeploy-windows.spec
+
+      - name: Build standalone
+        id: standalone-build
+        run: >-
+          uv run --locked --no-dev --group deploy
+          pyside6-deploy -c pysidedeploy-windows.spec --force
+          2>&1 | tee logs/standalone-build.log
+
+      - name: Archive standalone
+        run: |
+          # Zip from inside dist/ so the archive root is Purivox.dist, matching
+          # the layout the Linux tarball unpacks to.
+          (cd dist && 7z a -tzip -mx=5 purivox-windows-x86_64.zip Purivox.dist) \
+            2>&1 | tee logs/standalone.log
+
+      - name: Generate checksums
+        run: |
+          sha256sum dist/purivox-windows-x86_64.zip \
+            | tee dist/SHA256SUMS-windows | tee logs/checksums.log
+
+      - name: Upload standalone
+        id: standalone-artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: windows-standalone-${{ github.run_id }}
+          path: |
+            dist/purivox-windows-x86_64.zip
+            dist/SHA256SUMS-windows
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0
+
+      - name: Upload logs
+        id: logs-artifact
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: build-windows-logs-${{ github.run_id }}
+          path: logs/*.log
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Write summary
+        if: ${{ always() }}
+        run: |
+          cat >> "$GITHUB_STEP_SUMMARY" <<'MARKDOWN'
+          ## Windows build summary
+
+          | Item | Result |
+          |---|---|
+          | Job | `${{ job.status }}` |
+          | Standalone build | `${{ steps.standalone-build.outcome }}` |
+          | uv cache | `${{ steps.setup-uv.outputs.cache-hit }}` |
+          | Compiler cache | `${{ steps.compiler-cache.outputs.cache-hit }}` |
+
+          ### Artifacts
+
+          - Windows standalone: ${{ steps.standalone-artifact.outputs.artifact-url || 'Not uploaded' }}
+          - Build logs: ${{ steps.logs-artifact.outputs.artifact-url || 'Not uploaded' }}
+          MARKDOWN

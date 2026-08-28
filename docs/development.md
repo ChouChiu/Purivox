@@ -124,7 +124,7 @@ QT_QPA_PLATFORM=offscreen uvx --from ./dist/purivox-1.0.0-py3-none-any.whl \
   purivox --selftest
 ```
 
-## Linux 独立程序
+## 独立程序
 
 项目通过 Qt 官方 `pyside6-deploy` 封装 Nuitka，固定使用 `standalone` 目录模式：
 
@@ -135,22 +135,38 @@ uv run --locked --group deploy pyside6-deploy -c pysidedeploy.spec
 
 独立产物写入 `dist/`，包含 Python、Qt、Fluent Widgets、SciPy、SoundFile、soxr 和 ONNX Runtime，但不包含模型权重。发布前除自动化测试外，还应实际启动独立程序，检查页面导航、模型查找、音频解码、任务取消和输出试听。
 
+Windows 构建复用同一份 `pysidedeploy.spec`，但有两处必须改写，因此 CI 会由它派生一份
+`pysidedeploy-windows.spec`（该文件不入库）：
+
+- `pyside6-deploy` 只有一个 `icon` 键，在 Windows 上会作为 `--windows-icon-from-ico` 传给
+  Nuitka，而 Linux 构建用的 SVG 不被接受。仓库内的 `deployment/purivox.ico` 由
+  `src/resources/purivox.svg` 渲染而来，含 16～256 共 7 种尺寸；改动图标时两者需要一起更新。
+- 追加 `--assume-yes-for-downloads`。Nuitka 在 Windows 上会自行下载 ccache 并弹出确认，
+  在 Runner 上会直接卡住。
+
+`patchelf` 已从规格的 `packages` 中移除：`pyside6-deploy` 在 Linux 上本来就会自行安装它，
+而在 Windows 上它会尝试安装一个只有 Linux wheel 的包并失败。
+
 ## 持续集成
 
 `.github/workflows/build.yml` 在 `main` 分支、`v*` 标签、Pull Request 和手动触发时运行。
-质量门禁通过后，工作流构建 wheel、sdist 与 Linux standalone，再上传：
+质量门禁通过后，工作流并行构建 Linux 与 Windows 产物，再上传：
 
 - pytest JUnit XML；
 - 质量门禁与构建命令的独立日志；
 - wheel、sdist 及 SHA-256 校验文件；
-- 保留可执行权限的 Linux standalone 压缩包及 SHA-256 校验文件。
+- 保留可执行权限的 Linux standalone 压缩包及 SHA-256 校验文件；
+- Windows standalone 的 zip 压缩包及 SHA-256 校验文件。
+
+质量门禁只在 Ubuntu 上运行：Windows 任务只产出可分发的二进制，不重复跑测试。
 
 质量和构建任务都会生成 GitHub Job Summary，列出各门禁结果、缓存命中状态、日志和工件下载链接；
 即使前置步骤失败，也会尽可能写入已知结果。
 
 工件保留 14 天。uv 依赖缓存由 `uv.lock` 和 `pyproject.toml` 的内容共同失效，
 同时缓存 uv 管理的 Python 3.14；不缓存 `.venv` 本身。Linux standalone 额外使用
-ccache，根据锁文件、部署规格和 Python 源码失效，上限为 2 GiB。同一分支有新提交时会取消旧任务，
+ccache，根据锁文件、部署规格和 Python 源码失效，上限为 2 GiB；Windows 任务按同一套键缓存
+Nuitka 自带的编译缓存目录。同一分支有新提交时会取消旧任务，
 标签构建不会被取消。
 
 Ubuntu Runner 会显式安装 Qt 加载所需的 `libegl1`。所有命令步骤都使用开启 `pipefail` 的 Bash，

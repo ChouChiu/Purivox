@@ -12,6 +12,7 @@ dist/
 *.dist/
 *.onefile-build/
 deployment/deployment/
+pysidedeploy-windows.spec
 models/*.onnx
 *.part
 *.tmp.wav

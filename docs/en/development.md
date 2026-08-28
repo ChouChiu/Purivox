@@ -153,7 +153,7 @@ QT_QPA_PLATFORM=offscreen uvx --from ./dist/purivox-1.0.0-py3-none-any.whl \
   purivox --selftest
 ```
 
-## Linux Standalone Application
+## Standalone Applications
 
 The project uses Qt's official `pyside6-deploy` wrapper around Nuitka and fixes the output to
 `standalone` directory mode:
@@ -168,16 +168,34 @@ SoundFile, soxr, and ONNX Runtime, but not model weights. In addition to automat
 the standalone application before release and verify page navigation, model lookup, audio
 decoding, task cancellation, and output preview.
 
+The Windows build reuses the same `pysidedeploy.spec`, but two values have to be rewritten, so CI
+derives a `pysidedeploy-windows.spec` from it (that file is not committed):
+
+- `pyside6-deploy` carries a single `icon` key and hands it to Nuitka as
+  `--windows-icon-from-ico` on Windows, which will not accept the SVG the Linux build uses. The
+  committed `deployment/purivox.ico` is rendered from `src/resources/purivox.svg` at seven sizes
+  from 16 to 256 pixels; changing the icon means updating both.
+- `--assume-yes-for-downloads` is appended. On Windows, Nuitka fetches its own ccache and prompts
+  for confirmation, which would hang the runner.
+
+`patchelf` was removed from the specification's `packages`: `pyside6-deploy` already installs it
+itself on Linux, and on Windows it would try to install a package that only publishes Linux
+wheels, and fail.
+
 ## Continuous Integration
 
 `.github/workflows/build.yml` runs on the `main` branch, `v*` tags, pull requests, and manual
-dispatch. After the quality gates pass, the workflow builds the wheel, source distribution, and
-Linux standalone application, then uploads:
+dispatch. After the quality gates pass, the workflow builds the Linux and Windows outputs in
+parallel, then uploads:
 
 - Pytest JUnit XML;
 - Separate logs for quality-gate and build commands;
 - The wheel, source distribution, and their SHA-256 checksum files;
-- A Linux standalone archive that preserves executable permissions, plus its SHA-256 checksum.
+- A Linux standalone archive that preserves executable permissions, plus its SHA-256 checksum;
+- A Windows standalone zip archive plus its SHA-256 checksum.
+
+The quality gates run on Ubuntu only: the Windows job produces the distributable binary and does
+not repeat the test suite.
 
 Both quality and build jobs write a GitHub Job Summary listing gate results, cache-hit status,
 logs, and artifact links. Even if an earlier step fails, the jobs write as much known information
@@ -186,7 +204,8 @@ as possible.
 Artifacts are retained for 14 days. The uv dependency cache is invalidated by the contents of both
 `uv.lock` and `pyproject.toml`, and also caches the Python 3.14 installation managed by uv; the
 `.venv` directory itself is not cached. Linux standalone builds additionally use ccache,
-invalidated by the lockfile, deployment specification, and Python source, with a 2 GiB limit. A
+invalidated by the lockfile, deployment specification, and Python source, with a 2 GiB limit; the
+Windows job caches Nuitka's own compiler cache directory under the same key scheme. A
 new commit on the same branch cancels an older run, while tag builds are never cancelled.
 
 The Ubuntu runner explicitly installs `libegl1`, which Qt requires for loading. Every command step

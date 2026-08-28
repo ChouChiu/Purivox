@@ -7,8 +7,8 @@ project_file = pyproject.toml
 icon = src/resources/purivox.svg
 
 [python]
-python_path =
-packages = Nuitka==4.1.3,ordered-set,zstandard,patchelf
+python_path = /home/chouchiu/git/MR_Remover/.venv/bin/python
+packages = Nuitka==4.1.3,ordered-set,zstandard
 android_packages = 
 
 [qt]
@@ -35,3 +35,4 @@ ndk_path =
 sdk_path = 
 local_libs = 
 arch = 
+
