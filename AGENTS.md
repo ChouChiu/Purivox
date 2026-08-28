@@ -67,7 +67,7 @@ QT_QPA_PLATFORM=offscreen uv run --locked pytest
 QT_QPA_PLATFORM=offscreen uv run --locked pytest tests/benchmarks --runslow   # 15-min memory/quality gate
 uv build                           # sdist+wheel
 
-# Linux standalone (Nuitka via pyside6-deploy; output dist/)
+# Onefile executable (Nuitka via pyside6-deploy; output dist/Purivox.bin)
 uv sync --locked --group deploy
 uv run --locked --group deploy pyside6-deploy -c pysidedeploy.spec
 ```
@@ -90,7 +90,7 @@ Language keys: `zh_cn`, `en_us`, `ja_jp`, `ko_kr`.
 | File | Role |
 |---|---|
 | `pyproject.toml` | hatchling packaging; ruff + pytest config; `[tool.pyside6-project] files` = authoritative shipped-source roster |
-| `pysidedeploy.spec` | Nuitka standalone build (dir mode, `deployment/main.py` → `dist/`) |
+| `pysidedeploy.spec` | Nuitka build (onefile mode, `deployment/main.py` → `dist/Purivox.bin`) |
 | `src/entrypoints/cli.py` | `purivox` entry point (`main`); mr/ai subcommands, `--selftest` |
 | `src/app/main_window.py` | FluentWindow shell: navigation, i18n/theme, worker orchestration, auto-find |
 | `src/app/job_runner.py` / `worker.py` | Single-job QThread lifecycle and QObject operation adapter |
@@ -111,7 +111,7 @@ Language keys: `zh_cn`, `en_us`, `ja_jp`, `ko_kr`.
 - **UI stack**: PySide6 ≥6.8 + `PySide6-Fluent-Widgets[full]` (vendored `qfluentwidgets`; never mix with other Fluent widget packages). Qt is mandatory for audio fallback decode (`QAudioDecoder`) — CLI tests still need `QT_QPA_PLATFORM=offscreen`.
 - **DSP deps**: numpy ≥2, scipy, soundfile, soxr; neural: onnxruntime (CPU). All pinned to bounded ranges in `pyproject.toml`.
 - **Lint/format**: ruff only (`line-length = 100`, rules E/F/I/UP/B/SIM/RUF, E501 ignored). Format = `ruff format`; there is no separate black/isort.
-- **Deploy**: Nuitka 4.1.3 via `pyside6-deploy`; standalone dir mode only. ONNX weights are never packaged (downloaded at runtime; `models/*.onnx` gitignored).
+- **Deploy**: Nuitka 4.1.3 via `pyside6-deploy`; onefile mode (Linux `dist/Purivox.bin`, Windows `dist/Purivox.exe`). ONNX weights are never packaged (downloaded at runtime; `models/*.onnx` gitignored).
 
 ## Testing & QA
 

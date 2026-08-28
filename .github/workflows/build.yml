@@ -228,12 +228,16 @@ jobs:
 
       - name: Archive standalone
         run: |
-          tar -C dist -czf dist/purivox-linux-x86_64.tar.gz "Purivox.dist" \
+          # Onefile emits one executable. It still goes into a tarball because
+          # GitHub artifacts do not preserve the executable bit.
+          tar -C dist -czf dist/purivox-linux-x86_64.tar.gz "Purivox.bin" \
             2>&1 | tee logs/standalone.log
 
       - name: Generate checksums
         run: |
-          sha256sum dist/purivox-*.whl dist/purivox-*.tar.gz \
+          # The version-prefixed glob keeps purivox-linux-x86_64.tar.gz out of
+          # the Python distribution list, which a bare purivox-*.tar.gz matched.
+          sha256sum dist/purivox-*.whl dist/purivox-[0-9]*.tar.gz \
             | tee dist/SHA256SUMS-python logs/checksums.log
           sha256sum dist/purivox-linux-x86_64.tar.gz \
             | tee dist/SHA256SUMS-linux | tee -a logs/checksums.log
@@ -245,7 +249,7 @@ jobs:
           name: python-distributions-${{ github.run_id }}
           path: |
             dist/purivox-*.whl
-            dist/purivox-*.tar.gz
+            dist/purivox-[0-9]*.tar.gz
             dist/SHA256SUMS-python
           if-no-files-found: error
           retention-days: 14
@@ -340,10 +344,8 @@ jobs:
         run: |
           # pyside6-deploy carries a single icon key and hands it to Nuitka as
           # --windows-icon-from-ico, which will not accept the SVG the Linux
-          # build uses.  --assume-yes-for-downloads keeps Nuitka from prompting
-          # when it fetches its own ccache, which would hang the runner.
+          # build uses.
           sed -e 's|^icon = .*|icon = deployment/purivox.ico|' \
-              -e 's|^extra_args = |extra_args = --assume-yes-for-downloads |' \
               pysidedeploy.spec > pysidedeploy-windows.spec
           tee logs/deploy-spec.log < pysidedeploy-windows.spec
 
@@ -354,16 +356,11 @@ jobs:
           pyside6-deploy -c pysidedeploy-windows.spec --force
           2>&1 | tee logs/standalone-build.log
 
-      - name: Archive standalone
-        run: |
-          # Zip from inside dist/ so the archive root is Purivox.dist, matching
-          # the layout the Linux tarball unpacks to.
-          (cd dist && 7z a -tzip -mx=5 purivox-windows-x86_64.zip Purivox.dist) \
-            2>&1 | tee logs/standalone.log
-
       - name: Generate checksums
         run: |
-          sha256sum dist/purivox-windows-x86_64.zip \
+          # Onefile emits a single .exe. Windows has no executable bit to
+          # preserve and the artifact upload zips it anyway, so it ships as is.
+          sha256sum dist/Purivox.exe \
             | tee dist/SHA256SUMS-windows | tee logs/checksums.log
 
       - name: Upload standalone
@@ -372,7 +369,7 @@ jobs:
         with:
           name: windows-standalone-${{ github.run_id }}
           path: |
-            dist/purivox-windows-x86_64.zip
+            dist/Purivox.exe
             dist/SHA256SUMS-windows
           if-no-files-found: error
           retention-days: 14

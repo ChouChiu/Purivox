@@ -156,27 +156,35 @@ QT_QPA_PLATFORM=offscreen uvx --from ./dist/purivox-1.0.0-py3-none-any.whl \
 ## Standalone Applications
 
 The project uses Qt's official `pyside6-deploy` wrapper around Nuitka and fixes the output to
-`standalone` directory mode:
+`onefile` mode:
 
 ```bash
 uv sync --locked --group deploy
 uv run --locked --group deploy pyside6-deploy -c pysidedeploy.spec
 ```
 
-The standalone output is written to `dist/` and includes Python, Qt, Fluent Widgets, SciPy,
-SoundFile, soxr, and ONNX Runtime, but not model weights. In addition to automated testing, launch
-the standalone application before release and verify page navigation, model lookup, audio
-decoding, task cancellation, and output preview.
+The output is a single executable — `dist/Purivox.bin` on Linux and `dist/Purivox.exe` on
+Windows — containing Python, Qt, Fluent Widgets, SciPy, SoundFile, soxr, and ONNX Runtime, but not
+model weights.
 
-The Windows build reuses the same `pysidedeploy.spec`, but two values have to be rewritten, so CI
+Onefile unpacks into a temporary directory on every run, so it needs matching scratch space. The
+startup cost is modest in practice: the 126 MB Linux build completes a full `--selftest` run in
+about 3.1 seconds, with no meaningful difference between a cold and a warm start. In addition to
+automated testing, launch the executable before release and verify page navigation, model lookup,
+audio decoding, task cancellation, and output preview — in particular that resource files are
+still found under the unpacked path.
+
+The Windows build reuses the same `pysidedeploy.spec`, but the icon has to be rewritten, so CI
 derives a `pysidedeploy-windows.spec` from it (that file is not committed):
 
 - `pyside6-deploy` carries a single `icon` key and hands it to Nuitka as
   `--windows-icon-from-ico` on Windows, which will not accept the SVG the Linux build uses. The
   committed `deployment/purivox.ico` is rendered from `src/resources/purivox.svg` at seven sizes
   from 16 to 256 pixels; changing the icon means updating both.
-- `--assume-yes-for-downloads` is appended. On Windows, Nuitka fetches its own ccache and prompts
-  for confirmation, which would hang the runner.
+
+`--assume-yes-for-downloads` in the shared specification is required on both platforms: onefile
+downloads the components its bootstrap needs, and without the flag Nuitka stops on a confirmation
+prompt and hangs the runner.
 
 `patchelf` was removed from the specification's `packages`: `pyside6-deploy` already installs it
 itself on Linux, and on Windows it would try to install a package that only publishes Linux
@@ -191,8 +199,9 @@ parallel, then uploads:
 - Pytest JUnit XML;
 - Separate logs for quality-gate and build commands;
 - The wheel, source distribution, and their SHA-256 checksum files;
-- A Linux standalone archive that preserves executable permissions, plus its SHA-256 checksum;
-- A Windows standalone zip archive plus its SHA-256 checksum.
+- A tarball of the Linux executable, which preserves its executable bit, plus its SHA-256
+  checksum;
+- The Windows executable plus its SHA-256 checksum.
 
 The quality gates run on Ubuntu only: the Windows job produces the distributable binary and does
 not repeat the test suite.

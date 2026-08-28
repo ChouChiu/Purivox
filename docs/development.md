@@ -126,23 +126,29 @@ QT_QPA_PLATFORM=offscreen uvx --from ./dist/purivox-1.0.0-py3-none-any.whl \
 
 ## 独立程序
 
-项目通过 Qt 官方 `pyside6-deploy` 封装 Nuitka，固定使用 `standalone` 目录模式：
+项目通过 Qt 官方 `pyside6-deploy` 封装 Nuitka，固定使用 `onefile` 模式：
 
 ```bash
 uv sync --locked --group deploy
 uv run --locked --group deploy pyside6-deploy -c pysidedeploy.spec
 ```
 
-独立产物写入 `dist/`，包含 Python、Qt、Fluent Widgets、SciPy、SoundFile、soxr 和 ONNX Runtime，但不包含模型权重。发布前除自动化测试外，还应实际启动独立程序，检查页面导航、模型查找、音频解码、任务取消和输出试听。
+产物是单个可执行文件——Linux 为 `dist/Purivox.bin`，Windows 为 `dist/Purivox.exe`——内含 Python、Qt、Fluent Widgets、SciPy、SoundFile、soxr 和 ONNX Runtime，但不包含模型权重。
 
-Windows 构建复用同一份 `pysidedeploy.spec`，但有两处必须改写，因此 CI 会由它派生一份
+onefile 每次运行会把内容解包到临时目录，因此需要相应的临时空间。启动开销实测有限：126 MB 的
+Linux 产物跑完 `--selftest` 全流程约 3.1 秒，冷热两次没有明显差别。发布前除自动化测试外，
+还应实际启动它，检查页面导航、模型查找、音频解码、任务取消和输出试听——尤其要确认解包路径下
+资源文件仍能被找到。
+
+Windows 构建复用同一份 `pysidedeploy.spec`，但图标一项必须改写，因此 CI 会由它派生一份
 `pysidedeploy-windows.spec`（该文件不入库）：
 
 - `pyside6-deploy` 只有一个 `icon` 键，在 Windows 上会作为 `--windows-icon-from-ico` 传给
   Nuitka，而 Linux 构建用的 SVG 不被接受。仓库内的 `deployment/purivox.ico` 由
   `src/resources/purivox.svg` 渲染而来，含 16～256 共 7 种尺寸；改动图标时两者需要一起更新。
-- 追加 `--assume-yes-for-downloads`。Nuitka 在 Windows 上会自行下载 ccache 并弹出确认，
-  在 Runner 上会直接卡住。
+
+共享规格里的 `--assume-yes-for-downloads` 对两个平台都必要：onefile 会下载打包引导所需的组件，
+缺少它 Nuitka 会停在确认提示上，Runner 直接挂住。
 
 `patchelf` 已从规格的 `packages` 中移除：`pyside6-deploy` 在 Linux 上本来就会自行安装它，
 而在 Windows 上它会尝试安装一个只有 Linux wheel 的包并失败。
@@ -155,8 +161,8 @@ Windows 构建复用同一份 `pysidedeploy.spec`，但有两处必须改写，�
 - pytest JUnit XML；
 - 质量门禁与构建命令的独立日志；
 - wheel、sdist 及 SHA-256 校验文件；
-- 保留可执行权限的 Linux standalone 压缩包及 SHA-256 校验文件；
-- Windows standalone 的 zip 压缩包及 SHA-256 校验文件。
+- Linux 可执行文件的 tar.gz（用于保留可执行权限）及 SHA-256 校验文件；
+- Windows 可执行文件及 SHA-256 校验文件。
 
 质量门禁只在 Ubuntu 上运行：Windows 任务只产出可分发的二进制，不重复跑测试。
 
