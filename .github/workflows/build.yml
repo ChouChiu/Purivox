@@ -323,8 +323,12 @@ jobs:
             pyproject.toml
             uv.lock
 
-      - name: Prepare logs
-        run: mkdir -p logs
+      - name: Prepare directories
+        run: |
+          # dist/ has to exist up front. In onefile mode pyside6-deploy places
+          # the result with shutil.copy, which does not create the parent, and
+          # this job has no `uv build` step to create it as a side effect.
+          mkdir -p logs dist
 
       - name: Restore compiler cache
         id: compiler-cache
