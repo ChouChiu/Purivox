@@ -73,6 +73,7 @@ class FullStageJob:
     auto_align: bool = True
     center_extraction: bool = False
     open_mic_focus: bool = False
+    taps: int = 2
 
     def __post_init__(self) -> None:
         if not self.sources:
@@ -81,6 +82,8 @@ class FullStageJob:
             raise ValueError("strength must be in [0, 100]")
         if self.sigma not in {1, 3, 8, 16}:
             raise ValueError("sigma must be one of 1, 3, 8, 16")
+        if self.taps not in {1, 2, 3}:
+            raise ValueError("taps must be one of 1, 2, 3")
         if self.open_mic_focus and not self.center_extraction:
             raise ValueError("open-mic focus requires center extraction")
         resolved_stage = self.stage.expanduser().resolve()

@@ -370,7 +370,10 @@ def test_long_processing_uses_two_spectral_workers(monkeypatch):
         passthrough,
     )
 
-    output = process_audio(mixture, reference, sample_rate, 1.0, 8)
+    # Pinned to one tap: this covers the thread pool itself, and the default
+    # two taps quadruple the covariance per cell, which the memory guard pays
+    # for by dropping to a single worker at this sigma.
+    output = process_audio(mixture, reference, sample_rate, 1.0, 8, taps=1)
 
     assert len(worker_ids) == 2
     assert np.array_equal(output, mixture)
@@ -530,3 +533,89 @@ def test_reference_mask_keeps_the_song_tail_after_a_short_reference():
     tail = slice(3 * sample_rate, song_length - sample_rate // 10)
     assert output.shape == mixture.shape
     assert np.allclose(output[:, tail], mixture[:, tail], atol=2e-4)
+
+
+def test_reference_cancellation_handles_a_phase_correlated_stereo_reference():
+    """Guards the orientation of the normal equations.
+
+    The existing MIMO case mixes two uncorrelated tones, so the reference
+    covariance is nearly diagonal and a transposed system still cancels.  A
+    real stereo accompaniment has strongly correlated channels separated by a
+    small inter-channel delay, which puts most of the cross term in the
+    imaginary part.  Solving the conjugate transpose then fits a different
+    transfer: measured on this scene it costs about 3.4 dB of cancellation
+    depth and drops live-source fidelity from 0.68 to 0.39.
+    """
+    sample_rate = 16_000
+    length = sample_rate * 4
+    rng = np.random.default_rng(311)
+    left_ref = np.convolve(rng.normal(0.0, 0.25, length), np.ones(5) / 5, mode="same")
+    delay = 7
+    right_ref = 0.9 * np.pad(left_ref[:-delay], (delay, 0)) + rng.normal(0.0, 0.02, length)
+    # A broadband live source, not a tone: a single tone occupies too few bins
+    # for a wrongly oriented transfer to show up.
+    live = np.convolve(rng.normal(0.0, 0.08, length), np.ones(3) / 3, mode="same")
+    accompaniment = 0.85 * left_ref + 0.31 * right_ref
+    mix = np.stack([live + accompaniment, 0.95 * live - 0.22 * left_ref + 0.78 * right_ref])
+
+    output = process_audio(mix, np.stack([left_ref, right_ref]), sample_rate, 1.0, 8)
+
+    body = slice(sample_rate, 3 * sample_rate)
+    residual = output[0][body] - live[body]
+    depth = 10 * np.log10(
+        float(np.mean(accompaniment[body] ** 2)) / max(float(np.mean(residual**2)), 1e-20)
+    )
+    assert depth > 8.0
+    assert corr(output[0][body], live[body]) > 0.60
+
+
+def _reverberant_scene(sample_rate, seconds, reverb_seconds, seed):
+    length = sample_rate * seconds
+    rng = np.random.default_rng(seed)
+    reference = np.stack(
+        [np.convolve(rng.normal(0.0, 0.2, length), np.ones(5) / 5, mode="same") for _ in range(2)]
+    )
+    taps = int(reverb_seconds * sample_rate)
+    room = rng.normal(0.0, 1.0, taps) * np.exp(-np.arange(taps) / (0.25 * taps))
+    room[0] += 3.0
+    room /= np.linalg.norm(room)
+    # "full" then truncate keeps the direct path at t=0, so this measures the
+    # transfer model rather than a several-frame misalignment.
+    stage = np.stack([np.convolve(channel, room)[:length] for channel in reference])
+    time = np.arange(length) / sample_rate
+    vocal = np.stack([0.12 * np.sin(2 * np.pi * 437 * time)] * 2)
+    return (stage + vocal).astype(np.float32), reference.astype(np.float32), vocal
+
+
+def test_reference_taps_improve_a_reverberant_reference():
+    """Extra frame taps model a room that rings past the analysis window."""
+    sample_rate = 16_000
+    mix, reference, vocal = _reverberant_scene(sample_rate, 6, 0.06, seed=77)
+    body = slice(sample_rate, mix.shape[1] - sample_rate)
+
+    def residual(taps):
+        output = process_audio(mix, reference, sample_rate, 1.0, 3, taps=taps)
+        return float(np.mean((output[0][body] - vocal[0][body]) ** 2))
+
+    narrowband = residual(1)
+    convolutive = residual(3)
+
+    # A 60 ms room response spans several 46 ms analysis frames, so the single
+    # frame of the multiplicative model cannot describe it.
+    assert convolutive < 0.5 * narrowband
+
+
+def test_reference_taps_shrink_the_working_set_budget():
+    """Covariance storage grows with the square of the tap count.
+
+    The minimum statistical context is always preserved, so the block cannot
+    always shrink; the parallel worker count has to absorb the rest.
+    """
+    from features.reference_removal.dsp.algorithms import _processing_layout
+
+    length = 600 * 44_100
+    single_block, single_workers = _processing_layout(44_100, 8, length, taps=1)
+    triple_block, triple_workers = _processing_layout(44_100, 8, length, taps=3)
+
+    assert triple_block <= single_block
+    assert triple_workers < single_workers

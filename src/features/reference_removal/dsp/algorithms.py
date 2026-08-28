@@ -16,6 +16,8 @@ _CONFIDENCE_LOW = 0.03
 _CONFIDENCE_HIGH = 0.35
 _SPECTRAL_OVERSUBTRACTION = 1.5
 _SPECTRAL_CELL_BUDGET = 4_000_000
+_MAX_TRANSFER_GAIN = 2.0
+_DEFAULT_REFERENCE_TAPS = 2
 _MAX_PROCESSING_BLOCK_SECONDS = 48
 _MAX_PROCESSING_WORKERS = min(5, os.cpu_count() or 1)
 _MAX_PARALLEL_SPECTRAL_CELLS = 9_000_000
@@ -33,14 +35,6 @@ def _release_mapped_pages(values: np.ndarray) -> None:
         mapping.flush()
         if hasattr(mapping, "madvise") and hasattr(mmap, "MADV_DONTNEED"):
             mapping.madvise(mmap.MADV_DONTNEED)
-
-
-def _smooth(values: np.ndarray, sigma_time: float, sigma_frequency: float = 1.0) -> np.ndarray:
-    return gaussian_filter(values, sigma=(max(sigma_time, 0.0), sigma_frequency), mode="reflect")
-
-
-def _smooth_complex(values: np.ndarray, sigma_time: float) -> np.ndarray:
-    return _smooth(values.real, sigma_time) + 1j * _smooth(values.imag, sigma_time)
 
 
 def _spectral_smooth(
@@ -97,16 +91,21 @@ def _phantom_center_enhance(
     mix = float(np.clip(amount, 0.0, 1.0))
     if audio.shape[0] < 2 or mix <= 0.0:
         return audio
-    spectra = [stft(audio[channel]) for channel in range(2)]
+    # Match the core path's analysis size instead of a fixed 2048/512: at
+    # 96 kHz the fixed size was a 21 ms window, and the true Gaussian smoother
+    # then ran with a sigma near 17 frames.
+    n_fft = _analysis_fft_size(sample_rate)
+    hop = n_fft // 4
+    spectra = [stft(audio[channel], n_fft=n_fft, hop=hop) for channel in range(2)]
     token.raise_if_cancelled()
     left, right = spectra
     epsilon = 1e-10
     # Roughly 90 ms of temporal context at every sample rate suppresses musical
     # noise while retaining syllable attacks.
-    smooth = max(0.09 * sample_rate / 512.0, 1.0)
-    left_power = _smooth(np.abs(left) ** 2, smooth)
-    right_power = _smooth(np.abs(right) ** 2, smooth)
-    cross = _smooth_complex(left * np.conj(right), smooth)
+    smooth = max(0.09 * sample_rate / hop, 1.0)
+    left_power = _spectral_smooth(np.abs(left) ** 2, smooth)
+    right_power = _spectral_smooth(np.abs(right) ** 2, smooth)
+    cross = _spectral_smooth(left * np.conj(right), smooth)
     coherence = np.clip(
         np.abs(cross) ** 2 / (left_power * right_power + epsilon),
         0.0,
@@ -131,7 +130,7 @@ def _phantom_center_enhance(
         common_amplitude / (left_amplitude + epsilon) * np.exp(-0.5j * phase_delta) * left
         + common_amplitude / (right_amplitude + epsilon) * np.exp(0.5j * phase_delta) * right
     )
-    frequencies = fft_frequencies(sample_rate, 2 * (left.shape[1] - 1))
+    frequencies = fft_frequencies(sample_rate, n_fft)
     vocal_band = _smoothstep(80.0, 160.0, frequencies) * (
         1.0 - _smoothstep(9_000.0, 14_000.0, frequencies)
     )
@@ -147,8 +146,8 @@ def _phantom_center_enhance(
         focused.append(channel + vocal_band[None, :] * (target - channel))
     token.raise_if_cancelled()
     return np.asarray(
-        [istft(channel, length=audio.shape[1]) for channel in focused],
-        dtype=np.float64,
+        [istft(channel, hop=hop, length=audio.shape[1]) for channel in focused],
+        dtype=np.float32,
     )
 
 
@@ -156,6 +155,15 @@ def _analysis_fft_size(sample_rate: int) -> int:
     target = max(0.046 * sample_rate, 1.0)
     exponent = round(math.log2(target))
     return int(np.clip(2**exponent, 512, 4096))
+
+
+def _transfer_cell_cost(taps: int) -> int:
+    """Relative working-set cost of one spectral cell at a given tap count.
+
+    The covariance stored per cell is (2*taps) squared, so the cell budget has
+    to shrink quadratically for the measured peak RSS to stay put.
+    """
+    return max(taps, 1) ** 2
 
 
 def _processing_block_frames(
@@ -183,7 +191,12 @@ def _processing_block_frames(
     return max(context_frames, throughput_frames)
 
 
-def _processing_workers(sample_rate: int, sigma: float, length: int) -> int:
+def _processing_workers(
+    sample_rate: int,
+    sigma: float,
+    length: int,
+    taps: int = _DEFAULT_REFERENCE_TAPS,
+) -> int:
     context_frames = max(
         round((1.5 * float(sigma) + 4.0) * sample_rate),
         12 * sample_rate,
@@ -193,46 +206,139 @@ def _processing_workers(sample_rate: int, sigma: float, length: int) -> int:
     context_cells = context_stft_frames * (n_fft // 2 + 1)
     if length < 2 * context_frames:
         return 1
-    memory_limited_workers = _MAX_PARALLEL_SPECTRAL_CELLS // context_cells
+    # The minimum statistical context is always preserved, so a large tap count
+    # cannot be absorbed by shrinking the block.  Fewer parallel workers is the
+    # only remaining way to keep peak memory inside the same budget.
+    memory_limited_workers = _MAX_PARALLEL_SPECTRAL_CELLS // (
+        context_cells * _transfer_cell_cost(taps)
+    )
     return max(1, min(_MAX_PROCESSING_WORKERS, memory_limited_workers))
 
 
-def _processing_layout(sample_rate: int, sigma: float, length: int) -> tuple[int, int]:
-    workers = _processing_workers(sample_rate, sigma, length)
-    block = _processing_block_frames(sample_rate, sigma, _SPECTRAL_CELL_BUDGET // workers)
+def _processing_layout(
+    sample_rate: int,
+    sigma: float,
+    length: int,
+    taps: int = _DEFAULT_REFERENCE_TAPS,
+) -> tuple[int, int]:
+    workers = _processing_workers(sample_rate, sigma, length, taps)
+    budget = _SPECTRAL_CELL_BUDGET // (workers * _transfer_cell_cost(taps))
+    block = _processing_block_frames(sample_rate, sigma, budget)
     return block, workers
+
+
+def _reference_regressors(reference_spectra: list[np.ndarray], taps: int) -> list[np.ndarray]:
+    """Stack the reference channels at successive frame delays.
+
+    A single frame per channel is the multiplicative narrowband model: it can
+    only describe a room whose response dies inside one analysis window.  Real
+    venues ring far longer than the 46 ms window, so extra delayed taps give
+    the fit a convolutive transfer function across frames instead.
+    """
+    columns: list[np.ndarray] = []
+    for delay in range(taps):
+        for channel in reference_spectra:
+            if delay == 0:
+                columns.append(channel)
+                continue
+            shifted = np.zeros_like(channel)
+            shifted[delay:] = channel[:-delay]
+            columns.append(shifted)
+    return columns
+
+
+def _solve_hermitian(
+    covariance: list[list[np.ndarray]],
+    cross: list[np.ndarray],
+) -> list[np.ndarray]:
+    """Solve the Hermitian system R h = c for every time-frequency cell.
+
+    `covariance` holds the lower triangle as whole [frames, bins] spectra.
+    Stacking the cells into one [frames, bins, order, order] tensor and calling
+    `numpy.linalg.solve` makes LAPACK run once per cell, which measured about
+    seven times slower than the closed form it replaced.  An LDL^H
+    factorisation written out over the spectra keeps every step a single
+    vectorised array operation and needs no square roots.
+    """
+    order = len(cross)
+    lower: list[list[np.ndarray | None]] = [[None] * order for _ in range(order)]
+    pivot: list[np.ndarray] = []
+    for column in range(order):
+        value = covariance[column][column].real.copy()
+        for index in range(column):
+            factor = lower[column][index]
+            value -= (factor.real**2 + factor.imag**2) * pivot[index]
+        pivot.append(np.maximum(value, 1e-20))
+        for row in range(column + 1, order):
+            entry = covariance[row][column].copy()
+            for index in range(column):
+                entry -= lower[row][index] * np.conj(lower[column][index]) * pivot[index]
+            lower[row][column] = entry / pivot[column]
+    forward: list[np.ndarray] = []
+    for row in range(order):
+        value = cross[row].copy()
+        for index in range(row):
+            value -= lower[row][index] * forward[index]
+        forward.append(value)
+    transfer: list[np.ndarray | None] = [None] * order
+    for row in reversed(range(order)):
+        value = forward[row] / pivot[row]
+        for index in range(row + 1, order):
+            value = value - np.conj(lower[index][row]) * transfer[index]
+        transfer[row] = value
+    return transfer
 
 
 def _predict_reference_spectra(
     song_spectra: list[np.ndarray],
-    reference_spectra: list[np.ndarray],
+    regressors: list[np.ndarray],
     sigma_frames: float,
     token: CancellationToken,
     weights: np.ndarray | None = None,
 ) -> list[np.ndarray]:
     """Predict reference-correlated spectra without subtracting them from the mix."""
     epsilon = 1e-12
-    x0, x1 = reference_spectra[:2]
+    order = len(regressors)
     denominator = None
     if weights is not None:
         denominator = _spectral_smooth(weights, sigma_frames) + 1e-12
-    r00 = _weighted_smooth(np.abs(x0) ** 2, weights, sigma_frames, denominator).real
-    r11 = _weighted_smooth(np.abs(x1) ** 2, weights, sigma_frames, denominator).real
-    r01 = _weighted_smooth(x0 * np.conj(x1), weights, sigma_frames, denominator)
-    loading = 2e-4 * 0.5 * (r00 + r11) + epsilon
-    r00 += loading
-    r11 += loading
-    determinant = np.maximum((r00 * r11 - np.abs(r01) ** 2).real, epsilon)
+    # The normal equations for y ~ sum_k h_k x_k are R h = c with
+    # R[j][k] = E[x_k conj(x_j)] and c[j] = E[y conj(x_j)].  Filling R[j][k]
+    # with E[x_j conj(x_k)] instead transposes the system and silently solves
+    # for a different transfer, so only the lower triangle is built here and
+    # the upper one is never needed.
+    covariance: list[list[np.ndarray | None]] = [[None] * order for _ in range(order)]
+    for row in range(order):
+        for column in range(row + 1):
+            covariance[row][column] = _weighted_smooth(
+                regressors[column] * np.conj(regressors[row]),
+                weights,
+                sigma_frames,
+                denominator,
+            )
+    loading = covariance[0][0].real.copy()
+    for index in range(1, order):
+        loading += covariance[index][index].real
+    loading *= 2e-4 / order
+    loading += epsilon
+    for index in range(order):
+        covariance[index][index] = covariance[index][index] + loading
     predicted: list[np.ndarray] = []
     for channel in song_spectra:
         token.raise_if_cancelled()
-        ry0 = _weighted_smooth(channel * np.conj(x0), weights, sigma_frames, denominator)
-        ry1 = _weighted_smooth(channel * np.conj(x1), weights, sigma_frames, denominator)
-        h0 = (ry0 * r11 - ry1 * np.conj(r01)) / determinant
-        h1 = (ry1 * r00 - ry0 * r01) / determinant
-        row_gain = np.abs(h0) + np.abs(h1)
-        gain_scale = np.minimum(1.0, 2.0 / (row_gain + epsilon))
-        predicted.append((gain_scale * (h0 * x0 + h1 * x1)).astype(np.complex64))
+        cross = [
+            _weighted_smooth(channel * np.conj(regressor), weights, sigma_frames, denominator)
+            for regressor in regressors
+        ]
+        transfer = _solve_hermitian(covariance, cross)
+        row_gain = np.abs(transfer[0])
+        for index in range(1, order):
+            row_gain = row_gain + np.abs(transfer[index])
+        gain_scale = np.minimum(1.0, _MAX_TRANSFER_GAIN / (row_gain + epsilon))
+        combined = transfer[0] * regressors[0]
+        for index in range(1, order):
+            combined = combined + transfer[index] * regressors[index]
+        predicted.append((gain_scale * combined).astype(np.complex64))
     return predicted
 
 
@@ -243,6 +349,7 @@ def _reference_mask_cancel(
     strength: float,
     sigma: float,
     token: CancellationToken,
+    taps: int = _DEFAULT_REFERENCE_TAPS,
 ) -> np.ndarray:
     """Cancel reference-correlated content with a confidence-weighted soft mask.
 
@@ -265,9 +372,10 @@ def _reference_mask_cancel(
         reference_spectra.append(reference_spectra[0])
     sigma_frames = max(float(sigma) * sample_rate / hop / 6.0, 1.0)
 
+    regressors = _reference_regressors(reference_spectra, taps)
     predicted = _predict_reference_spectra(
         song_spectra,
-        reference_spectra,
+        regressors,
         sigma_frames,
         token,
     )
@@ -280,7 +388,7 @@ def _reference_mask_cancel(
     )
     predicted = _predict_reference_spectra(
         song_spectra,
-        reference_spectra,
+        regressors,
         sigma_frames,
         token,
         robust_weights,
@@ -314,7 +422,12 @@ def _reference_mask_cancel(
     )
     mask = np.sqrt(np.clip(remaining_power / (mixture_power + 1e-12), _MASK_FLOOR**2, 1.0))
     # A single narrow smoothing pass prevents isolated-bin musical noise without
-    # refilling tonal notches from untouched neighbours.
+    # refilling tonal notches from untouched neighbours.  Berouti-style
+    # signal-dependent over-subtraction, an Ephraim-Malah decision-directed
+    # Wiener gain and Breithaupt cepstral gain smoothing were all measured here
+    # against this line: each bought reverberant depth but roughly halved
+    # fidelity on a quiet live vocal, which the extra transfer taps deliver
+    # without that cost.
     mask = gaussian_filter(mask, sigma=(0.75, 0.35), mode="reflect")
     effective_mask = 1.0 - strength * (1.0 - np.clip(mask, _MASK_FLOOR, 1.0))
     token.raise_if_cancelled()
@@ -335,6 +448,7 @@ def process_audio(
     *,
     center_extraction: bool = False,
     open_mic_focus: bool = False,
+    taps: int = _DEFAULT_REFERENCE_TAPS,
 ) -> np.ndarray:
     cancel = token or CancellationToken()
     mix = np.asarray(song, dtype=np.float32)
@@ -355,7 +469,7 @@ def process_audio(
         return result
     # Long recordings scale across independent spectral workers.  The layout
     # divides the working-set budget; large contexts automatically use fewer.
-    block, workers = _processing_layout(sample_rate, sigma, length)
+    block, workers = _processing_layout(sample_rate, sigma, length, taps)
     overlap = min(
         max(round(0.5 * float(sigma) * sample_rate), 2 * sample_rate),
         block // 3,
@@ -387,6 +501,7 @@ def process_audio(
             strength,
             sigma,
             cancel,
+            taps,
         )
         if center_extraction:
             # Preserve the confirmed 75% enhancement sound while making the

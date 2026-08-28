@@ -12,7 +12,8 @@ from shared.processing import CancellationToken
 
 
 @pytest.mark.slow
-def test_fifteen_minute_stereo_rss_length_and_seams():
+@pytest.mark.parametrize("taps", [1, 2, 3])
+def test_fifteen_minute_stereo_rss_length_and_seams(taps):
     """Synthetic regression evidence only; this is not a real-music quality claim."""
     sample_rate = 44_100
     frames = 15 * 60 * sample_rate
@@ -39,20 +40,21 @@ def test_fifteen_minute_stereo_rss_length_and_seams():
             8,
             CancellationToken(),
             output.samples,
+            taps=taps,
         )
         assert result is output.samples
         assert result.shape == (2, frames)
         assert np.isfinite(result[:, ::sample_rate]).all()
         # The 2 GiB working-set budget permits about 45-second blocks at 44.1 kHz.
         # The four-second overlap still supplies the full sigma context.
-        block, _workers = _processing_layout(sample_rate, 8, frames)
+        block, _workers = _processing_layout(sample_rate, 8, frames, taps)
         overlap = min(round(0.5 * 8 * sample_rate), block // 3)
         step = block - overlap
         seams = np.arange(step, frames, step)
         jumps = np.abs(result[0, seams] - result[0, seams - 1])
         assert float(np.max(jumps, initial=0.0)) < 0.05
         peak_rss_kib = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
-        print(f"15-minute benchmark peak RSS: {peak_rss_kib / 1024:.1f} MiB")
+        print(f"15-minute benchmark peak RSS at taps={taps}: {peak_rss_kib / 1024:.1f} MiB")
         assert peak_rss_kib <= 2 * 1024 * 1024
     finally:
         output.cleanup()

@@ -38,6 +38,13 @@ def build_parser() -> argparse.ArgumentParser:
         "--strength", type=int, choices=range(0, 101), default=75, metavar="0..100"
     )
     reference.add_argument("--sigma", type=int, choices=(1, 3, 8, 16), default=3)
+    reference.add_argument(
+        "--taps",
+        type=int,
+        choices=(1, 2, 3),
+        default=2,
+        help="reference transfer taps across frames (default 2); 1 disables reverberation modelling",
+    )
     reference.add_argument("--align", action=argparse.BooleanOptionalAction, default=True)
     reference.add_argument(
         "--center-extraction",
@@ -97,6 +104,7 @@ def main(argv: list[str] | None = None) -> int:
                 output=args.output,
                 strength=args.strength,
                 sigma=args.sigma,
+                taps=args.taps,
                 auto_align=args.align,
                 language=args.lang,
                 center_extraction=args.center_extraction,
