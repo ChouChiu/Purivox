@@ -131,6 +131,7 @@ Common reference-cancellation options:
 |---|---:|---|
 | `--strength` | `0`–`100` | Vocal isolation strength; default: `75` |
 | `--sigma` | `1`, `3`, `8`, `16` | Advanced statistical window in seconds; default: `3`; the GUI always uses `3` |
+| `--taps` | `1`, `2`, `3` | Frame taps in the reference transfer; default: `2`, which compensates for venue reverberation. `1` is the previous behaviour and the fastest; `3` suits very long reverberation |
 | `--align` / `--no-align` | on / off | Automatic alignment; enabled by default |
 | `--center-extraction` | flag | Further emphasize vocals located at the center of the stereo image |
 | `--open-mic-focus` | flag | Preserve more centered vocal in open-mic sections while continuing to attenuate closed-mic or backing-only sections; requires center-focused processing |

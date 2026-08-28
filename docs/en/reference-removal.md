@@ -9,7 +9,8 @@
 Let the stereo recording to process be $\mathbf{y}(t)$ and the song source be
 $\mathbf{x}(t)$. Content that is absent from the song source—such as live vocals, speech, and
 ambient sound—is denoted by $\mathbf{v}(t)$. Reference-mask cancellation estimates a complex,
-time- and frequency-varying $2\times2$ transfer matrix in the STFT domain:
+time- and frequency-varying $2\times2K$ transfer matrix in the STFT domain ($K$ frame taps,
+default $K=2$):
 
 $$
 \mathbf{y}(t) \approx \mathbf{H}(t)\mathbf{x}(t) + \mathbf{v}(t)
@@ -80,10 +81,24 @@ This reduces the chance of meaningless long-distance matches.
 ### Local Drift
 
 Clock differences between recording devices can produce correct alignment at the beginning but
-increasing error toward the end. The implementation downsamples the audio into proxy signals,
+increasing error toward the end. The implementation resamples the audio into anti-aliased 16 kHz
+proxy signals,
 estimates local delay every 0.1 seconds, and limits the maximum change between adjacent estimates.
 Low-correlation windows retain the predicted value, and a three-point median filter suppresses
 jumps.
+
+What limits local delay accuracy is the proxy's *bandwidth*, not its sample grid. Measured end to
+end on a drifting broadband reference, raising the proxy rate from 2 kHz to 16 kHz lifted
+cancellation depth by roughly 10 dB while alignment runtime stayed flat: the tracking loop still
+advances once every 0.1 seconds, only each correlation gets longer. The wider band also admits
+more live-only content (vocals, cymbals) into the correlation, but the same sweep improved
+monotonically even with a loud live source present, so no cost from that trade was observed.
+
+The delay curve is **deliberately kept on the proxy sample grid**. Refining the peak to
+sub-sample resolution with parabolic interpolation was measured to *reduce* cancellation depth: a
+constant fractional delay is already absorbed by the per-bin complex transfer as a phase ramp, so
+the refinement only adds per-window noise to the lag curve without removing any error the mask
+cares about.
 
 After obtaining the delay curve $d(t)$, the source is resampled as
 
@@ -92,7 +107,10 @@ x_{\mathrm{aligned}}(t)=x\bigl(t-d(t)\bigr)
 $$
 
 Non-integer positions are interpolated with a radius-3 Lanczos kernel, and the result is written
-to mapped storage in blocks.
+to mapped storage in blocks. The kernel depends only on the fractional part of the source
+position, so it is read from a precomputed 8192-phase table rather than evaluating `sinc` per
+output sample; the table's quantisation error sits near -80 dBFS. Sliding window energy in the
+local tracker is computed from a prefix sum, which takes it from O(N*M) to O(N).
 
 ## Reference-Mask Cancellation
 
@@ -101,6 +119,51 @@ the current sample rate and constrained to 512–4096 points; the hop is one qua
 At each frequency bin, a complex transfer matrix is estimated from the smoothed source covariance
 and mix–source cross-power. Diagonal regularization is added to the covariance, and the total
 transfer gain for each output channel is limited to 2×.
+
+The normal equations are $R\,h=c$ with $R_{jk}=\mathbb{E}[x_k\overline{x_j}]$ and
+$c_j=\mathbb{E}[y\overline{x_j}]$. **The index order matters**: filling $R_{jk}$ with
+$\mathbb{E}[x_j\overline{x_k}]$ transposes the system and solves for a different transfer,
+measured at roughly 3.4 dB of cancellation depth on a stereo reference whose channels are
+strongly correlated across a small inter-channel delay — the normal case for real backing tracks.
+Only the lower triangle is built, and it is solved with an $LDL^{H}$ factorisation vectorised
+over whole spectra; stacking each time-frequency cell into a tensor for `numpy.linalg.solve`
+makes LAPACK run once per cell and measured about seven times slower.
+
+### Frame Taps (`--taps`)
+
+A single frame is the multiplicative narrowband model, which can only describe a room that decays
+inside one analysis window. Real venues ring far longer than 46 ms, so `--taps` extends the
+regressors from $[x_0(n),x_1(n)]$ to several successive frame delays, forming a convolutive
+transfer function across frames. Measured on synthetic scenes (clean broadband reference plus an
+exponentially decaying room response, direct path held at $t=0$):
+
+| Room response | `--taps 1` | `--taps 2` | `--taps 3` |
+|---|---:|---:|---:|
+| none | 13.23 dB | 13.22 dB | 13.22 dB |
+| 25 ms | 8.70 dB | **11.46 dB** | 9.84 dB |
+| 60 ms | 4.36 dB | **9.51 dB** | 8.31 dB |
+| 250 ms | 1.22 dB | 3.60 dB | **4.65 dB** |
+| tonal reference | 24.18 dB | 24.18 dB | 24.18 dB |
+
+Beyond that the estimator variance grows and quality falls again, so 3 is the ceiling. Real venue
+recordings are always reverberant, so the default is `2`; `1` keeps the previous behaviour and is
+the fastest.
+
+The cost has two parts. Per-block processing takes roughly 2.3× the time of `1` (`3` roughly
+4.7×). The covariance stored per spectral cell also grows with the square of the tap count, and
+the minimum statistical context required by `sigma` is always preserved and cannot absorb that by
+shrinking the block, so the parallel worker count has to drop: from 5 to 2 at 44.1 kHz with
+`sigma 3`, and back to a single worker at 96 kHz. That limit is necessary — peak memory measured
+on 15 minutes of 44.1 kHz material:
+
+| Setting | Peak RSS |
+|---|---:|
+| `taps 1`, 5 workers | 1335 MiB |
+| `taps 2`, 2 workers (current) | 1014 MiB |
+| `taps 2`, 5 workers (unguarded) | 2301 MiB |
+| `taps 3`, 5 workers (unguarded) | 3570 MiB |
+
+The last two exceed the 2 GiB working-set budget.
 
 The algorithm performs an initial fit, lowers the weights of vocal, cheering, and abnormal
 transients according to the prediction residual, then performs a second weighted fit. The GUI
@@ -143,6 +206,18 @@ Their sum is always 1, reducing seams at block boundaries.
 - Gorlow, Ramona, and Pachet's [live accompaniment-cancellation study](https://arxiv.org/abs/1611.08905) compares adaptive noise cancellation, spectral subtraction, and short-time ERB-band Wiener filtering. This implementation uses a simpler coherence-weighted frequency-domain soft mask rather than time-domain LMS or a separate ERB voting layer.
 - Boll's [classic spectral-subtraction paper](https://doi.org/10.1109/TASSP.1979.1163209) describes magnitude subtraction and residual-noise problems. This implementation retains a subtractive power target while adding reference-conditioned coherence, a mask floor, and narrow time-frequency smoothing instead of directly applying hard spectral subtraction.
 - Avery Lee's [Center Cut](https://www.virtualdub.org/blog2/entry_102.html) and ADRess-style methods depend on center imaging, inter-channel level differences, or phase differences. They apply only to the explicit optional center processing below and are not part of this default reference-cancellation optimization.
+- The convolutive transfer function (CTF) literature explains why the multiplicative narrowband approximation fails under long reverberation and how a finite set of frame taps replaces it, for example [joint dereverberation and blind source separation with a hybrid CTF model](https://doi.org/10.1016/j.apacoust.2024.110168); `--taps` is the minimal form of that idea. Schröter et al.'s [DeepFilterNet](https://arxiv.org/abs/2110.05588) and Tammen and Doclo's [deep multi-frame MVDR](https://arxiv.org/abs/2011.10345) are the learned form of the same idea: a complex filter across frames per time-frequency bin rather than a point-wise mask.
+- Engineering systems with the same structure are useful references. WebRTC's AEC3 is likewise "known reference plus unknown transfer plus double-talk", and its partitioned-block frequency-domain adaptive filter, delay estimation, and residual echo suppressor map onto the alignment, transfer estimation, and coherence-weighted mask here. Enzner and Vary's [frequency-domain adaptive Kalman filter](https://doi.org/10.1016/j.sigpro.2005.09.005) points at replacing the current two-pass robust fit with a state-space model; it is not implemented.
+
+### Approaches Rejected After Measurement
+
+Three textbook refinements were measured on the same synthetic scenes. Each traded live-source fidelity for reverberant depth, and frame taps reach the same depth without paying that, so none were adopted:
+
+- Berouti, Schwartz, and Makhoul's SNR-adaptive over-subtraction factor: 60 ms reverb 4.36 to 6.15 dB, but broadband fidelity 0.602 to 0.547 and quiet-vocal fidelity 0.202 to 0.117.
+- Ephraim-Malah decision-directed a-priori SNR with a Wiener gain: 60 ms reverb 4.36 to 9.33 dB, but broadband fidelity down to 0.313 and quiet-vocal down to 0.089.
+- Breithaupt, Gerkmann, and Martin's [cepstral gain smoothing](https://doi.org/10.1109/LSP.2007.906208): broadband fidelity 0.602 to 0.482, quiet-vocal 0.202 to 0.124.
+
+Also rejected: sub-sample refinement of the local delay (see Local Drift), and replacing `np.abs(z)**2` with `z.real**2 + z.imag**2` in the hot loops. The latter measured slower, because `abs` on complex input is a fused kernel while the hand-written form builds two temporaries.
 
 These papers provide algorithm structure and failure boundaries; they do not guarantee an improvement on every real performance. Matched-segment, loudness-matched A/B listening remains the acceptance criterion.
 
@@ -169,8 +244,9 @@ higher original rates are preserved, and output is written as 24-bit PCM WAV. Th
 standardizes the export format but cannot restore high-frequency detail absent from the input.
 
 Algorithm tests cover time offsets, local drift, inverted polarity, frequency-dependent room
-transfer, unrelated sources, rejection of source-only replacement lyrics, matrix crosstalk, block
-seams, center focus, and open-mic focus. Synthetic metrics only detect implementation
+transfer, unrelated sources, rejection of source-only replacement lyrics, matrix crosstalk,
+normal-equation orientation on a phase-correlated stereo reference, the frame-tap gain on a
+reverberant source, block seams, center focus, and open-mic focus. Synthetic metrics only detect implementation
 regressions. Real material must still be exported with identical input and settings for direct
 comparison, listening closely to vocal level, sibilance, breathing, harmonies, reverb tails, and
 audience sound.
