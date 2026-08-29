@@ -370,10 +370,7 @@ def test_long_processing_uses_two_spectral_workers(monkeypatch):
         passthrough,
     )
 
-    # Pinned to one tap: this covers the thread pool itself, and the default
-    # two taps quadruple the covariance per cell, which the memory guard pays
-    # for by dropping to a single worker at this sigma.
-    output = process_audio(mixture, reference, sample_rate, 1.0, 8, taps=1)
+    output = process_audio(mixture, reference, sample_rate, 1.0, 8)
 
     assert len(worker_ids) == 2
     assert np.array_equal(output, mixture)
@@ -567,55 +564,3 @@ def test_reference_cancellation_handles_a_phase_correlated_stereo_reference():
     )
     assert depth > 8.0
     assert corr(output[0][body], live[body]) > 0.60
-
-
-def _reverberant_scene(sample_rate, seconds, reverb_seconds, seed):
-    length = sample_rate * seconds
-    rng = np.random.default_rng(seed)
-    reference = np.stack(
-        [np.convolve(rng.normal(0.0, 0.2, length), np.ones(5) / 5, mode="same") for _ in range(2)]
-    )
-    taps = int(reverb_seconds * sample_rate)
-    room = rng.normal(0.0, 1.0, taps) * np.exp(-np.arange(taps) / (0.25 * taps))
-    room[0] += 3.0
-    room /= np.linalg.norm(room)
-    # "full" then truncate keeps the direct path at t=0, so this measures the
-    # transfer model rather than a several-frame misalignment.
-    stage = np.stack([np.convolve(channel, room)[:length] for channel in reference])
-    time = np.arange(length) / sample_rate
-    vocal = np.stack([0.12 * np.sin(2 * np.pi * 437 * time)] * 2)
-    return (stage + vocal).astype(np.float32), reference.astype(np.float32), vocal
-
-
-def test_reference_taps_improve_a_reverberant_reference():
-    """Extra frame taps model a room that rings past the analysis window."""
-    sample_rate = 16_000
-    mix, reference, vocal = _reverberant_scene(sample_rate, 6, 0.06, seed=77)
-    body = slice(sample_rate, mix.shape[1] - sample_rate)
-
-    def residual(taps):
-        output = process_audio(mix, reference, sample_rate, 1.0, 3, taps=taps)
-        return float(np.mean((output[0][body] - vocal[0][body]) ** 2))
-
-    narrowband = residual(1)
-    convolutive = residual(3)
-
-    # A 60 ms room response spans several 46 ms analysis frames, so the single
-    # frame of the multiplicative model cannot describe it.
-    assert convolutive < 0.5 * narrowband
-
-
-def test_reference_taps_shrink_the_working_set_budget():
-    """Covariance storage grows with the square of the tap count.
-
-    The minimum statistical context is always preserved, so the block cannot
-    always shrink; the parallel worker count has to absorb the rest.
-    """
-    from features.reference_removal.dsp.algorithms import _processing_layout
-
-    length = 600 * 44_100
-    single_block, single_workers = _processing_layout(44_100, 8, length, taps=1)
-    triple_block, triple_workers = _processing_layout(44_100, 8, length, taps=3)
-
-    assert triple_block <= single_block
-    assert triple_workers < single_workers

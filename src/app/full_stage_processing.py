@@ -202,7 +202,6 @@ def run_full_stage_job(
                     processed_audio.samples,
                     center_extraction=job.center_extraction,
                     open_mic_focus=job.open_mic_focus,
-                    taps=job.taps,
                 )
                 _blend_segment(
                     output.samples[:, stage_start:stage_end],

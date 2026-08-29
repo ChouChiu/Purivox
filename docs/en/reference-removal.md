@@ -129,78 +129,6 @@ Only the lower triangle is built, and it is solved with an $LDL^{H}$ factorisati
 over whole spectra; stacking each time-frequency cell into a tensor for `numpy.linalg.solve`
 makes LAPACK run once per cell and measured about seven times slower.
 
-### Frame Taps (`--taps`)
-
-A single frame is the multiplicative narrowband model, which can only describe a room that decays
-inside one analysis window. Real venues ring far longer than 46 ms, so `--taps` extends the
-regressors from $[x_0(n),x_1(n)]$ to several successive frame delays, forming a convolutive
-transfer function across frames. Measured on synthetic scenes (clean broadband reference plus an
-exponentially decaying room response, direct path held at $t=0$):
-
-| Room response | `--taps 1` | `--taps 2` | `--taps 3` |
-|---|---:|---:|---:|
-| none | 13.23 dB | 13.22 dB | 13.22 dB |
-| 25 ms | 8.70 dB | **11.46 dB** | 9.84 dB |
-| 60 ms | 4.36 dB | **9.51 dB** | 8.31 dB |
-| 250 ms | 1.22 dB | 3.60 dB | **4.65 dB** |
-| tonal reference | 24.18 dB | 24.18 dB | 24.18 dB |
-
-Beyond that the estimator variance grows and quality falls again, so 3 is the ceiling. Real venue
-recordings are always reverberant, so the default is `2`; `1` keeps the previous behaviour and is
-the fastest.
-
-The cost has two parts. Per-block processing takes roughly 2.3× the time of `1` (`3` roughly
-4.7×). The covariance stored per spectral cell also grows with the square of the tap count, and
-the minimum statistical context required by `sigma` is always preserved and cannot absorb that by
-shrinking the block, so the parallel worker count has to drop: from 5 to 2 at 44.1 kHz with
-`sigma 3`, and back to a single worker at 96 kHz. That limit is necessary — peak memory measured
-on 15 minutes of 44.1 kHz material:
-
-| Setting | Peak RSS |
-|---|---:|
-| `taps 1`, 5 workers | 1335 MiB |
-| `taps 2`, 2 workers (current) | 1014 MiB |
-| `taps 2`, 5 workers (unguarded) | 2301 MiB |
-| `taps 3`, 5 workers (unguarded) | 3570 MiB |
-
-The last two exceed the 2 GiB working-set budget.
-
-The algorithm performs an initial fit, lowers the weights of vocal, cheering, and abnormal
-transients according to the prediction residual, then performs a second weighted fit. The GUI
-uses a fixed three-second statistical context that balances adaptation speed and stability,
-instead of asking users to judge a low-level parameter whose effect is difficult to predict. The
-CLI retains `--sigma` values of 1, 3, 8, or 16 seconds for diagnosing unusual material.
-
-The predicted source contributes only to the power estimate. The algorithm computes one smoothed
-coherence estimate controlled by `sigma` and maps it directly to reference confidence. Confidence
-multiplies predicted-source power to form the removable-power estimate. The target has a 5%
-amplitude floor, and its real-valued soft mask receives one narrow time-frequency smoothing pass to
-suppress isolated-bin flicker without filling tonal notches from neighbouring bins. Both channels
-share the same power mask, avoiding image jumps from independent channel gating. The core path no
-longer stacks short-term coherence voting, ERB-band voting, recursive decision history, or spectral-
-flux restoration.
-
-A silent or unrelated song source produces low confidence and remains close to bypass. At zero
-strength, the STFT is skipped entirely and the input is copied sample for sample.
-
-The full recording uses blocks calculated from the sample rate and spectral size. Serial processing
-uses a four-million-cell STFT working set. Sufficiently long material scales automatically with the
-CPU and statistical context up to five independent spectral threads, while limiting concurrent
-contexts to nine million cells so peak memory stays below 2 GiB. Short material and large contexts
-such as 96 kHz with high `sigma` use fewer threads or remain serial. The `float32` PCM fast path
-performs `complex64` STFT/ISTFT directly instead of promoting to double precision only to cast the
-result back. The minimum statistical context required by `sigma` is always retained. Weighted fits
-reuse one smoothed weight denominator, while parallel blocks reduce total wait time. Adjacent blocks
-overlap by at least two seconds, increasing with `sigma` to half of the statistical context and
-capped at one third of the block length. They use squared-cosine and squared-sine crossfade weights:
-
-$$
-w_{\mathrm{old}}(\theta)=\cos^2\theta,\qquad
-w_{\mathrm{new}}(\theta)=\sin^2\theta
-$$
-
-Their sum is always 1, reducing seams at block boundaries.
-
 ### Research Basis and Boundaries
 
 - Gorlow, Ramona, and Pachet's [live accompaniment-cancellation study](https://arxiv.org/abs/1611.08905) compares adaptive noise cancellation, spectral subtraction, and short-time ERB-band Wiener filtering. This implementation uses a simpler coherence-weighted frequency-domain soft mask rather than time-domain LMS or a separate ERB voting layer.
@@ -213,6 +141,24 @@ Their sum is always 1, reducing seams at block boundaries.
 
 Three textbook refinements were measured on the same synthetic scenes. Each traded live-source fidelity for reverberant depth, and frame taps reach the same depth without paying that, so none were adopted:
 
+- **Convolutive transfer function (CTF) frame taps**, shipped briefly as `--taps` and then removed
+  outright. The gain was real on synthetic scenes but confined to short reverberation; retested at
+  the venue RT60 this document itself cites, it vanishes or goes slightly negative:
+
+  | Room response | 1 tap | 2 taps | 3 taps |
+  |---|---:|---:|---:|
+  | 25 ms | 8.70 dB | **11.46** | 9.84 |
+  | 60 ms | 4.36 | **9.51** | 8.31 |
+  | 250 ms | 1.22 | 3.60 | **4.65** |
+  | 500 ms | 1.23 | 1.83 | 2.83 |
+  | 1000 ms | 1.58 | 1.47 | 1.76 |
+  | 2000 ms | 0.88 | 0.85 | 0.84 |
+
+  The cost was not conditional: four minutes of audio went from 4.8 s to 21.6 s at 44.1 kHz and
+  from 14.6 s to 76.2 s at 96 kHz, because the per-block cost multiplies with a reduced parallel
+  worker count. The original "venues are reverberant, so enable it by default" call generalised
+  from the favourable 60 ms case without testing at the 0.8-2 s a real venue rings. Validate at
+  venue scale before retrying this direction.
 - Berouti, Schwartz, and Makhoul's SNR-adaptive over-subtraction factor: 60 ms reverb 4.36 to 6.15 dB, but broadband fidelity 0.602 to 0.547 and quiet-vocal fidelity 0.202 to 0.117.
 - Ephraim-Malah decision-directed a-priori SNR with a Wiener gain: 60 ms reverb 4.36 to 9.33 dB, but broadband fidelity down to 0.313 and quiet-vocal down to 0.089.
 - Breithaupt, Gerkmann, and Martin's [cepstral gain smoothing](https://doi.org/10.1109/LSP.2007.906208): broadband fidelity 0.602 to 0.482, quiet-vocal 0.202 to 0.124.
@@ -245,8 +191,8 @@ standardizes the export format but cannot restore high-frequency detail absent f
 
 Algorithm tests cover time offsets, local drift, inverted polarity, frequency-dependent room
 transfer, unrelated sources, rejection of source-only replacement lyrics, matrix crosstalk,
-normal-equation orientation on a phase-correlated stereo reference, the frame-tap gain on a
-reverberant source, block seams, center focus, and open-mic focus. Synthetic metrics only detect implementation
+normal-equation orientation on a phase-correlated stereo reference, block seams, center focus, and
+open-mic focus. Synthetic metrics only detect implementation
 regressions. Real material must still be exported with identical input and settings for direct
 comparison, listening closely to vocal level, sibilance, breathing, harmonies, reverb tails, and
 audience sound.
