@@ -3,12 +3,17 @@ from __future__ import annotations
 from pathlib import Path
 
 import numpy as np
+import pytest
 import soundfile as sf
 
 from features.full_stage import (
     ClipKind,
+    FullStageAnalysis,
     FullStageJob,
+    TimelineClip,
+    add_manual_clip,
     analyze_full_stage,
+    remove_manual_clip,
 )
 from shared.processing import CancellationToken
 
@@ -59,3 +64,64 @@ def test_full_stage_matches_sources_in_order_and_preserves_gaps(tmp_path: Path):
         (10.0, 13.0),
         (22.0, 25.0),
     ]
+
+
+def test_manual_clip_is_inserted_and_gaps_are_recomputed(tmp_path: Path):
+    """A spliced backing reuses a source in an order no anchor search finds."""
+    source = (tmp_path / "song.wav").resolve()
+    analysis = FullStageAnalysis(
+        60.0,
+        (
+            TimelineClip(ClipKind.SONG, 0.0, 20.0, source, 0, 0.0, 20.0, 0.9),
+            TimelineClip(ClipKind.UNMATCHED, 20.0, 60.0),
+        ),
+    )
+
+    updated = add_manual_clip(
+        analysis,
+        TimelineClip(ClipKind.SONG, 30.0, 45.0, source, 0, 60.0, 75.0, manual=True),
+    )
+
+    kinds = [(clip.kind, clip.stage_start, clip.stage_end) for clip in updated.clips]
+    assert kinds == [
+        (ClipKind.SONG, 0.0, 20.0),
+        (ClipKind.UNMATCHED, 20.0, 30.0),
+        (ClipKind.SONG, 30.0, 45.0),
+        (ClipKind.UNMATCHED, 45.0, 60.0),
+    ]
+    # Rendering gates fragments behind a switch, so an explicit addition has to
+    # be a song or it would be silently skipped.
+    manual = updated.clips[2]
+    assert manual.manual and manual.kind == ClipKind.SONG
+    assert manual in updated.matched_clips
+
+
+def test_manual_clip_removal_only_applies_to_manual_entries(tmp_path: Path):
+    source = (tmp_path / "song.wav").resolve()
+    analysis = FullStageAnalysis(
+        40.0,
+        (TimelineClip(ClipKind.SONG, 0.0, 20.0, source, 0, 0.0, 20.0, 0.9),),
+    )
+    added = add_manual_clip(
+        analysis,
+        TimelineClip(ClipKind.SONG, 25.0, 35.0, source, 0, 0.0, 10.0, manual=True),
+    )
+    manual_index = next(index for index, clip in enumerate(added.clips) if clip.manual)
+
+    with pytest.raises(ValueError):
+        remove_manual_clip(added, 0)
+
+    restored = remove_manual_clip(added, manual_index)
+    assert not any(clip.manual for clip in restored.clips)
+    assert [clip.kind for clip in restored.clips] == [ClipKind.SONG, ClipKind.UNMATCHED]
+
+
+def test_manual_clip_rejects_a_range_past_the_stage(tmp_path: Path):
+    source = (tmp_path / "song.wav").resolve()
+    analysis = FullStageAnalysis(10.0, (TimelineClip(ClipKind.UNMATCHED, 0.0, 10.0),))
+
+    with pytest.raises(ValueError):
+        add_manual_clip(
+            analysis,
+            TimelineClip(ClipKind.SONG, 5.0, 20.0, source, 0, 0.0, 15.0, manual=True),
+        )

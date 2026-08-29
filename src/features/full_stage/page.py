@@ -27,7 +27,8 @@ from qfluentwidgets import (
     TitleLabel,
 )
 
-from features.full_stage.models import ClipKind, FullStageAnalysis
+from features.full_stage.matching import add_manual_clip, remove_manual_clip
+from features.full_stage.models import ClipKind, FullStageAnalysis, TimelineClip
 from shared.config import cfg
 from shared.i18n import tr
 from shared.ui import FormCard, PageScrollArea
@@ -120,6 +121,14 @@ class FullStagePage(PageScrollArea):
         header.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
         header.setSectionResizeMode(5, QHeaderView.ResizeMode.Stretch)
         self.timeline_card.layout.addWidget(self.timeline)
+        clip_actions = QHBoxLayout()
+        self.add_clip = PushButton(FluentIcon.ADD, "")
+        self.remove_clip = PushButton(FluentIcon.DELETE, "")
+        self.remove_clip.setEnabled(False)
+        for button in (self.add_clip, self.remove_clip):
+            clip_actions.addWidget(button)
+        clip_actions.addStretch()
+        self.timeline_card.layout.addLayout(clip_actions)
         self.layout.addWidget(self.timeline_card)
 
         self.status_card = FormCard()
@@ -153,6 +162,9 @@ class FullStagePage(PageScrollArea):
         self.strength.valueChanged.connect(lambda value: self.strength_value.setText(f"{value}%"))
         self.center_extraction.checkedChanged.connect(self._sync_enhancement_controls)
         self.timeline.itemChanged.connect(self._timeline_item_changed)
+        self.timeline.itemSelectionChanged.connect(self._update_clip_actions)
+        self.add_clip.clicked.connect(self._add_clip)
+        self.remove_clip.clicked.connect(self._remove_clip)
 
     def retranslate(self, language: str) -> None:
         self.language = language
@@ -167,6 +179,8 @@ class FullStagePage(PageScrollArea):
         self.sources_hint.setText(tr(language, "stage_sources_hint"))
         self.add_sources.setText(tr(language, "stage_add_sources"))
         self.remove_source.setText(tr(language, "stage_remove_source"))
+        self.add_clip.setText(tr(language, "stage_add_clip"))
+        self.remove_clip.setText(tr(language, "stage_remove_clip"))
         self.parameters.title_label.setText(tr(language, "params"))
         self.strength_label.setText(tr(language, "strength"))
         self.center_extraction_label.setText(tr(language, "center_extraction"))
@@ -249,8 +263,10 @@ class FullStagePage(PageScrollArea):
             self.open_mic_focus,
             self.include_fragments,
             self.timeline,
+            self.add_clip,
         ):
             control.setEnabled(not running)
+        self.remove_clip.setEnabled(not running and self._selected_manual_row() is not None)
         if not running:
             self._sync_enhancement_controls()
 
@@ -356,6 +372,72 @@ class FullStagePage(PageScrollArea):
             raise ValueError("time range must be positive")
         return start, end
 
+    def _selected_manual_row(self) -> int | None:
+        if self.analysis is None:
+            return None
+        row = self.timeline.currentRow()
+        if not 0 <= row < len(self.analysis.clips):
+            return None
+        return row if self.analysis.clips[row].manual else None
+
+    def _update_clip_actions(self) -> None:
+        self.remove_clip.setEnabled(self._selected_manual_row() is not None)
+
+    def _add_clip(self) -> None:
+        if self.analysis is None:
+            self.status.setText(tr(self.language, "stage_need_analysis"))
+            return
+        sources = self.source_paths()
+        if not sources:
+            self.status.setText(tr(self.language, "stage_need_sources"))
+            return
+        index = self.sources.currentRow()
+        if not 0 <= index < len(sources):
+            index = 0
+        # Start inside the first gap the matcher left, which is where a spliced
+        # backing track's missing pieces almost always belong.
+        start = 0.0
+        limit = self.analysis.duration_seconds
+        for clip in self.analysis.clips:
+            if clip.kind == ClipKind.UNMATCHED:
+                start, limit = clip.stage_start, clip.stage_end
+                break
+        length = min(30.0, limit - start)
+        if length <= 0.0:
+            self.status.setText(tr(self.language, "stage_no_room_for_clip"))
+            return
+        try:
+            self.analysis = add_manual_clip(
+                self.analysis,
+                TimelineClip(
+                    ClipKind.SONG,
+                    start,
+                    start + length,
+                    source=sources[index],
+                    source_index=index,
+                    source_start=0.0,
+                    source_end=length,
+                    manual=True,
+                ),
+            )
+        except (IndexError, ValueError):
+            self.status.setText(tr(self.language, "stage_invalid_edit"))
+            return
+        self._render_timeline()
+        self.status.setText(tr(self.language, "stage_manual_added"))
+
+    def _remove_clip(self) -> None:
+        row = self._selected_manual_row()
+        if row is None or self.analysis is None:
+            return
+        try:
+            self.analysis = remove_manual_clip(self.analysis, row)
+        except (IndexError, ValueError):
+            self.status.setText(tr(self.language, "stage_invalid_edit"))
+            return
+        self._render_timeline()
+        self.status.setText(tr(self.language, "stage_manual_removed"))
+
     def _timeline_item_changed(self, item: QTableWidgetItem) -> None:
         if self._updating_timeline or self.analysis is None:
             return
@@ -421,7 +503,11 @@ class FullStagePage(PageScrollArea):
                     tr(self.language, type_keys[clip.kind]),
                     f"{self._clock(clip.stage_start)} - {self._clock(clip.stage_end)}",
                     source_range,
-                    "—" if clip.kind == ClipKind.UNMATCHED else f"{clip.confidence:.0%}",
+                    tr(self.language, "stage_manual_label")
+                    if clip.manual
+                    else "—"
+                    if clip.kind == ClipKind.UNMATCHED
+                    else f"{clip.confidence:.0%}",
                     tr(self.language, "stage_unmatched_label")
                     if clip.source is None
                     else clip.source.name,

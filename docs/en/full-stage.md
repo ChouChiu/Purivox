@@ -26,6 +26,7 @@ flowchart TB
     song --> timeline["Editable timeline"]
     fragment --> timeline
     unmatched --> timeline
+    manual["Hand-entered segments"] --> timeline
     timeline --> review["Manual review and correction"]
     review --> render{"Entry enabled and matched?"}
     render -->|yes| cancel["Local alignment<br/>and reference cancellation"]
@@ -80,13 +81,14 @@ fragments before rendering.
 
 ## Timeline Model
 
-Timeline entries have three kinds:
+Timeline entries have these kinds:
 
 | Kind | Meaning | Default processing |
 |---|---|---|
 | Full song | The primary full-length match for a source | Reference cancellation enabled |
 | Short fragment | A local reuse of the same source | User-selectable |
 | Unmatched | A gap without reliable source coverage | Preserve original audio |
+| Manual | A segment the user entered; the confidence column reads "Manual" | Treated as a full song |
 
 Each matched entry records the stage start/end times, source file, source start/end times,
 confidence, and enabled state. The model rejects negative times, zero-length ranges, matched
@@ -94,6 +96,28 @@ entries without a source, and out-of-range confidence.
 
 After detected occupied ranges are merged, any gap of at least 0.25 seconds produces an unmatched
 entry. Sources that were not detected are listed separately for manual review.
+
+### Manual Segments and Spliced Backing Tracks
+
+The analysis places at most one full-song position per source, and the fragment scan is weighted
+toward the first and last 75 seconds of the stage. A **spliced backing track** — the same song cut
+into pieces and replayed in an order the performance calls for — is outside what that search can
+reconstruct.
+
+The timeline therefore accepts hand-entered rows through "Add segment". A new row lands at the
+start of the first unidentified range, and the editable stage-time and source-range columns move
+it to its real position. Manual segments are full songs rather than fragments: rendering gates
+fragments behind a switch, and an entry the user typed in should not be silently skipped by it.
+The confidence column reads "Manual" rather than inventing a detection score.
+
+Only manual segments can be removed. Detected entries are skipped by clearing their checkbox and
+stay in the list for review.
+
+A spliced backing track can also be handled without the full-stage feature: cut the source into
+the performance's order first, then run it through single mode as one continuous song. That
+returns it to a single continuous alignment problem, but the splice points have to be accurate to
+within tens of milliseconds — local delay tracking corrects at most 2 ms per 0.1 s, so a half
+second of error takes about 25 seconds to absorb, and cancellation fails throughout.
 
 ## Segmented Rendering
 

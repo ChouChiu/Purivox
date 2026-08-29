@@ -118,6 +118,63 @@ def test_full_stage_page_orders_sources_and_renders_analysis(qtbot, tmp_path: Pa
     assert page.analysis.clips[1].source_end == 7.0
 
 
+def test_full_stage_page_adds_and_removes_a_manual_clip(qtbot, tmp_path: Path):
+    """Spliced backing tracks need timeline rows the matcher cannot produce."""
+    page = FullStagePage()
+    qtbot.addWidget(page)
+    page.retranslate("zh_cn")
+    source = (tmp_path / "song.wav").resolve()
+    item = QListWidgetItem(source.name)
+    item.setData(Qt.ItemDataRole.UserRole, str(source))
+    page.sources.addItem(item)
+    page.set_analysis(
+        FullStageAnalysis(
+            60.0,
+            (
+                TimelineClip(ClipKind.SONG, 0.0, 20.0, source, 0, 0.0, 20.0, 0.9),
+                TimelineClip(ClipKind.UNMATCHED, 20.0, 60.0),
+            ),
+        )
+    )
+    assert not page.remove_clip.isEnabled()
+
+    page.add_clip.click()
+
+    manual_rows = [row for row, clip in enumerate(page.analysis.clips) if clip.manual]
+    assert len(manual_rows) == 1
+    row = manual_rows[0]
+    assert page.timeline.item(row, 4).text() == "手动"
+    assert page.timeline.item(row, 1).text() == "完整歌曲"
+    # The new row lands in the gap and its ranges stay editable for correction.
+    assert page.analysis.clips[row].stage_start == 20.0
+    page.timeline.item(row, 2).setText("00:30.000 - 00:45.000")
+    page.timeline.item(row, 3).setText("01:00.000 - 01:15.000")
+    assert page.analysis.clips[row].stage_start == 30.0
+    assert page.analysis.clips[row].source_start == 60.0
+
+    page.timeline.setCurrentCell(row, 0)
+    assert page.remove_clip.isEnabled()
+    page.remove_clip.click()
+    assert not any(clip.manual for clip in page.analysis.clips)
+
+
+def test_full_stage_page_will_not_remove_a_detected_clip(qtbot, tmp_path: Path):
+    page = FullStagePage()
+    qtbot.addWidget(page)
+    page.retranslate("zh_cn")
+    source = (tmp_path / "song.wav").resolve()
+    page.set_analysis(
+        FullStageAnalysis(
+            30.0,
+            (TimelineClip(ClipKind.SONG, 0.0, 20.0, source, 0, 0.0, 20.0, 0.9),),
+        )
+    )
+
+    page.timeline.setCurrentCell(0, 0)
+
+    assert not page.remove_clip.isEnabled()
+
+
 def test_full_stage_job_forwards_normal_mr_parameters(qtbot, tmp_path: Path):
     load_config()
     window = MainWindow()

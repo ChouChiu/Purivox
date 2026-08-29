@@ -24,6 +24,7 @@ class TimelineClip:
     source_end: float = 0.0
     confidence: float = 0.0
     enabled: bool = True
+    manual: bool = False
 
     def __post_init__(self) -> None:
         if self.stage_start < 0 or self.stage_end <= self.stage_start:
@@ -38,6 +39,8 @@ class TimelineClip:
             raise ValueError("matched source range must have a positive duration")
         if not 0.0 <= self.confidence <= 1.0:
             raise ValueError("confidence must be in [0, 1]")
+        if self.manual and self.kind == ClipKind.UNMATCHED:
+            raise ValueError("unmatched clips cannot be manual")
 
     @property
     def duration(self) -> float:

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 import numpy as np
@@ -382,6 +382,46 @@ def _find_fragments(
             )
         )
     return fragments
+
+
+def _rebuilt(analysis: FullStageAnalysis, occupied: list[TimelineClip]) -> FullStageAnalysis:
+    """Recompute the unmatched gaps around a changed set of matched clips."""
+    gaps = _unmatched_clips(analysis.duration_seconds, occupied)
+    clips = tuple(sorted(occupied + gaps, key=lambda clip: (clip.stage_start, clip.kind.value)))
+    return replace(analysis, clips=clips)
+
+
+def add_manual_clip(analysis: FullStageAnalysis, clip: TimelineClip) -> FullStageAnalysis:
+    """Insert a user-supplied clip the matcher could not find on its own.
+
+    A spliced backing track reuses parts of a source in an order no anchor
+    search will reconstruct, so the timeline has to accept ranges the user
+    knows about.  The clip is a full song rather than a fragment because
+    rendering gates fragments behind a switch, and an explicit addition should
+    not be silently skipped by it.
+    """
+    if clip.kind == ClipKind.UNMATCHED:
+        raise ValueError("a manual clip must reference a source")
+    if clip.stage_end > analysis.duration_seconds:
+        raise ValueError("manual clip exceeds the stage duration")
+    occupied = [existing for existing in analysis.clips if existing.kind != ClipKind.UNMATCHED]
+    occupied.append(clip)
+    return _rebuilt(analysis, occupied)
+
+
+def remove_manual_clip(analysis: FullStageAnalysis, index: int) -> FullStageAnalysis:
+    """Drop a manually added clip. Detected clips are disabled, never removed."""
+    if not 0 <= index < len(analysis.clips):
+        raise IndexError("timeline index out of range")
+    target = analysis.clips[index]
+    if not target.manual:
+        raise ValueError("only manually added clips can be removed")
+    occupied = [
+        existing
+        for position, existing in enumerate(analysis.clips)
+        if existing.kind != ClipKind.UNMATCHED and position != index
+    ]
+    return _rebuilt(analysis, occupied)
 
 
 def _unmatched_clips(duration: float, occupied: list[TimelineClip]) -> list[TimelineClip]:
