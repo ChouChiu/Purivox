@@ -34,6 +34,7 @@ from shared.i18n import tr
 from shared.ui import (
     AUDIO_FILE_FILTER,
     WAV_FILE_FILTER,
+    AudioDropLineEdit,
     FormCard,
     PageScrollArea,
     sync_dependent_switch,
@@ -53,8 +54,16 @@ class MrPage(PageScrollArea):
         self.title = TitleLabel()
         self.layout.addWidget(self.title)
         self.files = FormCard()
-        self.song_label, self.song_edit, self.song_button = BodyLabel(), LineEdit(), PushButton()
-        self.acc_label, self.acc_edit, self.acc_button = BodyLabel(), LineEdit(), PushButton()
+        self.song_label, self.song_edit, self.song_button = (
+            BodyLabel(),
+            AudioDropLineEdit(),
+            PushButton(),
+        )
+        self.acc_label, self.acc_edit, self.acc_button = (
+            BodyLabel(),
+            AudioDropLineEdit(),
+            PushButton(),
+        )
         self.output_label, self.output_edit, self.output_button = (
             BodyLabel(),
             LineEdit(),
@@ -177,6 +186,8 @@ class MrPage(PageScrollArea):
 
         self.song_button.clicked.connect(self._select_song)
         self.acc_button.clicked.connect(self._select_acc)
+        self.song_edit.file_dropped.connect(self.set_song)
+        self.acc_edit.file_dropped.connect(self.set_accompaniment)
         self.output_button.clicked.connect(self._select_output)
         self.output_edit.textEdited.connect(self._output_edited)
         self.output_edit.editingFinished.connect(self.normalized_output_path)
@@ -184,7 +195,7 @@ class MrPage(PageScrollArea):
         self.cancel_button.clicked.connect(self.cancel_requested)
         self.strength.valueChanged.connect(lambda value: self.strength_value.setText(f"{value}%"))
         self.center_extraction.checkedChanged.connect(self._sync_enhancement_controls)
-        self.preview_play.clicked.connect(self._toggle_preview)
+        self.preview_play.clicked.connect(self.toggle_preview)
         self.preview_stop.clicked.connect(self.stop_preview)
         self.preview_volume.valueChanged.connect(
             lambda value: self.audio_output.setVolume(value / 100.0)
@@ -214,6 +225,8 @@ class MrPage(PageScrollArea):
         self.open_mic_focus_label.setText(tr("open_mic_focus"))
         for button in (self.song_button, self.acc_button, self.output_button):
             button.setText(tr("browse"))
+        for edit in (self.song_edit, self.acc_edit):
+            edit.setToolTip(tr("drop_hint"))
         self.auto_find.setOnText(tr("auto_find_on"))
         self.auto_find.setOffText(tr("auto_find_off"))
         for switch in (self.center_extraction, self.open_mic_focus):
@@ -257,6 +270,10 @@ class MrPage(PageScrollArea):
         if not running:
             self._sync_enhancement_controls()
 
+    def browse_primary_input(self) -> None:
+        """Open the file dialog a page-level shortcut should reach."""
+        self._select_song()
+
     def _select_song(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
             self,
@@ -264,13 +281,16 @@ class MrPage(PageScrollArea):
             filter=AUDIO_FILE_FILTER,
         )
         if path:
-            self.clear_result()
-            self.song_edit.setText(path)
-            if not self._output_user_edited or not self.output_edit.text().strip():
-                output = str(Path(path).with_name(Path(path).stem + "_vocals.wav"))
-                self.output_edit.setText(output)
-                self._output_user_edited = False
-            self.song_changed.emit(path)
+            self.set_song(path)
+
+    def set_song(self, path: str) -> None:
+        """Take a song from the file dialog or from a drop, identically."""
+        self.clear_result()
+        self.song_edit.setText(path)
+        if not self._output_user_edited or not self.output_edit.text().strip():
+            self.output_edit.setText(str(Path(path).with_name(Path(path).stem + "_vocals.wav")))
+            self._output_user_edited = False
+        self.song_changed.emit(path)
 
     def _select_acc(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
@@ -279,8 +299,11 @@ class MrPage(PageScrollArea):
             filter=AUDIO_FILE_FILTER,
         )
         if path:
-            self.clear_result()
-            self.acc_edit.setText(path)
+            self.set_accompaniment(path)
+
+    def set_accompaniment(self, path: str) -> None:
+        self.clear_result()
+        self.acc_edit.setText(path)
 
     def _select_output(self) -> None:
         path, _ = QFileDialog.getSaveFileName(
@@ -357,7 +380,7 @@ class MrPage(PageScrollArea):
         self.preview_time.setText("00:00 / 00:00")
         self._render_stats()
 
-    def _toggle_preview(self) -> None:
+    def toggle_preview(self) -> None:
         if self._result_path is None:
             return
         if self.player.playbackState() == QMediaPlayer.PlaybackState.PlayingState:

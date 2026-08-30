@@ -35,6 +35,7 @@ Vocal Isolation, and their results should not be compared directly.
 - Chunked long-audio processing, task cancellation, and atomic output writes
 - All results exported as PCM WAV at 96 kHz / 24-bit or higher
 - In-app result preview and audio statistics
+- Audio files can be dropped straight onto the interface, and the common actions have shortcuts: `Ctrl+O` to choose an input, `Ctrl+Return` to start, `F5` to identify songs, `Esc` to cancel, `Ctrl+P` to play/pause the preview
 - GUI and CLI reuse the corresponding MR Remove and AI separation task pipelines
 
 ## Installation

@@ -4,8 +4,8 @@ from functools import partial
 from pathlib import Path
 
 from PySide6.QtCore import QEvent
-from PySide6.QtGui import QCloseEvent, QColor, QPalette
-from PySide6.QtWidgets import QApplication
+from PySide6.QtGui import QCloseEvent, QColor, QKeySequence, QPalette, QShortcut
+from PySide6.QtWidgets import QApplication, QWidget
 from qfluentwidgets import (
     FluentIcon,
     FluentWindow,
@@ -58,6 +58,7 @@ class MainWindow(FluentWindow):
         self.setMinimumSize(820, 620)
         self._apply_theme(str(cfg.theme.value))
         self._build_navigation()
+        self._build_shortcuts()
         self._connect()
         self.retranslate()
 
@@ -68,6 +69,55 @@ class MainWindow(FluentWindow):
         self.settings_nav = self.addSubInterface(
             self.settings, FluentIcon.SETTING, "", NavigationItemPosition.BOTTOM
         )
+
+    def _build_shortcuts(self) -> None:
+        """Bind window-level shortcuts that act on whichever page is showing.
+
+        Binding them here rather than on each page keeps one accelerator per
+        action: three page-local `Ctrl+O` shortcuts would be an ambiguous
+        overload, and a window shortcut also works before a page takes focus.
+        """
+        self.open_shortcut = self._shortcut(
+            QKeySequence.StandardKey.Open, self._browse_current_input
+        )
+        self.start_shortcut = self._shortcut(QKeySequence("Ctrl+Return"), self._start_current)
+        self.analyze_shortcut = self._shortcut(
+            QKeySequence.StandardKey.Refresh, self._analyze_current
+        )
+        self.cancel_shortcut = self._shortcut(QKeySequence.StandardKey.Cancel, self.cancel)
+        self.preview_shortcut = self._shortcut(QKeySequence("Ctrl+P"), self._toggle_preview)
+
+    def _shortcut(self, sequence: QKeySequence | QKeySequence.StandardKey, slot) -> QShortcut:
+        shortcut = QShortcut(QKeySequence(sequence), self)
+        shortcut.activated.connect(slot)
+        return shortcut
+
+    def current_page(self) -> QWidget:
+        """The page a shortcut should act on, looking through the MR workspace."""
+        current = self.stackedWidget.currentWidget()
+        if current is self.mr_workspace:
+            return self.mr_workspace.stack.currentWidget()
+        return current
+
+    def _browse_current_input(self) -> None:
+        page = self.current_page()
+        if isinstance(page, MrPage | AiPage | FullStagePage):
+            page.browse_primary_input()
+
+    def _start_current(self) -> None:
+        page = self.current_page()
+        if isinstance(page, MrPage | AiPage | FullStagePage):
+            page.start_requested.emit()
+
+    def _analyze_current(self) -> None:
+        page = self.current_page()
+        if isinstance(page, FullStagePage):
+            page.analyze_requested.emit()
+
+    def _toggle_preview(self) -> None:
+        page = self.current_page()
+        if isinstance(page, MrPage):
+            page.toggle_preview()
 
     def _connect(self) -> None:
         self.home.mr_requested.connect(self._open_mr)
@@ -118,6 +168,7 @@ class MainWindow(FluentWindow):
         self.setWindowTitle(tr("window_title"))
         for page in (self.home, self.mr_workspace, self.ai, self.settings):
             page.retranslate()
+        self._apply_shortcut_hints()
         for navigation, key in (
             (self.home_nav, "nav_home"),
             (self.mr_nav, "nav_mr"),
@@ -125,6 +176,24 @@ class MainWindow(FluentWindow):
             (self.settings_nav, "nav_settings"),
         ):
             navigation.setText(tr(key))
+
+    def _apply_shortcut_hints(self) -> None:
+        """Append each binding to the tooltip of the control it triggers."""
+        for control, shortcut in (
+            (self.mr.song_button, self.open_shortcut),
+            (self.ai.song_button, self.open_shortcut),
+            (self.full_stage.stage_button, self.open_shortcut),
+            (self.mr.start_button, self.start_shortcut),
+            (self.ai.start_button, self.start_shortcut),
+            (self.full_stage.start_button, self.start_shortcut),
+            (self.full_stage.analyze_button, self.analyze_shortcut),
+            (self.mr.cancel_button, self.cancel_shortcut),
+            (self.ai.cancel_button, self.cancel_shortcut),
+            (self.full_stage.cancel_button, self.cancel_shortcut),
+            (self.mr.preview_play, self.preview_shortcut),
+        ):
+            keys = shortcut.key().toString(QKeySequence.SequenceFormat.NativeText)
+            control.setToolTip(f"{control.text()} ({keys})")
 
     def _warning(self, key: str) -> None:
         InfoBar.warning(

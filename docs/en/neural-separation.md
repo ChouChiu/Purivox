@@ -59,6 +59,10 @@ SHA-256 digest is computed incrementally, and only a transfer whose size and dig
 catalogue is committed with an atomic rename. Any failure, mismatch, or cancellation calls
 `cancelWriting()`, so no partial file survives and no model can appear present but corrupt.
 
+A `QFileSystemWatcher` on the search directories keeps the AI page's ready/needs-download label
+current, so a weight that finishes downloading or is copied in by hand updates it immediately
+without reopening the page.
+
 The current catalog contains four model definitions:
 
 | Model ID | Display name | Weights file |

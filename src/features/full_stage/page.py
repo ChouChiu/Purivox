@@ -14,7 +14,6 @@ from qfluentwidgets import (
     BodyLabel,
     FluentIcon,
     LineEdit,
-    ListWidget,
     PrimaryPushButton,
     ProgressBar,
     PushButton,
@@ -31,6 +30,8 @@ from shared.i18n import tr
 from shared.ui import (
     AUDIO_FILE_FILTER,
     WAV_FILE_FILTER,
+    AudioDropLineEdit,
+    AudioDropListWidget,
     FormCard,
     PageScrollArea,
     sync_dependent_switch,
@@ -50,7 +51,11 @@ class FullStagePage(PageScrollArea):
         self.layout.addWidget(self.title)
 
         self.files = FormCard()
-        self.stage_label, self.stage_edit, self.stage_button = BodyLabel(), LineEdit(), PushButton()
+        self.stage_label, self.stage_edit, self.stage_button = (
+            BodyLabel(),
+            AudioDropLineEdit(),
+            PushButton(),
+        )
         self.stage_edit.setReadOnly(True)
         self.output_label, self.output_edit, self.output_button = (
             BodyLabel(),
@@ -65,7 +70,7 @@ class FullStagePage(PageScrollArea):
         self.sources_hint = BodyLabel()
         self.sources_hint.setWordWrap(True)
         self.sources_card.layout.addWidget(self.sources_hint)
-        self.sources = ListWidget()
+        self.sources = AudioDropListWidget()
         self.sources.setMinimumHeight(150)
         self.sources.setDragDropMode(QAbstractItemView.DragDropMode.NoDragDrop)
         self.sources_card.layout.addWidget(self.sources)
@@ -154,6 +159,8 @@ class FullStagePage(PageScrollArea):
         self.layout.addStretch()
 
         self.stage_button.clicked.connect(self._select_stage)
+        self.stage_edit.file_dropped.connect(self.set_stage)
+        self.sources.files_dropped.connect(self.add_source_paths)
         self.output_button.clicked.connect(self._select_output)
         self.add_sources.clicked.connect(self._add_sources)
         self.remove_source.clicked.connect(self._remove_source)
@@ -179,6 +186,8 @@ class FullStagePage(PageScrollArea):
         self.output_label.setText(tr("output_file"))
         self.output_edit.setPlaceholderText(tr("stage_output_hint"))
         self.stage_button.setText(tr("browse"))
+        self.stage_edit.setToolTip(tr("drop_hint"))
+        self.sources.setToolTip(tr("drop_hint"))
         self.output_button.setText(tr("browse"))
         self.sources_card.title_label.setText(tr("stage_sources"))
         self.sources_hint.setText(tr("stage_sources_hint"))
@@ -278,14 +287,21 @@ class FullStagePage(PageScrollArea):
             self.timeline_model.set_analysis(None)
         self.start_button.setEnabled(False)
 
+    def browse_primary_input(self) -> None:
+        """Open the file dialog a page-level shortcut should reach."""
+        self._select_stage()
+
     def _select_stage(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
             self,
             tr("stage_audio"),
             filter=AUDIO_FILE_FILTER,
         )
-        if not path:
-            return
+        if path:
+            self.set_stage(path)
+
+    def set_stage(self, path: str) -> None:
+        """Take the stage recording from the file dialog or from a drop."""
         self.stage_edit.setText(path)
         self.output_edit.setText(
             str(Path(path).with_name(Path(path).stem + "_full_stage_vocals.wav"))
@@ -308,7 +324,12 @@ class FullStagePage(PageScrollArea):
             tr("stage_sources"),
             filter=AUDIO_FILE_FILTER,
         )
+        self.add_source_paths(paths)
+
+    def add_source_paths(self, paths: list[str]) -> None:
+        """Append sources from the file dialog or from a drop, skipping repeats."""
         existing = {str(path.resolve()) for path in self.source_paths()}
+        added = False
         for path_text in paths:
             path = Path(path_text).expanduser().resolve()
             if str(path) in existing:
@@ -318,7 +339,8 @@ class FullStagePage(PageScrollArea):
             item.setToolTip(str(path))
             self.sources.addItem(item)
             existing.add(str(path))
-        if paths:
+            added = True
+        if added:
             self.invalidate_analysis()
 
     def _remove_source(self) -> None:

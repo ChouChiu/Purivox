@@ -597,5 +597,9 @@
         <source>ai_err_infer</source>
         <translation>AI 分离失败：{msg}</translation>
     </message>
+    <message>
+        <source>drop_hint</source>
+        <translation>可以把音频文件拖到这里</translation>
+    </message>
 </context>
 </TS>

@@ -17,6 +17,7 @@ from features.full_stage.page import FullStagePage
 from features.reference_removal.page import MrPage
 from shared.audio import AudioStats
 from shared.config import cfg, load_config
+from shared.i18n import tr
 from shared.ui import SmoothComboBox, SmoothComboBoxMenu
 
 
@@ -410,3 +411,78 @@ def test_long_output_path_does_not_expand_page_width(qtbot, tmp_path: Path):
     QApplication.processEvents()
 
     assert page.content.sizeHint().width() <= baseline
+
+
+def test_pages_take_files_by_drag_and_drop(qtbot, tmp_path: Path):
+    """Dropping a file must set up the page exactly as the file dialog does."""
+    window = MainWindow()
+    qtbot.addWidget(window)
+    song = tmp_path / "live.wav"
+
+    window.mr.song_edit.file_dropped.emit(str(song))
+    assert window.mr.song_edit.text() == str(song)
+    assert Path(window.mr.output_edit.text()).name == "live_vocals.wav"
+
+    window.full_stage.stage_edit.file_dropped.emit(str(song))
+    assert Path(window.full_stage.output_edit.text()).name == "live_full_stage_vocals.wav"
+
+    window.full_stage.sources.files_dropped.emit([str(tmp_path / "a.wav"), str(tmp_path / "b.wav")])
+    assert [path.name for path in window.full_stage.source_paths()] == ["a.wav", "b.wav"]
+    window.full_stage.sources.files_dropped.emit([str(tmp_path / "a.wav")])
+    assert len(window.full_stage.source_paths()) == 2, "a repeated source must not be added twice"
+
+
+def test_window_shortcuts_act_on_the_visible_page(qtbot):
+    window = MainWindow()
+    qtbot.addWidget(window)
+    window.switchTo(window.mr_workspace)
+    window.mr_workspace.show_single()
+    assert window.current_page() is window.mr
+
+    with qtbot.waitSignal(window.mr.start_requested):
+        window.start_shortcut.activated.emit()
+
+    window.mr_workspace.show_full_stage()
+    assert window.current_page() is window.full_stage
+    with qtbot.waitSignal(window.full_stage.analyze_requested):
+        window.analyze_shortcut.activated.emit()
+    with qtbot.waitSignal(window.full_stage.start_requested):
+        window.start_shortcut.activated.emit()
+
+    # Cancelling with no job running must be harmless rather than an error.
+    window.cancel_shortcut.activated.emit()
+
+
+def test_shortcut_hints_follow_the_interface_language(qtbot):
+    window = MainWindow()
+    qtbot.addWidget(window)
+    cfg.set(cfg.language, "en_us")
+    assert window.mr.start_button.toolTip() == "Start (Ctrl+Return)"
+    assert window.full_stage.analyze_button.toolTip().endswith("(F5)")
+    cfg.set(cfg.language, "zh_cn")
+    assert window.mr.start_button.toolTip() == "开始处理 (Ctrl+Return)"
+
+
+def test_ai_page_watches_the_model_directories(qtbot, tmp_path: Path, monkeypatch):
+    """A weight that appears while the page is open refreshes its status."""
+    from features.neural_separation import page as ai_page
+    from features.neural_separation.catalog import get_model
+
+    monkeypatch.setattr(ai_page, "candidate_model_dirs", lambda override=None: (tmp_path,))
+    monkeypatch.setattr(
+        ai_page,
+        "find_model",
+        lambda entry, override=None: next(
+            (path for path in (tmp_path / entry.filename,) if path.is_file()), None
+        ),
+    )
+    page = ai_page.AiPage()
+    qtbot.addWidget(page)
+    page.retranslate()
+    assert str(tmp_path) in page.model_watcher.directories()
+    assert page.model_status.text() == tr("ai_model_need_download")
+
+    with qtbot.waitSignal(page.model_watcher.directoryChanged, timeout=5000):
+        (tmp_path / get_model(str(page.model.currentData())).filename).write_bytes(b"weights")
+
+    assert page.model_status.text() == tr("ai_model_ready")
