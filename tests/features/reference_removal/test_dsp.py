@@ -366,7 +366,7 @@ def test_long_processing_uses_two_spectral_workers(monkeypatch):
         return song.copy()
 
     monkeypatch.setattr(
-        "features.reference_removal.dsp.algorithms._reference_mask_cancel",
+        "features.reference_removal.dsp.algorithms._reference_cancel",
         passthrough,
     )
 
@@ -376,7 +376,7 @@ def test_long_processing_uses_two_spectral_workers(monkeypatch):
     assert np.array_equal(output, mixture)
 
 
-def test_process_audio_uses_reference_mask_cancellation(monkeypatch):
+def test_process_audio_uses_reference_cancellation(monkeypatch):
     sample_rate = 8_000
     time = np.arange(sample_rate * 2) / sample_rate
     vocal = 0.3 * np.sin(2 * np.pi * 440 * time)
@@ -385,9 +385,9 @@ def test_process_audio_uses_reference_mask_cancellation(monkeypatch):
     from features.reference_removal.dsp import algorithms
 
     calls = []
-    original = algorithms._reference_mask_cancel
+    original = algorithms._reference_cancel
     monkeypatch.setattr(
-        "features.reference_removal.dsp.algorithms._reference_mask_cancel",
+        "features.reference_removal.dsp.algorithms._reference_cancel",
         lambda *args: calls.append(args) or original(*args),
     )
 

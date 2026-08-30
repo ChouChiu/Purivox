@@ -27,7 +27,7 @@ Vocal Isolation, and their results should not be compared directly.
 
 - Fluent Design desktop interface with light, dark, and system themes
 - Instant switching among Chinese, English, Japanese, and Korean interfaces
-- Global time alignment, local clock-drift tracking, and reference-mask cancellation
+- Global time alignment, local clock-drift tracking, and coherent reference cancellation
 - Optional **Emphasize live vocals** and **Open-mic focus** processing
 - Song identification, repeated-segment detection, and editable processing ranges for full-stage
   recordings

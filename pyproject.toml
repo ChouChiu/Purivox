@@ -108,6 +108,7 @@ files = [
   "src/features/reference_removal/dsp/__init__.py",
   "src/features/reference_removal/dsp/algorithms.py",
   "src/features/reference_removal/dsp/alignment.py",
+  "src/features/reference_removal/dsp/transfer.py",
   "src/features/reference_removal/finder.py",
   "src/features/reference_removal/models.py",
   "src/features/reference_removal/page.py",

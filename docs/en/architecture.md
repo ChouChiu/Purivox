@@ -121,7 +121,7 @@ partially written final output.
 ```mermaid
 flowchart TB
     input["Audio input"] --> choice{"Workflow"}
-    choice -->|Single| mr["Align song source<br/>reference-mask cancellation"]
+    choice -->|Single| mr["Align song source<br/>coherent reference cancellation"]
     choice -->|Full Stage| stage["Multi-source matching<br/>timeline-based cancellation"]
     choice -->|AI Track Separation| ai["Chunked model inference<br/>calculate vocals and background"]
     mr --> mrout["Vocal WAV<br/>at least 96 kHz / 24-bit"]

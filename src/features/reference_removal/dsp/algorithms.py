@@ -5,64 +5,51 @@ import os
 from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
-from scipy.ndimage import gaussian_filter, gaussian_filter1d, uniform_filter1d
+from scipy.ndimage import gaussian_filter
 
 from shared.audio import BLOCK_FRAMES, release_mapped_pages
 from shared.dsp import fft_frequencies, istft, stft
 from shared.processing import CancellationToken
 
+from .transfer import (
+    TRANSFER_ORDER,
+    effective_observations,
+    power_transfer,
+    predict_reference_spectra,
+    smoothstep,
+    spectral_smooth,
+)
+
 _MASK_FLOOR = 0.05
-_CONFIDENCE_LOW = 0.03
-_CONFIDENCE_HIGH = 0.35
 _SPECTRAL_OVERSUBTRACTION = 1.5
+# A geometric mean sits at about 0.56 of the arithmetic mean for the residual's
+# distribution, so the threshold is scaled up to keep the same amount of
+# down-weighting as the mean-based form it replaced.
+_ROBUST_SCALE = 7.0
+# Frames where the reference explains most of the mixture are the ones that
+# reveal how much accompaniment the transfer failed to describe.
+_LEAKAGE_LOW = 0.5
+_LEAKAGE_HIGH = 0.9
+# Leakage cannot exceed the prediction it leaked from.
+_MAX_LEAKAGE = 1.0
+# A power-domain fit needs a clearly positive correlation before it is allowed
+# to remove anything: unrelated music shares loudness envelopes, and this gate
+# is what keeps an unrelated source from being suppressed.
+_INCOHERENT_LOW = 0.15
+_INCOHERENT_HIGH = 0.45
+# The power-domain estimate is noisier than the coherent one, so it gets its
+# own over-subtraction factor rather than borrowing the coherent path's.  It has
+# not been tuned away from that value: it is kept separate because this is the
+# knob to lower when the incoherent path suppresses cleanly but audibly costs
+# quality, which is what it does on a badly phase-decorrelated capture.
+_INCOHERENT_OVERSUBTRACTION = 1.5
+# Width of the single narrow smoothing pass over the finished mask, in
+# (frames, bins).
+_MASK_SMOOTHING = (0.75, 0.35)
 _SPECTRAL_CELL_BUDGET = 4_000_000
-_MAX_TRANSFER_GAIN = 2.0
 _MAX_PROCESSING_BLOCK_SECONDS = 48
 _MAX_PROCESSING_WORKERS = min(5, os.cpu_count() or 1)
 _MAX_PARALLEL_SPECTRAL_CELLS = 9_000_000
-
-
-def _spectral_smooth(
-    values: np.ndarray,
-    sigma_time: float,
-    sigma_frequency: float = 1.0,
-) -> np.ndarray:
-    """Smooth long spectral contexts in O(N) time along the frame axis."""
-    if np.iscomplexobj(values):
-        return _spectral_smooth(values.real, sigma_time, sigma_frequency) + 1j * _spectral_smooth(
-            values.imag,
-            sigma_time,
-            sigma_frequency,
-        )
-    window = max(round(6.0 * sigma_time), 1)
-    smoothed = uniform_filter1d(values, size=window, axis=0, mode="reflect")
-    if sigma_frequency > 0.0:
-        smoothed = gaussian_filter1d(
-            smoothed,
-            sigma=sigma_frequency,
-            axis=1,
-            mode="reflect",
-        )
-    return smoothed
-
-
-def _weighted_smooth(
-    values: np.ndarray,
-    weights: np.ndarray | None,
-    sigma_time: float,
-    denominator: np.ndarray | None = None,
-) -> np.ndarray:
-    if weights is None:
-        return _spectral_smooth(values, sigma_time)
-    if denominator is None:
-        denominator = _spectral_smooth(weights, sigma_time) + 1e-12
-    numerator = _spectral_smooth(values * weights, sigma_time)
-    return numerator / denominator
-
-
-def _smoothstep(low: float, high: float, values: np.ndarray) -> np.ndarray:
-    scaled = np.clip((values - low) / (high - low), 0.0, 1.0)
-    return scaled * scaled * (3.0 - 2.0 * scaled)
 
 
 def _phantom_center_enhance(
@@ -88,9 +75,9 @@ def _phantom_center_enhance(
     # Roughly 90 ms of temporal context at every sample rate suppresses musical
     # noise while retaining syllable attacks.
     smooth = max(0.09 * sample_rate / hop, 1.0)
-    left_power = _spectral_smooth(np.abs(left) ** 2, smooth)
-    right_power = _spectral_smooth(np.abs(right) ** 2, smooth)
-    cross = _spectral_smooth(left * np.conj(right), smooth)
+    left_power = spectral_smooth(np.abs(left) ** 2, smooth)
+    right_power = spectral_smooth(np.abs(right) ** 2, smooth)
+    cross = spectral_smooth(left * np.conj(right), smooth)
     coherence = np.clip(
         np.abs(cross) ** 2 / (left_power * right_power + epsilon),
         0.0,
@@ -99,7 +86,7 @@ def _phantom_center_enhance(
     phase_delta = np.angle(cross)
     half_delta = 0.5 * np.abs(phase_delta)
     phase_overlap = np.maximum(0.0, np.cos(half_delta) - np.sin(half_delta))
-    coherence_gate = _smoothstep(0.03, 0.35, coherence)
+    coherence_gate = smoothstep(0.03, 0.35, coherence)
     left_amplitude = np.sqrt(left_power)
     right_amplitude = np.sqrt(right_power)
     common_amplitude = np.minimum(left_amplitude, right_amplitude) * phase_overlap * coherence_gate
@@ -110,14 +97,14 @@ def _phantom_center_enhance(
     # 9 dB. Use conventional Mid as a fallback center instead of fading the whole
     # spatial stage out: this keeps a buried center vocal while still suppressing
     # wide backing in sections where nobody is singing.
-    center_presence = _smoothstep(0.02, 0.18, center_share)
+    center_presence = smoothstep(0.02, 0.18, center_share)
     center = 0.5 * (
         common_amplitude / (left_amplitude + epsilon) * np.exp(-0.5j * phase_delta) * left
         + common_amplitude / (right_amplitude + epsilon) * np.exp(0.5j * phase_delta) * right
     )
     frequencies = fft_frequencies(sample_rate, n_fft)
-    vocal_band = _smoothstep(80.0, 160.0, frequencies) * (
-        1.0 - _smoothstep(9_000.0, 14_000.0, frequencies)
+    vocal_band = smoothstep(80.0, 160.0, frequencies) * (
+        1.0 - smoothstep(9_000.0, 14_000.0, frequencies)
     )
     side_floor = 0.35
     center_gain = 1.25
@@ -189,109 +176,7 @@ def _processing_layout(sample_rate: int, sigma: float, length: int) -> tuple[int
     return block, workers
 
 
-def _solve_hermitian(
-    covariance: list[list[np.ndarray]],
-    cross: list[np.ndarray],
-) -> list[np.ndarray]:
-    """Solve the Hermitian system R h = c for every time-frequency cell.
-
-    `covariance` holds the lower triangle as whole [frames, bins] spectra.
-    Stacking the cells into one [frames, bins, order, order] tensor and calling
-    `numpy.linalg.solve` makes LAPACK run once per cell, which measured about
-    seven times slower.  An LDL^H factorisation written out over the spectra
-    keeps every step a single vectorised array operation and needs no square
-    roots.
-    """
-    order = len(cross)
-    lower: list[list[np.ndarray | None]] = [[None] * order for _ in range(order)]
-    pivot: list[np.ndarray] = []
-    for column in range(order):
-        value = covariance[column][column].real.copy()
-        for index in range(column):
-            factor = lower[column][index]
-            value -= (factor.real**2 + factor.imag**2) * pivot[index]
-        pivot.append(np.maximum(value, 1e-20))
-        for row in range(column + 1, order):
-            entry = covariance[row][column].copy()
-            for index in range(column):
-                entry -= lower[row][index] * np.conj(lower[column][index]) * pivot[index]
-            lower[row][column] = entry / pivot[column]
-    forward: list[np.ndarray] = []
-    for row in range(order):
-        value = cross[row].copy()
-        for index in range(row):
-            value -= lower[row][index] * forward[index]
-        forward.append(value)
-    transfer: list[np.ndarray | None] = [None] * order
-    for row in reversed(range(order)):
-        value = forward[row] / pivot[row]
-        for index in range(row + 1, order):
-            value = value - np.conj(lower[index][row]) * transfer[index]
-        transfer[row] = value
-    return transfer
-
-
-def _predict_reference_spectra(
-    song_spectra: list[np.ndarray],
-    reference_spectra: list[np.ndarray],
-    sigma_frames: float,
-    token: CancellationToken,
-    weights: np.ndarray | None = None,
-) -> list[np.ndarray]:
-    """Predict reference-correlated spectra without subtracting them from the mix.
-
-    One reference frame per channel is the multiplicative narrowband model.
-    Spanning several frames instead, as a convolutive transfer function, was
-    measured and removed again: it only helped for room responses shorter than
-    a few hundred milliseconds, and at the 0.8-2 s a real venue rings it was
-    worth nothing or slightly negative while costing 4.5-5.2x the runtime.
-    """
-    epsilon = 1e-12
-    order = len(reference_spectra)
-    denominator = None
-    if weights is not None:
-        denominator = _spectral_smooth(weights, sigma_frames) + 1e-12
-    # The normal equations for y ~ sum_k h_k x_k are R h = c with
-    # R[j][k] = E[x_k conj(x_j)] and c[j] = E[y conj(x_j)].  Filling R[j][k]
-    # with E[x_j conj(x_k)] instead transposes the system and silently solves
-    # for a different transfer, so only the lower triangle is built here and
-    # the upper one is never needed.
-    covariance: list[list[np.ndarray | None]] = [[None] * order for _ in range(order)]
-    for row in range(order):
-        for column in range(row + 1):
-            covariance[row][column] = _weighted_smooth(
-                reference_spectra[column] * np.conj(reference_spectra[row]),
-                weights,
-                sigma_frames,
-                denominator,
-            )
-    loading = covariance[0][0].real.copy()
-    for index in range(1, order):
-        loading += covariance[index][index].real
-    loading *= 2e-4 / order
-    loading += epsilon
-    for index in range(order):
-        covariance[index][index] = covariance[index][index] + loading
-    predicted: list[np.ndarray] = []
-    for channel in song_spectra:
-        token.raise_if_cancelled()
-        cross = [
-            _weighted_smooth(channel * np.conj(reference), weights, sigma_frames, denominator)
-            for reference in reference_spectra
-        ]
-        transfer = _solve_hermitian(covariance, cross)
-        row_gain = np.abs(transfer[0])
-        for index in range(1, order):
-            row_gain = row_gain + np.abs(transfer[index])
-        gain_scale = np.minimum(1.0, _MAX_TRANSFER_GAIN / (row_gain + epsilon))
-        combined = transfer[0] * reference_spectra[0]
-        for index in range(1, order):
-            combined = combined + transfer[index] * reference_spectra[index]
-        predicted.append((gain_scale * combined).astype(np.complex64))
-    return predicted
-
-
-def _reference_mask_cancel(
+def _reference_cancel(
     song: np.ndarray,
     reference: np.ndarray,
     sample_rate: int,
@@ -299,12 +184,20 @@ def _reference_mask_cancel(
     sigma: float,
     token: CancellationToken,
 ) -> np.ndarray:
-    """Cancel reference-correlated content with a confidence-weighted soft mask.
+    """Cancel reference-correlated content coherently, then suppress what is left.
 
-    The estimated complex reference transfer is used only to model accompaniment
-    power. Reconstruction always multiplies the original mixture spectra by a
-    linked real mask, so this path performs no waveform or complex-spectrum
-    polarity subtraction.
+    A real mask can only attenuate a whole time-frequency cell.  Where a live
+    voice and the accompaniment share a cell - which in the vocal range is the
+    normal case, not the exception - the mask has to choose between removing
+    both and keeping both, so depth is always paid for with the voice.  The
+    transfer estimate is a complex vector, and subtracting it removes the
+    accompaniment vector from inside the cell while the live vector survives.
+
+    This is the linear-canceller-then-residual-suppressor arrangement acoustic
+    echo cancellers use.  It is not the direct residual this project removed
+    earlier: that one subtracted a broadband real 2x2 matrix in the time domain
+    with no per-bin projection, no confidence and no bound on the result, which
+    is why a word present only in the reference ended up inverted in the output.
     """
     length = min(song.shape[1], reference.shape[1])
     mix = np.asarray(song[:, :length], dtype=np.float32)
@@ -320,7 +213,7 @@ def _reference_mask_cancel(
         reference_spectra.append(reference_spectra[0])
     sigma_frames = max(float(sigma) * sample_rate / hop / 6.0, 1.0)
 
-    predicted = _predict_reference_spectra(
+    predicted, _explained = predict_reference_spectra(
         song_spectra,
         reference_spectra,
         sigma_frames,
@@ -329,56 +222,121 @@ def _reference_mask_cancel(
     residual_power = np.zeros(song_spectra[0].shape, dtype=np.float32)
     for mixture_channel, predicted_channel in zip(song_spectra, predicted, strict=True):
         residual_power += np.abs(mixture_channel - predicted_channel) ** 2
-    local_residual = _spectral_smooth(residual_power, sigma_frames)
-    robust_weights = np.minimum(1.0, 4.0 * local_residual / (residual_power + 1e-12)).astype(
-        np.float32
-    )
-    predicted = _predict_reference_spectra(
+    # The scale the outliers are judged against has to be one they cannot lift
+    # themselves.  A smoothed arithmetic mean is dragged up by the very live
+    # transients it is meant to down-weight, so take the geometric mean: the
+    # same O(N) smoother, read in the log domain.
+    residual_floor = 1e-10 * float(np.mean(residual_power)) + 1e-30
+    local_residual = np.exp(spectral_smooth(np.log(residual_power + residual_floor), sigma_frames))
+    robust_weights = np.minimum(
+        1.0, _ROBUST_SCALE * local_residual / (residual_power + 1e-12)
+    ).astype(np.float32)
+    del residual_power, local_residual, predicted
+    predicted, explained = predict_reference_spectra(
         song_spectra,
         reference_spectra,
         sigma_frames,
         token,
         robust_weights,
     )
+    del robust_weights
     token.raise_if_cancelled()
 
-    mixture_power = np.zeros(song_spectra[0].shape, dtype=np.float32)
-    removable_power = np.zeros_like(mixture_power)
-    confidence_sigma = max(sigma_frames / 2.0, 1.0)
+    # How much of the prediction to subtract is not a free parameter.  The
+    # transfer is estimated from a finite window, so its error variance is
+    # about order/observations of the unexplained power, and the shrinkage that
+    # minimises the mean square error of the subtraction follows from that
+    # alone.  It reaches zero for a reference that explains nothing, which is
+    # what keeps an unrelated reference from being subtracted at all.
+    variance_ratio = TRANSFER_ORDER / effective_observations(sigma_frames, song_spectra[0].shape[0])
+    alignment = np.zeros(song_spectra[0].shape, dtype=np.float32)
+    predicted_power = np.zeros_like(alignment)
+    for mixture_channel, predicted_channel, confidence in zip(
+        song_spectra, predicted, explained, strict=True
+    ):
+        predicted_channel *= confidence / (confidence + variance_ratio * (1.0 - confidence) + 1e-12)
+        alignment += (mixture_channel * np.conj(predicted_channel)).real
+        predicted_power += np.abs(predicted_channel) ** 2
+    # The linear stage may only take energy out.  Solving |y - t*d| <= |y| for t
+    # gives 2*Re(y conj(d))/|d|^2 exactly, so this is the largest step that
+    # cannot amplify - and because it reads the phase, it also falls to zero
+    # where the prediction is orthogonal to the mixture in a cell.  Bounding
+    # |e| by |y| instead leaves the residual pointing wherever the bad
+    # prediction put it, merely rescaled.  The step is linked across channels
+    # like the mask that follows it.
+    step = np.clip(2.0 * alignment / (predicted_power + 1e-20), 0.0, 1.0).astype(np.float32)
+    del alignment, predicted_power
+    removable_power = np.zeros(song_spectra[0].shape, dtype=np.float32)
+    residual_spectra: list[np.ndarray] = []
     for mixture_channel, predicted_channel in zip(song_spectra, predicted, strict=True):
-        channel_power = np.abs(mixture_channel) ** 2
-        reference_power = np.abs(predicted_channel) ** 2
-        smoothed_mix = _spectral_smooth(channel_power, confidence_sigma)
-        smoothed_reference = _spectral_smooth(reference_power, confidence_sigma)
-        cross = _spectral_smooth(
-            mixture_channel * np.conj(predicted_channel),
-            confidence_sigma,
-        )
-        coherence = np.clip(
-            np.abs(cross) ** 2 / (smoothed_mix * smoothed_reference + 1e-12),
-            0.0,
-            1.0,
-        )
-        confidence = _smoothstep(_CONFIDENCE_LOW, _CONFIDENCE_HIGH, coherence)
-        mixture_power += channel_power
-        removable_power += confidence * reference_power
+        removed = step * predicted_channel
+        residual_spectra.append(mixture_channel - removed)
+        removable_power += np.abs(removed) ** 2
+    del predicted, step
+    token.raise_if_cancelled()
+
+    # What survives the subtraction is not only the live source: reverberation
+    # ringing past the analysis window, residual misalignment and level moves
+    # all leave accompaniment behind that the narrowband transfer could not
+    # describe.  Its size is measured per bin over the frames the reference
+    # dominates - a stage recording supplies plenty of those between vocal
+    # phrases - and the mask is asked to remove that much and no more.
+    residual_power = np.zeros_like(removable_power)
+    for residual in residual_spectra:
+        residual_power += np.abs(residual) ** 2
+    dominant = smoothstep(_LEAKAGE_LOW, _LEAKAGE_HIGH, sum(explained) / len(explained))
+    leakage = np.sum(dominant * residual_power, axis=0) / (
+        np.sum(dominant * removable_power, axis=0) + 1e-12
+    )
+    leakage = np.clip(leakage, 0.0, _MAX_LEAKAGE).astype(np.float32)
+    del dominant, explained
+
+    # Where the capture path destroyed phase, the coherent stage has nothing to
+    # subtract and `removable_power` is far smaller than the accompaniment that
+    # is actually present.  The power-domain fit sees that content, so the mask
+    # removes whichever of the two explains more, minus what has already gone.
+    reference_power = np.zeros_like(residual_power)
+    for reference_channel in reference_spectra:
+        reference_power += np.abs(reference_channel) ** 2
+    mixture_power = np.zeros_like(residual_power)
+    for mixture_channel in song_spectra:
+        mixture_power += np.abs(mixture_channel) ** 2
+    incoherent_power, incoherent_confidence = power_transfer(
+        mixture_power, reference_power, sigma_frames
+    )
+    del reference_power, mixture_power, reference_spectra
+    incoherent_power *= smoothstep(_INCOHERENT_LOW, _INCOHERENT_HIGH, incoherent_confidence)
+    incoherent_power = np.maximum(incoherent_power - removable_power, 0.0)
+    del incoherent_confidence
 
     remaining_power = np.maximum(
-        mixture_power - _SPECTRAL_OVERSUBTRACTION * removable_power,
-        (_MASK_FLOOR**2) * mixture_power,
+        residual_power
+        - _SPECTRAL_OVERSUBTRACTION * leakage[None, :] * removable_power
+        - _INCOHERENT_OVERSUBTRACTION * incoherent_power,
+        (_MASK_FLOOR**2) * residual_power,
     )
-    mask = np.sqrt(np.clip(remaining_power / (mixture_power + 1e-12), _MASK_FLOOR**2, 1.0))
+    del incoherent_power
+    mask = np.sqrt(np.clip(remaining_power / (residual_power + 1e-12), _MASK_FLOOR**2, 1.0))
+    del remaining_power, removable_power, residual_power
     # A single narrow smoothing pass prevents isolated-bin musical noise without
     # refilling tonal notches from untouched neighbours.  Berouti-style
     # signal-dependent over-subtraction, an Ephraim-Malah decision-directed
     # Wiener gain and Breithaupt cepstral gain smoothing were all measured here
     # against this line: each bought a few dB on short reverberation but roughly
     # halved fidelity on a quiet live vocal, so none of them replaced it.
-    mask = gaussian_filter(mask, sigma=(0.75, 0.35), mode="reflect")
-    effective_mask = 1.0 - strength * (1.0 - np.clip(mask, _MASK_FLOOR, 1.0))
+    mask = gaussian_filter(mask, sigma=_MASK_SMOOTHING, mode="reflect")
+    np.clip(mask, _MASK_FLOOR, 1.0, out=mask)
     token.raise_if_cancelled()
+    # Strength interpolates towards the fully processed spectrum.  With nothing
+    # subtracted this is exactly the mask blend it replaces, 1 - a(1 - M), so
+    # bypass at zero and monotonicity are unchanged.
+    for index, (mixture_channel, residual) in enumerate(
+        zip(song_spectra, residual_spectra, strict=True)
+    ):
+        residual_spectra[index] = mixture_channel + strength * (mask * residual - mixture_channel)
+    del song_spectra, mask
     return np.asarray(
-        [istft(channel * effective_mask, hop=hop, length=length) for channel in song_spectra],
+        [istft(channel, hop=hop, length=length) for channel in residual_spectra],
         dtype=np.float32,
     )
 
@@ -439,7 +397,7 @@ def process_audio(
             reference_block[:, : reference_end - start] = accompaniment[:, start:reference_end]
         else:
             reference_block = accompaniment[:, start:end]
-        processed = _reference_mask_cancel(
+        processed = _reference_cancel(
             mix[:, start:end],
             reference_block,
             sample_rate,

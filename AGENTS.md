@@ -4,7 +4,7 @@
 
 **Purivox v1.0.0** (`purivox`) — a desktop vocal/accompaniment separation tool written in Python 3.11+ / PySide6 with PySide6-Fluent-Widgets (Fluent Design UI). Three workflows share one codebase:
 
-- **MR Remove** (`purivox mr`): reference-guided cancellation — takes a known accompaniment as reference, aligns it (GCC-PHAT + clock-drift tracking), and cancels it with a confidence-weighted reference mask. Phantom-center focus is opt-in.
+- **MR Remove** (`purivox mr`): reference-guided cancellation — takes a known accompaniment as reference, aligns it (GCC-PHAT + clock-drift tracking), and cancels it coherently — a complex subtraction of the estimated transfer, then a residual soft mask over what is left. Phantom-center focus is opt-in.
 - **Full Stage** (GUI): matches multiple sources against a continuous stage recording, exposes an editable timeline, and applies reference cancellation only to enabled matched clips.
 - **AI vocal extraction** (`purivox ai`): UVR MDX-Net ONNX inference with no reference; models download on demand and are verified by SHA-256.
 
@@ -24,7 +24,7 @@ src/entrypoints (cli.py, gui.py)          — startup only
 
 Invariants enforced by `tests/test_architecture.py`: `shared` must never import `app` or `features.*`; feature packages must never import one another. Adding a feature = one new `src/features/<feature>/` dir; it may import `shared` freely and must not be imported by other features.
 
-**Reference pipeline** (`features/reference_removal/processing.py`): `read_audio` (SoundFile, Qt Multimedia fallback) → upmix to stereo → resample song source to stage rate (soxr) → optional `align_audio` (GCC-PHAT coarse lag + Lanczos warp) → `process_audio` (12–28 s blocks selected from `sigma`, at least 2 s overlap, cos²/sin² crossfade) → resample to the 96 kHz Hi-Res export floor when needed → audio stats (peak/RMS dBFS) → atomic 24-bit WAV write.
+**Reference pipeline** (`features/reference_removal/processing.py`): `read_audio` (SoundFile, Qt Multimedia fallback) → upmix to stereo → resample song source to stage rate (soxr) → optional `align_audio` (GCC-PHAT coarse lag + Lanczos warp) → `process_audio` (blocks sized by the spectral-cell budget, ~45 s at 44.1 kHz, at least 2 s overlap, cos²/sin² crossfade) → resample to the 96 kHz Hi-Res export floor when needed → audio stats (peak/RMS dBFS) → atomic 24-bit WAV write.
 
 **Neural pipeline** (`features/neural_separation/processing.py`): resample input to 44.1 kHz → `ensure_model` (search: `--models-dir` override → `PURIVOX_MODELS` env → system app-data dir → repo `models/`; download from TRvlvr releases with SHA-256 verify) → `MdxNet.separate` (chunked overlap-add, hanning divider accumulation) → background = mix − vocal → resample both stems to 96 kHz → write 24-bit `<stem>_vocal.wav` + `<stem>_background.wav`.
 
@@ -36,7 +36,7 @@ Invariants enforced by `tests/test_architecture.py`: `shared` must never import 
 |---|---|
 | `src/entrypoints/` | `cli.py` (argparse: `mr`, `ai`, `--selftest`) and `gui.py` |
 | `src/app/` | `main_window.py` (FluentWindow shell), `job_presenter.py` (page state/results), `job_runner.py`/`worker.py` (QThread lifecycle and adapter), cross-feature orchestration, `version.py` |
-| `src/features/reference_removal/` | MR pipeline: `dsp/algorithms.py` (reference-mask cancellation), `dsp/alignment.py`, `finder.py` (auto accompaniment match), `processing.py`, `page.py`, `models.py` |
+| `src/features/reference_removal/` | MR pipeline: `dsp/algorithms.py` (coherent cancellation), `dsp/transfer.py` (transfer estimation), `dsp/alignment.py`, `finder.py` (auto accompaniment match), `processing.py`, `page.py`, `models.py` |
 | `src/features/full_stage/` | Multi-source fingerprint matching, timeline models, `timeline_model.py` (`QAbstractTableModel` behind the editable timeline), and the full-stage page |
 | `src/features/neural_separation/` | AI pipeline: `inference.py` (MdxNet ONNX wrapper), `model_store.py` (search + `QNetworkAccessManager` download + `QSaveFile` verify-then-commit), `catalog.py` (4 shipped model entries, `MODEL_BASE_URL`), `processing.py`, `page.py` |
 | `src/features/home/`, `src/features/settings/` | HomePage (brand + entry cards), SettingsPage (language/theme/log level) |
@@ -48,6 +48,7 @@ Invariants enforced by `tests/test_architecture.py`: `shared` must never import 
 | `tests/` | Mirrors `src/` path-for-path (`tests/shared/` ↔ `src/shared/`, `tests/features/…`); `benchmarks/` for long/`--runslow` gates |
 | `models/` | 4 prebuilt ONNX weights (gitignored, never committed); not shipped in wheels/standalone |
 | `deployment/` | `main.py` — standalone Nuitka entry shim |
+| `tools/` | Developer scripts, kept out of the package: `eval_cancellation.py` reports cancellation depth and live-source fidelity per synthetic scene, for A/B comparison across a DSP change |
 
 ## Development Commands
 
@@ -59,6 +60,10 @@ uv run --locked purivox                            # GUI
 uv run --locked purivox mr <song> <acc> <out.wav> --strength 75 --sigma 8 --align --lang zh_cn
 uv run --locked purivox ai <song> [--output-dir <dir>] [--model mdxnet_1] [--models-dir <dir>]
 uv run --locked purivox --selftest                 # self-test smoke (offscreen-safe)
+
+# DSP A/B: capture a baseline before a change, compare after
+uv run --locked python tools/eval_cancellation.py --save baseline.json
+uv run --locked python tools/eval_cancellation.py --compare baseline.json
 
 # checks (no lint/test without offscreen Qt platform)
 uv run --locked ruff check src tests
@@ -107,7 +112,8 @@ Language keys: `zh_cn`, `en_us`, `ja_jp`, `ko_kr`.
 | `src/shared/jobs.py` | Reference-job settings contract shared by `ReferenceJob`, `FullStageJob` and the CLI parser |
 | `src/shared/audio/io.py` | memmap audio loading, soxr resample, ≥96 kHz / 24-bit Hi-Res preparation, atomic WAV write |
 | `src/shared/config.py` / `i18n.py` / `logging.py` | settings persistence, `QTranslator` install + `tr()`, single-line log format |
-| `src/features/reference_removal/dsp/algorithms.py` | Reference-mask cancellation, optional center focus, and linked peak protection |
+| `src/features/reference_removal/dsp/algorithms.py` | Coherent cancellation (complex subtraction + residual mask), optional center focus, and linked peak protection |
+| `src/features/reference_removal/dsp/transfer.py` | Smoothed spectral statistics, the vectorised LDL^H solve, and the complex transfer with its adjusted multiple coherence |
 | `src/features/reference_removal/dsp/alignment.py` | GCC-PHAT coarse alignment + local drift tracking + Lanczos warp |
 | `src/features/neural_separation/inference.py` / `model_store.py` | MdxNet ONNX wrapper (chunked overlap-add); model search, Qt-network download, incremental SHA-256 verified before `QSaveFile.commit()` |
 | `src/features/full_stage/timeline_model.py` | `TimelineModel`: the analysis as an editable `QAbstractTableModel` (`data`/`flags`/`setData`), with `clip_edited` / `edit_rejected` for page status text |
@@ -127,6 +133,6 @@ Language keys: `zh_cn`, `en_us`, `ja_jp`, `ko_kr`.
 ## Testing & QA
 
 - **Framework**: pytest ≥8.3 + pytest-qt ≥4.4. Run: `QT_QPA_PLATFORM=offscreen uv run --locked pytest` (offscreen mandatory; conftest sets it and adds `--runslow`, auto-skipping `@pytest.mark.slow` tests otherwise). Marker `model` is declared but currently unused; `--runslow` runs the 15-minute, 44.1 kHz stereo reference-cancellation benchmark (`tests/benchmarks/test_long_audio.py`) asserting seam smoothness and peak RSS ≤ 2 GiB.
-- **Layout**: `tests/` mirrors `src/` path-for-path. Per-area coverage: audio IO/resample/atomic-write (`tests/shared/test_audio.py`), STFT round-trip (`test_spectral.py`), i18n key parity (`test_i18n.py`), log format (`test_logging.py`), reference-mask cancellation + alignment/MIMO (`tests/features/reference_removal/test_dsp.py`), drift/focus/jitter regressions (`test_dsp_regression.py`), finder similarity (`test_finder.py`), end-to-end reference job + AudioStats + same-input rejection (`test_processing.py`), neural chunked overlap-add identity (`test_neural.py`), CLI option handling (`tests/entrypoints/test_cli.py`), GUI navigation/theme/combos/stats via pytest-qt (`tests/app/test_gui.py`), timeline model data/flags/edit rejection (`tests/features/full_stage/test_timeline_model.py`), and model download/verify/cancel against a localhost HTTP server (`tests/features/neural_separation/test_model_store.py` — it repoints `catalog.MODEL_BASE_URL`, so no test ever reaches the real release host).
+- **Layout**: `tests/` mirrors `src/` path-for-path. Per-area coverage: audio IO/resample/atomic-write (`tests/shared/test_audio.py`), STFT round-trip (`test_spectral.py`), i18n key parity (`test_i18n.py`), log format (`test_logging.py`), coherent cancellation + alignment/MIMO (`tests/features/reference_removal/test_dsp.py`), drift/focus/jitter regressions (`test_dsp_regression.py`), finder similarity (`test_finder.py`), end-to-end reference job + AudioStats + same-input rejection (`test_processing.py`), neural chunked overlap-add identity (`test_neural.py`), CLI option handling (`tests/entrypoints/test_cli.py`), GUI navigation/theme/combos/stats via pytest-qt (`tests/app/test_gui.py`), timeline model data/flags/edit rejection (`tests/features/full_stage/test_timeline_model.py`), and model download/verify/cancel against a localhost HTTP server (`tests/features/neural_separation/test_model_store.py` — it repoints `catalog.MODEL_BASE_URL`, so no test ever reaches the real release host).
 - **Architecture gate**: `tests/test_architecture.py` parses ASTs — any `shared → app/features` or feature↔feature import fails the suite.
-- **Expectations**: synthetic DSP metrics are regression evidence only — they do not claim real-music quality (stated in README). Run `uv run --locked purivox --selftest` for a quick pipeline smoke check before committing DSP changes.
+- **Expectations**: synthetic DSP metrics are regression evidence only — they do not claim real-music quality (stated in README). Run `uv run --locked purivox --selftest` for a quick pipeline smoke check before committing DSP changes. DSP changes are accepted or rejected on measurement here, so run `tools/eval_cancellation.py` as well to see what a change did to depth and fidelity; `docs/reference-removal.md` records the numbers for the ones that landed and the ones that did not.
