@@ -7,10 +7,10 @@
 ## Design Goals
 
 Purivox separates its interface, feature implementations, and shared infrastructure. The
-GUI and CLI only collect parameters, report progress, and present results; independently callable
-task functions perform the actual processing. This lets the desktop application and command line
-reuse the same implementation and makes it possible to test audio pipelines without starting the
-interface.
+GUI and CLI only collect parameters, report progress, and present results; the actual processing
+happens in independently callable task functions. This lets the desktop application and command
+line reuse the same implementation and makes it possible to test audio pipelines without starting
+the interface.
 
 ## Layered Structure
 
@@ -65,8 +65,9 @@ full-stage jobs validate strength, statistics window, and the center-processing 
 Each page emits start and cancel signals without controlling threads directly. `MainWindow`
 creates an immutable job object from the page parameters and passes the processing function to
 `JobPresenter`. The presenter manages the page's running state, progress text, and result display,
-then delegates background execution to `JobRunner`. The runner exclusively owns the lifecycle of
-the `QThread` and `ProcessingWorker`, ensuring that only one task runs in a window at a time.
+then delegates background execution to `JobRunner`. The runner has exclusive ownership of the
+`QThread` and `ProcessingWorker` lifecycles, ensuring that only one task runs in a window at a
+time.
 `ProcessingWorker` only adapts a regular Python call to Qt signals. The runner emits its own
 `finished` signal only after the thread object completes deferred deletion, preventing races
 between Qt object destruction and window closure or test-scope teardown. This leaves the main
@@ -112,9 +113,9 @@ every streaming loop; finding and releasing mapped pages likewise has a single i
 block loop. All of these operations respond to cancellation, avoiding separate implementations that
 could drift between pipelines.
 
-WAV output is first written to a temporary file in the destination directory, then atomically
-replaces the destination with `os.replace`. Cancellation or failure therefore does not leave a
-partially written final output.
+WAV output is first written to a temporary file in the destination directory, and `os.replace`
+then atomically replaces the destination. Cancellation or failure therefore leaves no partially
+written final output.
 
 ## Three Processing Pipelines
 

@@ -42,8 +42,8 @@ environment. This project specifically uses `PySide6-Fluent-Widgets[full]`.
   for example `shared.audio.BLOCK_FRAMES`, `shared.audio.AUDIO_EXTENSIONS`,
   `shared.jobs.SIGMA_CHOICES`, `shared.i18n.SUPPORTED_LANGUAGES`, and `shared.logging.LOG_LEVELS`.
 - Qt background tasks are coordinated by `app/job_presenter.py`, which manages page state, and
-  then passed to `app/job_runner.py` for thread ownership. Pages and processing pipelines must not
-  create their own threads.
+  are then passed to `app/job_runner.py`, which owns the threads. Pages and processing pipelines
+  must not create their own threads.
 - Slots that receive signals across a thread boundary are declared with `@Slot(<types>)`
   (worker → `JobRunner` → `JobPresenter`) so Qt dispatches the queued connection with the declared
   signature.
@@ -107,11 +107,11 @@ processing pipelines therefore no longer carry a language parameter. The GUI rei
 Configuration is managed by the `QConfig` singleton in `src/shared/config.py`. When changing a
 persistent option, account for its default value, validator, page retranslation, and tests.
 
-Reference-guided vocal isolation uses reference-mask cancellation. Every user-selectable path must
+Reference-guided vocal isolation uses reference cancellation. Every user-selectable path must
 reconstruct output from the original stage mix and must never write source-only content or its
 inverted polarity into the result. DSP changes cannot be judged from synthetic metrics alone:
-first pass the automated gates, then export directly listenable comparisons from fixed real-world
-material. Technical checks must not be reported as confirmation of listening quality.
+first pass the automated checks, then export directly listenable comparisons from fixed real-world
+material. Technical check results must not be reported as confirmation of listening quality.
 
 ## Adding Source Files
 

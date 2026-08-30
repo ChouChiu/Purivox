@@ -54,9 +54,9 @@ stack: `QNetworkAccessManager` issues the request, so it follows the system prox
 the release host's safe redirects and applies a 120-second timeout to a stalled transfer. Progress
 comes from the `downloadProgress` signal, and cancellation aborts the reply from a polling timer.
 
-Writing goes through `QSaveFile`: bytes land in a temporary file beside the destination while the
-SHA-256 digest is computed incrementally, and only a transfer whose size and digest both match the
-catalogue is committed with an atomic rename. Any failure, mismatch, or cancellation calls
+Writing goes through `QSaveFile`: bytes go into a temporary file beside the destination while
+the SHA-256 digest is computed incrementally, and the file is committed with an atomic rename only
+when its size and digest both match the catalogue. Any failure, mismatch, or cancellation calls
 `cancelWriting()`, so no partial file survives and no model can appear present but corrupt.
 
 A `QFileSystemWatcher` on the search directories keeps the AI page's ready/needs-download label
@@ -104,7 +104,7 @@ For long audio, the chunk size is calculated from the model's `hop`, `segment_si
 Adjacent prediction chunks use Hann-windowed overlap-add:
 
 $$
-\widehat y[n]=\frac{\sum_k w_k[n],\widehat y_k[n]}
+\widehat y[n]=\frac{\sum_k w_k[n]\,\widehat y_k[n]}
 {\max\left(\sum_k w_k[n],\varepsilon\right)}
 $$
 

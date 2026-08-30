@@ -9,13 +9,13 @@ Python, PySide6, and PySide6-Fluent-Widgets. Its core MR Remove feature provides
 
 - **Single**: provide a stage/live recording and the corresponding song source. Purivox
   automatically synchronizes them and isolates the live vocals.
-- **Full Stage**: provide a continuous stage/live recording and multiple song sources. Audio
-  Station identifies where each song occurs and isolates the live vocals in each matched segment.
+- **Full Stage**: provide a continuous stage/live recording and multiple song sources. Purivox
+  identifies where each song occurs and isolates the live vocals in each matched segment.
 
-Vocal Isolation only removes content that can be explained by the song source. It is therefore
+Vocal Isolation removes only content that can be explained by the song source. It is therefore
 designed to preserve live vocals, speech, cheering, and ambient sound that are absent from that
-source. Accurate song sources are essential: clipping, heavy reverberation, different
-arrangements, or an incorrect source can all reduce the quality of the result.
+source. An accurate song source is essential: clipping, heavy reverberation, a different
+arrangement, or the wrong source can all reduce the quality of the result.
 
 The project also includes a separate **AI Track Separation** tool. It uses UVR MDX-Net ONNX
 models to predict vocal and background tracks from ordinary audio. AI separation does not use a
@@ -42,7 +42,7 @@ Vocal Isolation, and their results should not be compared directly.
 
 [uv](https://docs.astral.sh/uv/) is required. The project uses `.python-version` to select Python
 automatically and manages an isolated environment inside the repository. Do not install another
-Qt Fluent component that exports `qfluentwidgets` into this environment.
+Qt Fluent component that also exports `qfluentwidgets` into this environment.
 
 ```bash
 uv sync --locked
@@ -61,7 +61,7 @@ uv run --locked purivox
 1. Open **Vocal Isolation** and select **Single**.
 2. Select the stage/live audio to process and the corresponding song source.
 3. Alignment runs automatically. Start with the default removal strength of 75%; the graphical
-   interface uses a fixed statistical context.
+   interface uses a fixed statistical window.
 4. Preview the result before adjusting the strength. If you hear obvious pumping or thinning of
    the live vocal, reduce the strength or confirm that the song source is correct.
 5. **Emphasize live vocals** and **Open-mic focus** are optional. The latter is available only
@@ -131,7 +131,7 @@ Common reference-cancellation options:
 | Option | Value | Description |
 |---|---:|---|
 | `--strength` | `0`–`100` | Vocal isolation strength; default: `75` |
-| `--sigma` | `1`, `3`, `8`, `16` | Advanced statistical window in seconds; default: `3`; the GUI always uses `3` |
+| `--sigma` | `1`, `3`, `8`, `16` | Statistical window in seconds (advanced option); default: `3`; the GUI always uses `3` |
 | `--align` / `--no-align` | on / off | Automatic alignment; enabled by default |
 | `--center-extraction` | flag | Further emphasize vocals located at the center of the stereo image |
 | `--open-mic-focus` | flag | Preserve more centered vocal in open-mic sections while continuing to attenuate closed-mic or backing-only sections; requires center-focused processing |

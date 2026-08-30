@@ -107,8 +107,9 @@ The interface presents this table through Qt's model/view classes: `TimelineMode
 single source of truth, and `TableView` only displays it. Cell text, alignment, check state, and
 editability come from `data()` and `flags()`; user edits are parsed and validated in `setData()`
 before they reach the analysis, and an invalid entry returns `False` and emits `edit_rejected`, so
-the view restores the previous value on its own. Nothing repaints whole rows or blocks the signals
-its own repainting would raise, and a language change simply makes the model emit `dataChanged`.
+the view restores the previous value on its own. There is no whole-table repaint and no code that
+blocks signals raised by its own repainting; a language change simply makes the model emit
+`dataChanged`.
 
 ### Manual Segments and Spliced Backing Tracks
 
@@ -130,7 +131,8 @@ A spliced backing track can also be handled without the full-stage feature: cut 
 the performance's order first, then run it through single mode as one continuous song. That
 returns it to a single continuous alignment problem, but the splice points have to be accurate to
 within tens of milliseconds — local delay tracking corrects at most 2 ms per 0.1 s, so a half
-second of error takes about 25 seconds to absorb, and cancellation fails throughout.
+second of error takes about 25 seconds to recover from, and cancellation fails for that whole
+time.
 
 ## Segmented Rendering
 
@@ -143,7 +145,7 @@ optional short fragment:
 3. Optionally perform local drift alignment.
 4. Measure how well both the original timeline position and drift-aligned result explain the stage
    audio; use drift alignment only when the new result is no worse.
-5. Process the segment with reference-mask cancellation. Reconstruction uses only the original
+5. Process the segment with reference cancellation. Reconstruction uses only the original
    stage mix and never mixes the source waveform into the result.
 6. Blend the result into the full-recording copy with fades of up to 50 ms at both boundaries.
 
@@ -152,10 +154,10 @@ high-quality soxr; a higher original rate is preserved. The result is then writt
 24-bit PCM WAV. Upsampling changes the export format but does not add spectral detail absent from
 the original recording.
 
-Explanatory quality is calculated by fitting small $2\times2$ direct models in multiple windows,
-measuring their residual ratios, and taking the median so that one abnormal window cannot dominate
-the decision. This selection gate prevents an already correct timeline position from being damaged
-by an unreliable local-delay trajectory.
+Explanatory power is calculated by fitting small $2\times2$ direct models in multiple windows,
+measuring their residual ratios, and taking the median, so that one abnormal window cannot
+dominate the decision. This selection gate prevents an already correct timeline position from
+being damaged by an unreliable local-delay trajectory.
 
 ## Failure Strategy
 

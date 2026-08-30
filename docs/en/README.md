@@ -6,15 +6,15 @@
 
 This directory documents Purivox's internal design, signal-processing methods, and
 development workflow. For installation and usage instructions intended for general users, see
-the [project README](../../README_EN.md). Mermaid diagrams describe flows and dependencies, while
-LaTeX is used for mathematical models.
+the [project README](../../README_EN.md). Flows and dependencies are drawn with Mermaid, and
+mathematical models use LaTeX.
 
 ## Documentation Index
 
 | Document | Contents |
 |---|---|
 | [Architecture and Data Flow](architecture.md) | Layer boundaries, task orchestration, audio storage, cancellation, and error handling |
-| [Reference-Guided Vocal Isolation](reference-removal.md) | Time alignment, reference-mask cancellation, chunk blending, and center-focused processing |
+| [Reference-Guided Vocal Isolation](reference-removal.md) | Time alignment, reference cancellation, chunk blending, and center-focused processing |
 | [Full Stage Processing](full-stage.md) | Multi-source fingerprints, candidate clustering, timeline generation, segmented rendering, and boundary protection |
 | [AI Track Separation](neural-separation.md) | Model locations, verification, MDX-Net input/output, and overlap-add inference |
 | [Development, Testing, and Release](development.md) | Environment setup, code conventions, quality gates, packaging, and standalone builds |
