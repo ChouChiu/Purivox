@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from PySide6.QtCore import QObject, Signal
+from PySide6.QtCore import QObject, Signal, Slot
 from PySide6.QtWidgets import QWidget
 from qfluentwidgets import InfoBar, InfoBarPosition, StateToolTip
 
@@ -56,6 +56,7 @@ class JobPresenter(QObject):
     def cancel(self) -> None:
         self._runner.cancel()
 
+    @Slot(int, str)
     def _progress(self, value: int, message: str) -> None:
         if self._active_page is not None:
             self._active_page.progress.setValue(value)
@@ -63,6 +64,7 @@ class JobPresenter(QObject):
         if self._state_tip is not None:
             self._state_tip.setContent(message)
 
+    @Slot(object)
     def _success(self, result: ProcessingResultLike) -> None:
         if self._state_tip is not None:
             self._state_tip.setState(True)
@@ -90,6 +92,7 @@ class JobPresenter(QObject):
             parent=self._parent,
         )
 
+    @Slot(str)
     def _failure(self, message: str) -> None:
         self._discard_state_tip()
         if self._active_page is not None:
@@ -102,6 +105,7 @@ class JobPresenter(QObject):
             parent=self._parent,
         )
 
+    @Slot()
     def _cancelled(self) -> None:
         if self._active_page is not None:
             self._active_page.status.setText(tr("cancelled"))
@@ -112,6 +116,7 @@ class JobPresenter(QObject):
             self._state_tip.deleteLater()
             self._state_tip = None
 
+    @Slot()
     def _job_finished(self) -> None:
         if self._active_page is not None:
             self._active_page.set_running(False)

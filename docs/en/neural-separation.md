@@ -48,11 +48,16 @@ Models are searched in this order:
 3. The `models/` directory under the system application-data directory;
 4. The `models/` directory at the development repository root.
 
-If weights are not found, the application downloads them from TRvlvr's public UVR model releases
-to the explicit directory or system application-data directory. A download is first written to a
-`.part` file, then checked against both the registered file size and SHA-256 digest. Only a file
-that passes both checks atomically replaces the final model path. Failure or cancellation removes
-the temporary file.
+If weights are not found, the application downloads them from TRvlvr's public UVR model releases to
+the explicit directory or system application-data directory. The transfer runs on Qt's network
+stack: `QNetworkAccessManager` issues the request, so it follows the system proxy configuration and
+the release host's safe redirects and applies a 120-second timeout to a stalled transfer. Progress
+comes from the `downloadProgress` signal, and cancellation aborts the reply from a polling timer.
+
+Writing goes through `QSaveFile`: bytes land in a temporary file beside the destination while the
+SHA-256 digest is computed incrementally, and only a transfer whose size and digest both match the
+catalogue is committed with an atomic rename. Any failure, mismatch, or cancellation calls
+`cancelWriting()`, so no partial file survives and no model can appear present but corrupt.
 
 The current catalog contains four model definitions:
 

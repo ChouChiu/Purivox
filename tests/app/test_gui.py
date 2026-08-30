@@ -4,7 +4,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 import soundfile as sf
-from PySide6.QtCore import QEvent, QPoint, Qt
+from PySide6.QtCore import QEvent, QItemSelectionModel, QPoint, Qt
 from PySide6.QtGui import QColor, QPalette
 from PySide6.QtMultimedia import QMediaDevices
 from PySide6.QtWidgets import QApplication, QListWidgetItem
@@ -75,6 +75,26 @@ def test_home_page_presents_mr_workspace_and_ai(qtbot):
         window.home.ai_card.open_button.click()
 
 
+def _text(model, row: int, column: int) -> str:
+    return model.data(model.index(row, column), Qt.ItemDataRole.DisplayRole)
+
+
+def _check_state(model, row: int) -> Qt.CheckState:
+    return model.data(model.index(row, 0), Qt.ItemDataRole.CheckStateRole)
+
+
+def _set_text(model, row: int, column: int, value: str) -> bool:
+    return model.setData(model.index(row, column), value, Qt.ItemDataRole.EditRole)
+
+
+def _select_row(page, row: int) -> None:
+    """Select a timeline row the way clicking it does."""
+    page.timeline.selectionModel().setCurrentIndex(
+        page.timeline_model.index(row, 0),
+        QItemSelectionModel.SelectionFlag.SelectCurrent | QItemSelectionModel.SelectionFlag.Rows,
+    )
+
+
 def test_full_stage_page_orders_sources_and_renders_analysis(qtbot, tmp_path: Path):
     page = FullStagePage()
     qtbot.addWidget(page)
@@ -101,17 +121,19 @@ def test_full_stage_page_orders_sources_and_renders_analysis(qtbot, tmp_path: Pa
         ),
     )
     page.set_analysis(analysis)
-    assert page.timeline.rowCount() == 3
-    assert page.timeline.item(1, 0).checkState() == Qt.CheckState.Checked
-    assert page.timeline.item(1, 1).text() == "完整歌曲"
-    assert page.timeline.item(1, 4).text() == "90%"
+    model = page.timeline_model
+    assert model.rowCount() == 3
+    assert page.timeline.model() is model
+    assert _check_state(model, 1) == Qt.CheckState.Checked
+    assert _text(model, 1, 1) == "完整歌曲"
+    assert _text(model, 1, 4) == "90%"
     assert page.start_button.isEnabled()
 
-    page.timeline.item(1, 0).setCheckState(Qt.CheckState.Unchecked)
+    assert model.setData(model.index(1, 0), Qt.CheckState.Unchecked, Qt.ItemDataRole.CheckStateRole)
     assert not page.analysis.clips[1].enabled
     assert not page.analysis.matched_clips
-    page.timeline.item(1, 2).setText("00:03.000 - 00:09.000")
-    page.timeline.item(1, 3).setText("00:01.000 - 00:07.000")
+    assert _set_text(model, 1, 2, "00:03.000 - 00:09.000")
+    assert _set_text(model, 1, 3, "00:01.000 - 00:07.000")
     assert page.analysis.clips[1].stage_start == 3.0
     assert page.analysis.clips[1].stage_end == 9.0
     assert page.analysis.clips[1].source_start == 1.0
@@ -143,16 +165,17 @@ def test_full_stage_page_adds_and_removes_a_manual_clip(qtbot, tmp_path: Path):
     manual_rows = [row for row, clip in enumerate(page.analysis.clips) if clip.manual]
     assert len(manual_rows) == 1
     row = manual_rows[0]
-    assert page.timeline.item(row, 4).text() == "手动"
-    assert page.timeline.item(row, 1).text() == "完整歌曲"
+    model = page.timeline_model
+    assert _text(model, row, 4) == "手动"
+    assert _text(model, row, 1) == "完整歌曲"
     # The new row lands in the gap and its ranges stay editable for correction.
     assert page.analysis.clips[row].stage_start == 20.0
-    page.timeline.item(row, 2).setText("00:30.000 - 00:45.000")
-    page.timeline.item(row, 3).setText("01:00.000 - 01:15.000")
+    assert _set_text(model, row, 2, "00:30.000 - 00:45.000")
+    assert _set_text(model, row, 3, "01:00.000 - 01:15.000")
     assert page.analysis.clips[row].stage_start == 30.0
     assert page.analysis.clips[row].source_start == 60.0
 
-    page.timeline.setCurrentCell(row, 0)
+    _select_row(page, row)
     assert page.remove_clip.isEnabled()
     page.remove_clip.click()
     assert not any(clip.manual for clip in page.analysis.clips)
@@ -170,7 +193,7 @@ def test_full_stage_page_will_not_remove_a_detected_clip(qtbot, tmp_path: Path):
         )
     )
 
-    page.timeline.setCurrentCell(0, 0)
+    _select_row(page, 0)
 
     assert not page.remove_clip.isEnabled()
 

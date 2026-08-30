@@ -44,6 +44,14 @@ environment. This project specifically uses `PySide6-Fluent-Widgets[full]`.
 - Qt background tasks are coordinated by `app/job_presenter.py`, which manages page state, and
   then passed to `app/job_runner.py` for thread ownership. Pages and processing pipelines must not
   create their own threads.
+- Slots that receive signals across a thread boundary are declared with `@Slot(<types>)`
+  (worker → `JobRunner` → `JobPresenter`) so Qt dispatches the queued connection with the declared
+  signature.
+- Prefer the Qt facility where Qt owns the problem: `QAbstractTableModel` + `TableView` for an
+  editable table instead of filling `QTableWidget` items; `QNetworkAccessManager` for HTTP (system
+  proxy, redirects, transfer timeout, progress, `abort()`); `QSaveFile` for verify-then-commit
+  writes; `QStandardPaths` for locations. Leave the standard library where it is already equal or
+  better (`hashlib`, `tempfile` + `numpy.memmap`, argparse subcommands, the DSP thread pool).
 - Independent interactive widgets on a page should live in a small module inside the same feature
   package. The preview-seek widget, for example, is in `reference_removal/preview.py`.
 - Use `create_pcm_audio` and chunked loops for long audio, sized by `shared.audio.BLOCK_FRAMES`;

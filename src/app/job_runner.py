@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from PySide6.QtCore import QObject, QThread, Signal
+from PySide6.QtCore import QObject, QThread, Signal, Slot
 
 from app.worker import ProcessingWorker
 from shared.processing import ProcessingOperation
@@ -47,6 +47,7 @@ class JobRunner(QObject):
         if self._worker is not None:
             self._worker.request_cancel()
 
+    @Slot()
     def _reset(self) -> None:
         self._thread = None
         self._worker = None

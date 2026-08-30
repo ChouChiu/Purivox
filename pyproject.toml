@@ -94,6 +94,7 @@ files = [
   "src/features/full_stage/matching.py",
   "src/features/full_stage/models.py",
   "src/features/full_stage/page.py",
+  "src/features/full_stage/timeline_model.py",
   "src/features/home/__init__.py",
   "src/features/home/page.py",
   "src/features/neural_separation/__init__.py",

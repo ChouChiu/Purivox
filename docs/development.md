@@ -35,6 +35,12 @@ uv sync --locked --group deploy
   例如 `shared.audio.BLOCK_FRAMES`、`shared.audio.AUDIO_EXTENSIONS`、`shared.jobs.SIGMA_CHOICES`、
   `shared.i18n.SUPPORTED_LANGUAGES` 和 `shared.logging.LOG_LEVELS`。
 - Qt 后台任务统一由 `app/job_presenter.py` 协调页面状态，再交给 `app/job_runner.py` 管理线程；页面和业务管线不得自行创建线程。
+- 跨线程接收信号的槽用 `@Slot(<类型>)` 标注（worker → `JobRunner` → `JobPresenter`），让 Qt 按声明的
+  签名派发排队连接。
+- Qt 已经解决的问题优先用 Qt：可编辑表格用 `QAbstractTableModel` + `TableView`，不要用 `QTableWidget`
+  逐格填 item；HTTP 用 `QNetworkAccessManager`（系统代理、跳转、超时、进度、`abort()`）；先校验后落盘
+  用 `QSaveFile`；路径用 `QStandardPaths`。标准库已经等价或更好的地方保持不变（`hashlib`、
+  `tempfile` + `numpy.memmap`、argparse 子命令、DSP 线程池）。
 - 页面中的独立交互控件拆成同功能包内的小模块，例如试听跳转控件位于 `reference_removal/preview.py`。
 - 长音频使用 `create_pcm_audio` 与分块循环（块大小取 `shared.audio.BLOCK_FRAMES`），不要把整个文件
   复制到普通内存数组；映射页用 `shared.audio.release_mapped_pages()` 释放。

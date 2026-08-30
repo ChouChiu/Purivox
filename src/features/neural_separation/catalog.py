@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-_BASE = "https://github.com/TRvlvr/model_repo/releases/download/all_public_uvr_models/"
+# Where every catalogue entry is fetched from; tests redirect this at a local server.
+MODEL_BASE_URL = "https://github.com/TRvlvr/model_repo/releases/download/all_public_uvr_models/"
 
 
 @dataclass(frozen=True, slots=True)
@@ -16,7 +17,7 @@ class ModelEntry:
 
     @property
     def url(self) -> str:
-        return _BASE + self.filename
+        return MODEL_BASE_URL + self.filename
 
 
 _CATALOG = (

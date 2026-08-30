@@ -102,6 +102,14 @@ entries without a source, and out-of-range confidence.
 After detected occupied ranges are merged, any gap of at least 0.25 seconds produces an unmatched
 entry. Sources that were not detected are listed separately for manual review.
 
+The interface presents this table through Qt's model/view classes: `TimelineModel`
+(a `QAbstractTableModel` in `features/full_stage/timeline_model.py`) treats the analysis as its
+single source of truth, and `TableView` only displays it. Cell text, alignment, check state, and
+editability come from `data()` and `flags()`; user edits are parsed and validated in `setData()`
+before they reach the analysis, and an invalid entry returns `False` and emits `edit_rejected`, so
+the view restores the previous value on its own. Nothing repaints whole rows or blocks the signals
+its own repainting would raise, and a language change simply makes the model emit `dataChanged`.
+
 ### Manual Segments and Spliced Backing Tracks
 
 The analysis places at most one full-song position per source, and the fragment scan is weighted

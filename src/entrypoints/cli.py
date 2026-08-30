@@ -90,6 +90,7 @@ def main(argv: list[str] | None = None) -> int:
         return run_gui(args.selftest)
     app = QCoreApplication.instance() or QCoreApplication(sys.argv[:1])
     app.setApplicationName(APPLICATION_NAME)
+    app.setApplicationVersion(__version__)
     app.setOrganizationName(ORGANIZATION_NAME)
     with redirect_stdout(io.StringIO()):
         from shared.config import cfg, load_config

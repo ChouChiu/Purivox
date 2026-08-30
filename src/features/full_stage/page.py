@@ -1,17 +1,14 @@
 from __future__ import annotations
 
-import re
-from dataclasses import replace
 from pathlib import Path
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import QItemSelection, Qt, Signal
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QFileDialog,
     QHBoxLayout,
     QHeaderView,
     QListWidgetItem,
-    QTableWidgetItem,
 )
 from qfluentwidgets import (
     BodyLabel,
@@ -23,12 +20,12 @@ from qfluentwidgets import (
     PushButton,
     Slider,
     SwitchButton,
-    TableWidget,
+    TableView,
     TitleLabel,
 )
 
-from features.full_stage.matching import add_manual_clip, remove_manual_clip
 from features.full_stage.models import ClipKind, FullStageAnalysis, TimelineClip
+from features.full_stage.timeline_model import TimelineModel
 from shared.config import cfg
 from shared.i18n import tr
 from shared.ui import (
@@ -48,8 +45,6 @@ class FullStagePage(PageScrollArea):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("fullStagePage")
-        self.analysis: FullStageAnalysis | None = None
-        self._updating_timeline = False
 
         self.title = TitleLabel()
         self.layout.addWidget(self.title)
@@ -109,8 +104,9 @@ class FullStagePage(PageScrollArea):
         self.timeline_hint = BodyLabel()
         self.timeline_hint.setWordWrap(True)
         self.timeline_card.layout.addWidget(self.timeline_hint)
-        self.timeline = TableWidget()
-        self.timeline.setColumnCount(6)
+        self.timeline_model = TimelineModel(self)
+        self.timeline = TableView()
+        self.timeline.setModel(self.timeline_model)
         self.timeline.setMinimumHeight(260)
         self.timeline.setEditTriggers(
             QAbstractItemView.EditTrigger.DoubleClicked
@@ -166,10 +162,15 @@ class FullStagePage(PageScrollArea):
         self.cancel_button.clicked.connect(self.cancel_requested)
         self.strength.valueChanged.connect(lambda value: self.strength_value.setText(f"{value}%"))
         self.center_extraction.checkedChanged.connect(self._sync_enhancement_controls)
-        self.timeline.itemChanged.connect(self._timeline_item_changed)
-        self.timeline.itemSelectionChanged.connect(self._update_clip_actions)
+        self.timeline.selectionModel().selectionChanged.connect(self._selection_changed)
+        self.timeline_model.clip_edited.connect(self._clip_edited)
+        self.timeline_model.edit_rejected.connect(self._edit_rejected)
         self.add_clip.clicked.connect(self._add_clip)
         self.remove_clip.clicked.connect(self._remove_clip)
+
+    @property
+    def analysis(self) -> FullStageAnalysis | None:
+        return self.timeline_model.analysis
 
     def retranslate(self) -> None:
         self.title.setText(tr("nav_full_stage"))
@@ -201,24 +202,13 @@ class FullStagePage(PageScrollArea):
         self.open_mic_focus.setToolTip(tr("open_mic_focus_tip"))
         self.timeline_card.title_label.setText(tr("stage_timeline"))
         self.timeline_hint.setText(tr("stage_timeline_hint"))
-        self.timeline.setHorizontalHeaderLabels(
-            [
-                tr("stage_clip_enabled"),
-                tr("stage_clip_type"),
-                tr("stage_clip_time"),
-                tr("stage_source_time"),
-                tr("stage_confidence"),
-                tr("stage_clip_source"),
-            ]
-        )
+        self.timeline_model.retranslate()
         self.status_card.title_label.setText(tr("status_group"))
         self.cancel_button.setText(tr("cancel"))
         self.analyze_button.setText(tr("stage_analyze"))
         self.start_button.setText(tr("stage_start"))
         if self.progress.value() == 0:
             self.status.setText(tr("stage_ready"))
-        if self.analysis is not None:
-            self._render_timeline()
         self._sync_enhancement_controls()
 
     def _sync_enhancement_controls(self, _checked: bool | None = None) -> None:
@@ -272,8 +262,7 @@ class FullStagePage(PageScrollArea):
             self._sync_enhancement_controls()
 
     def set_analysis(self, analysis: FullStageAnalysis) -> None:
-        self.analysis = analysis
-        self._render_timeline()
+        self.timeline_model.set_analysis(analysis)
         self.start_button.setEnabled(True)
         self.status.setText(
             tr(
@@ -285,10 +274,9 @@ class FullStagePage(PageScrollArea):
         )
 
     def invalidate_analysis(self, clear_timeline: bool = True) -> None:
-        self.analysis = None
-        self.start_button.setEnabled(False)
         if clear_timeline:
-            self.timeline.setRowCount(0)
+            self.timeline_model.set_analysis(None)
+        self.start_button.setEnabled(False)
 
     def _select_stage(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
@@ -339,49 +327,22 @@ class FullStagePage(PageScrollArea):
             self.sources.takeItem(row)
             self.invalidate_analysis()
 
-    @staticmethod
-    def _clock(seconds: float) -> str:
-        milliseconds = max(0, round(seconds * 1000))
-        whole, millis = divmod(milliseconds, 1000)
-        minutes, secs = divmod(whole, 60)
-        hours, minutes = divmod(minutes, 60)
-        prefix = f"{hours:d}:{minutes:02d}" if hours else f"{minutes:02d}"
-        return f"{prefix}:{secs:02d}.{millis:03d}"
-
-    @staticmethod
-    def _parse_clock(text: str) -> float:
-        parts = text.strip().split(":")
-        if not 1 <= len(parts) <= 3:
-            raise ValueError("invalid time")
-        values = [float(part.strip()) for part in parts]
-        if any(value < 0 for value in values):
-            raise ValueError("negative time")
-        if len(values) == 1:
-            return values[0]
-        if len(values) == 2:
-            return values[0] * 60 + values[1]
-        return values[0] * 3600 + values[1] * 60 + values[2]
-
-    @classmethod
-    def _parse_range(cls, text: str) -> tuple[float, float]:
-        parts = re.split(r"\s+-\s+", text.strip())
-        if len(parts) != 2:
-            raise ValueError("time range must contain a separated dash")
-        start, end = (cls._parse_clock(part) for part in parts)
-        if end <= start:
-            raise ValueError("time range must be positive")
-        return start, end
-
     def _selected_manual_row(self) -> int | None:
-        if self.analysis is None:
-            return None
-        row = self.timeline.currentRow()
-        if not 0 <= row < len(self.analysis.clips):
-            return None
-        return row if self.analysis.clips[row].manual else None
+        index = self.timeline.selectionModel().currentIndex()
+        clip = self.timeline_model.clip(index.row()) if index.isValid() else None
+        return index.row() if clip is not None and clip.manual else None
 
     def _update_clip_actions(self) -> None:
         self.remove_clip.setEnabled(self._selected_manual_row() is not None)
+
+    def _selection_changed(self, _selected: QItemSelection, _deselected: QItemSelection) -> None:
+        self._update_clip_actions()
+
+    def _clip_edited(self) -> None:
+        self.status.setText(tr("stage_manual_updated"))
+
+    def _edit_rejected(self) -> None:
+        self.status.setText(tr("stage_invalid_edit"))
 
     def _add_clip(self) -> None:
         if self.analysis is None:
@@ -406,119 +367,25 @@ class FullStagePage(PageScrollArea):
         if length <= 0.0:
             self.status.setText(tr("stage_no_room_for_clip"))
             return
-        try:
-            self.analysis = add_manual_clip(
-                self.analysis,
-                TimelineClip(
-                    ClipKind.SONG,
-                    start,
-                    start + length,
-                    source=sources[index],
-                    source_index=index,
-                    source_start=0.0,
-                    source_end=length,
-                    manual=True,
-                ),
+        added = self.timeline_model.add_clip(
+            TimelineClip(
+                ClipKind.SONG,
+                start,
+                start + length,
+                source=sources[index],
+                source_index=index,
+                source_start=0.0,
+                source_end=length,
+                manual=True,
             )
-        except (IndexError, ValueError):
-            self.status.setText(tr("stage_invalid_edit"))
-            return
-        self._render_timeline()
-        self.status.setText(tr("stage_manual_added"))
+        )
+        if added:
+            self.status.setText(tr("stage_manual_added"))
 
     def _remove_clip(self) -> None:
         row = self._selected_manual_row()
-        if row is None or self.analysis is None:
+        if row is None:
             return
-        try:
-            self.analysis = remove_manual_clip(self.analysis, row)
-        except (IndexError, ValueError):
-            self.status.setText(tr("stage_invalid_edit"))
-            return
-        self._render_timeline()
-        self.status.setText(tr("stage_manual_removed"))
-
-    def _timeline_item_changed(self, item: QTableWidgetItem) -> None:
-        if self._updating_timeline or self.analysis is None:
-            return
-        row = item.row()
-        if not 0 <= row < len(self.analysis.clips):
-            return
-        clip = self.analysis.clips[row]
-        try:
-            if item.column() == 0 and clip.kind != ClipKind.UNMATCHED:
-                updated = replace(clip, enabled=item.checkState() == Qt.CheckState.Checked)
-            elif item.column() == 2:
-                start, end = self._parse_range(item.text())
-                if end > self.analysis.duration_seconds:
-                    raise ValueError("stage range exceeds duration")
-                updated = replace(clip, stage_start=start, stage_end=end)
-            elif item.column() == 3 and clip.kind != ClipKind.UNMATCHED:
-                start, end = self._parse_range(item.text())
-                updated = replace(clip, source_start=start, source_end=end)
-            else:
-                return
-        except ValueError:
-            self.status.setText(tr("stage_invalid_edit"))
-            self._render_timeline()
-            return
-        clips = list(self.analysis.clips)
-        clips[row] = updated
-        self.analysis = replace(self.analysis, clips=tuple(clips))
-        self.status.setText(tr("stage_manual_updated"))
-        if item.column() == 0:
-            self._render_timeline()
-
-    def _render_timeline(self) -> None:
-        analysis = self.analysis
-        self._updating_timeline = True
-        self.timeline.blockSignals(True)
-        try:
-            self.timeline.setRowCount(0 if analysis is None else len(analysis.clips))
-            if analysis is None:
-                return
-            type_keys = {
-                ClipKind.SONG: "stage_type_song",
-                ClipKind.FRAGMENT: "stage_type_fragment",
-                ClipKind.UNMATCHED: "stage_type_unmatched",
-            }
-            for row, clip in enumerate(analysis.clips):
-                enabled = QTableWidgetItem()
-                enabled.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-                enabled.setCheckState(
-                    Qt.CheckState.Checked if clip.enabled else Qt.CheckState.Unchecked
-                )
-                enabled.setFlags(
-                    Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsUserCheckable
-                    if clip.kind != ClipKind.UNMATCHED
-                    else Qt.ItemFlag.NoItemFlags
-                )
-                self.timeline.setItem(row, 0, enabled)
-                source_range = (
-                    "—"
-                    if clip.kind == ClipKind.UNMATCHED
-                    else f"{self._clock(clip.source_start)} - {self._clock(clip.source_end)}"
-                )
-                values = (
-                    tr(type_keys[clip.kind]),
-                    f"{self._clock(clip.stage_start)} - {self._clock(clip.stage_end)}",
-                    source_range,
-                    tr("stage_manual_label")
-                    if clip.manual
-                    else "—"
-                    if clip.kind == ClipKind.UNMATCHED
-                    else f"{clip.confidence:.0%}",
-                    tr("stage_unmatched_label") if clip.source is None else clip.source.name,
-                )
-                for column, value in enumerate(values, start=1):
-                    item = QTableWidgetItem(value)
-                    flags = Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable
-                    if column == 2 or (column == 3 and clip.kind != ClipKind.UNMATCHED):
-                        flags |= Qt.ItemFlag.ItemIsEditable
-                    item.setFlags(flags)
-                    if column in {1, 2, 3, 4}:
-                        item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-                    self.timeline.setItem(row, column, item)
-        finally:
-            self.timeline.blockSignals(False)
-            self._updating_timeline = False
+        if self.timeline_model.remove_clip(row):
+            self.status.setText(tr("stage_manual_removed"))
+            self._update_clip_actions()
