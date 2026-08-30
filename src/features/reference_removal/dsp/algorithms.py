@@ -43,9 +43,23 @@ _INCOHERENT_HIGH = 0.45
 # knob to lower when the incoherent path suppresses cleanly but audibly costs
 # quality, which is what it does on a badly phase-decorrelated capture.
 _INCOHERENT_OVERSUBTRACTION = 1.5
+# The incoherent path rides on much weaker evidence than the coherent one, so a
+# single noisy cell must not be allowed to drive the mask all the way to the
+# floor: that is exactly the fluctuation that is audible as musical noise.
+# Capping how much of the residual power this path may claim per cell keeps
+# the mask dips shallow wherever the evidence is weak, while confident cells
+# still reach the same depth through the coherent stage.
+_INCOHERENT_MAX_SHARE = 0.55
 # Width of the single narrow smoothing pass over the finished mask, in
 # (frames, bins).
 _MASK_SMOOTHING = (0.75, 0.35)
+# The mask ratio is formed from instantaneous per-cell powers, which forces the
+# narrow Gaussian pass to absorb nearly all of their variance.  Smoothing the
+# numerator and denominator in time first (sigma in frames, ~11.6 ms each at
+# 44.1 kHz) removes most of that fluctuation before the ratio is taken, which
+# is the dominant source of musical noise on captures whose phase has been
+# destroyed.
+_MASK_POWER_SMOOTH = 1.5
 _SPECTRAL_CELL_BUDGET = 4_000_000
 _MAX_PROCESSING_BLOCK_SECONDS = 48
 _MAX_PROCESSING_WORKERS = min(5, os.cpu_count() or 1)
@@ -308,6 +322,9 @@ def _reference_cancel(
     incoherent_power *= smoothstep(_INCOHERENT_LOW, _INCOHERENT_HIGH, incoherent_confidence)
     incoherent_power = np.maximum(incoherent_power - removable_power, 0.0)
     del incoherent_confidence
+    # Bound the weak-evidence path so one noisy cell cannot drive the mask to
+    # the floor: deep, isolated mask dips are what musical noise sounds like.
+    incoherent_power = np.minimum(incoherent_power, _INCOHERENT_MAX_SHARE * residual_power)
 
     remaining_power = np.maximum(
         residual_power
@@ -316,14 +333,22 @@ def _reference_cancel(
         (_MASK_FLOOR**2) * residual_power,
     )
     del incoherent_power
-    mask = np.sqrt(np.clip(remaining_power / (residual_power + 1e-12), _MASK_FLOOR**2, 1.0))
-    del remaining_power, removable_power, residual_power
-    # A single narrow smoothing pass prevents isolated-bin musical noise without
-    # refilling tonal notches from untouched neighbours.  Berouti-style
-    # signal-dependent over-subtraction, an Ephraim-Malah decision-directed
-    # Wiener gain and Breithaupt cepstral gain smoothing were all measured here
-    # against this line: each bought a few dB on short reverberation but roughly
-    # halved fidelity on a quiet live vocal, so none of them replaced it.
+    # Form the mask from powers smoothed in time rather than from instantaneous
+    # per-cell powers: most of the ratio's variance is removed before it
+    # reaches the mask, and the Gaussian pass below only has to catch what is
+    # left.  This is what tamed the musical noise on phase-decorrelated
+    # captures; the floor still bounds the ratio from below.
+    mask_remaining = spectral_smooth(remaining_power, _MASK_POWER_SMOOTH, 0.0)
+    mask_residual = spectral_smooth(residual_power, _MASK_POWER_SMOOTH, 0.0)
+    mask = np.sqrt(np.clip(mask_remaining / (mask_residual + 1e-12), _MASK_FLOOR**2, 1.0))
+    del mask_remaining, mask_residual, remaining_power, removable_power, residual_power
+    # The narrow Gaussian pass catches what the power-domain smoothing left:
+    # isolated-bin musical noise, without refilling tonal notches from
+    # untouched neighbours.  Berouti-style signal-dependent over-subtraction, an
+    # Ephraim-Malah decision-directed Wiener gain and Breithaupt cepstral gain
+    # smoothing were all measured here against this line: each bought a few dB
+    # on short reverberation but roughly halved fidelity on a quiet live vocal,
+    # so none of them replaced it.
     mask = gaussian_filter(mask, sigma=_MASK_SMOOTHING, mode="reflect")
     np.clip(mask, _MASK_FLOOR, 1.0, out=mask)
     token.raise_if_cancelled()

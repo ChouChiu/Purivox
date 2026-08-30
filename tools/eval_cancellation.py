@@ -22,7 +22,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
-from scipy.signal import fftconvolve
+from scipy.signal import fftconvolve, istft, stft
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
@@ -185,6 +185,60 @@ def _reference_only_word() -> Scene:
     )
 
 
+def _phase_decorrelated_stage() -> Scene:
+    """The failure mode the incoherent power path exists for.
+
+    A capture path (PA, room, broadcast limiter) can keep the magnitudes
+    correlated with the reference while destroying the phase relationship, so
+    the complex transfer has nothing to subtract even though the accompaniment
+    is plainly audible.  The power-domain regression recovers that content, and
+    this scene is the only synthetic guard for it: with the incoherent path
+    disabled the depth collapses toward zero while the other scenes barely
+    move.
+    """
+    rng = np.random.default_rng(4242)
+    length = SAMPLE_RATE * 10
+    time = np.arange(length) / SAMPLE_RATE
+    reference = np.stack(
+        [
+            _music(rng, length, (110.0, 220.0, 330.0, 660.0)),
+            _music(rng, length, (98.0, 196.0, 294.0, 588.0)),
+        ]
+    )
+    reference *= 0.25 / np.max(np.abs(reference))
+    # Strong musical dynamics: the power envelope is what the regression reads.
+    beat = 0.5 + 0.5 * np.sin(2 * np.pi * 2.5 * time) * np.sin(2 * np.pi * 0.8 * time)
+    envelope = 0.05 + 0.95 * beat**2
+    reference *= envelope[None, :]
+
+    def decorrelate(channel: np.ndarray) -> np.ndarray:
+        _frequencies, _frames, spectrum = stft(
+            channel, fs=SAMPLE_RATE, nperseg=1024, noverlap=768
+        )
+        phases = np.cumsum(rng.normal(0.0, 0.18, spectrum.shape), axis=1)
+        transformed = np.abs(spectrum) * np.exp(1j * phases)
+        _time, reconstructed = istft(
+            transformed, fs=SAMPLE_RATE, nperseg=1024, noverlap=768
+        )
+        return reconstructed[:length]
+
+    accompaniment = np.stack([decorrelate(reference[0]), decorrelate(reference[1])])
+    accompaniment *= 4.0
+    live = np.stack(
+        [
+            0.04 * np.sin(2 * np.pi * 431 * time) + 0.02 * np.sin(2 * np.pi * 862 * time),
+            0.036 * np.sin(2 * np.pi * 431 * time) + 0.018 * np.sin(2 * np.pi * 862 * time),
+        ]
+    )
+    return Scene(
+        name="phase_decorrelated_stage",
+        mixture=live + accompaniment,
+        reference=reference,
+        live=live,
+        accompaniment=accompaniment,
+    )
+
+
 def _phase_correlated_stereo() -> Scene:
     rng = np.random.default_rng(311)
     length = SAMPLE_RATE * 5
@@ -219,6 +273,7 @@ SCENES: tuple[Callable[[], Scene], ...] = (
     _unrelated_reference,
     _reference_only_word,
     _phase_correlated_stereo,
+    _phase_decorrelated_stage,
 )
 
 

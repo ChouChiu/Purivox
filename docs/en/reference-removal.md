@@ -246,16 +246,21 @@ at a cost of roughly 0.3–0.6 dB of depth and 0.03 of fidelity on the synthetic
 coherent path already worked well — in effect, spending headroom on clean material to make
 difficult material usable.
 
-The gain has a cost. This path removes content whose power follows the source rather than
+The gain has a cost: this path removes content whose power follows the source rather than
 content the waveform shows to come from the source, so it relies on much weaker evidence than the
-coherent path, and its mask opens and closes much more abruptly. Listening on badly
-phase-decorrelated material
-confirmed it: the accompaniment does come out cleanly, but audio quality drops audibly, from musical
-noise caused by the mask fluctuating. This is an unresolved trade-off rather than a defect that can be
-tuned away: when $\gamma^2$ is only 0.02–0.05 above 500 Hz there is simply not enough
-information to decide whether a given cell is accompaniment. The parameters that adjust this
-trade-off are
-`_INCOHERENT_OVERSUBTRACTION`, `_MASK_FLOOR` and `_MASK_SMOOTHING`.
+coherent path. In its first version the path drove the mask directly, and on badly
+phase-decorrelated material the mask's cell-by-cell opening and closing was audible as musical
+noise even though the accompaniment came out cleanly. Two bounds now keep that noise in check: a
+single cell's incoherent claim is capped at a share of the residual power
+(`_INCOHERENT_MAX_SHARE`), so weak evidence can never push the mask to the floor, and the mask
+ratio is formed from powers smoothed in time (`_MASK_POWER_SMOOTH`) before the existing narrow
+Gaussian pass, which flattens most of the fluctuation before it reaches the mask. On the synthetic
+phase-decorrelated scene the depth gives back about 0.2 dB (1.34 → 1.14 dB) for that. The remaining
+knobs are `_INCOHERENT_OVERSUBTRACTION`, `_MASK_FLOOR` and `_MASK_SMOOTHING`; when
+$gamma^2$ is only 0.02–0.05 above 500 Hz there is simply not enough information to decide whether
+a given cell is accompaniment, which is why the smoothstep gate still shuts the path off at low
+confidence.
+
 
 ### Research Basis and Boundaries
 
@@ -288,6 +293,14 @@ All three metrics improve together with nothing regressing — something none of
 attempts managed. As for runtime, four minutes of material goes from 5.18 s to 4.77 s at 44.1 kHz
 and from 12.95 s to 13.50 s at 96 kHz; the added subtraction stage is more than paid for by the
 post-hoc coherence smoothing it removed.
+
+The two mask-fluctuation bounds described in the previous section were then added on top. On the
+same synthetic suite, compared with the version before them: room 25 ms depth +0.89 dB and fidelity
++0.009; phase-correlated stereo reference depth +2.14 dB, fidelity +0.083 and live gain +0.129;
+tempo drift 1% depth −0.04 dB, essentially flat; the unrelated-reference bypass stays exact. The
+harness also gained a `phase_decorrelated_stage` scene that guards the incoherent path
+specifically — disabling that path drops its depth toward zero while the other scenes barely move,
+which is the reason the path exists.
 
 The gain shrinks sharply at the long-reverberation end, down to 0.23 dB at 2000 ms. The
 multiplicative narrowband model cannot describe the accompaniment there in the first place, so the
