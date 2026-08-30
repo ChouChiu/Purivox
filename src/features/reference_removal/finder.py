@@ -4,9 +4,11 @@ from dataclasses import dataclass
 from difflib import SequenceMatcher
 from pathlib import Path
 
+from shared.audio import AUDIO_EXTENSIONS
+
 _KEYWORDS = ("伴奏", "accompaniment", "instrumental", "inst", "karaoke", "off vocal", "minus one")
 _OUTPUT_MARKERS = ("_vocals", "-vocals", "消音")
-_EXTENSIONS = {".mp3", ".wav", ".flac", ".m4a", ".ogg", ".opus"}
+_EXTENSIONS = frozenset(AUDIO_EXTENSIONS)
 
 
 @dataclass(frozen=True, slots=True)

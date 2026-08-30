@@ -17,6 +17,34 @@ logger = logging.getLogger(__name__)
 
 HI_RES_SAMPLE_RATE = 96_000
 HI_RES_BIT_DEPTH = 24
+# Every streaming loop in the project reads, writes and copies audio in blocks
+# of this many frames, so a long recording never becomes a resident array.
+BLOCK_FRAMES = 262_144
+# Container suffixes offered by the file dialogs and accepted by the automatic
+# accompaniment finder.
+AUDIO_EXTENSIONS = (".wav", ".flac", ".mp3", ".m4a", ".ogg", ".opus")
+
+
+def _mapping_of(values: np.ndarray) -> mmap.mmap | None:
+    """Find the mmap object backing a (possibly sliced or transposed) array."""
+    base: object = values
+    mapping = None
+    while isinstance(base, np.ndarray):
+        mapping = getattr(base, "_mmap", mapping)
+        if getattr(base, "base", None) is None:
+            break
+        base = base.base
+    return mapping
+
+
+def release_mapped_pages(values: np.ndarray) -> None:
+    """Flush a disk mapping and let the kernel evict its resident pages."""
+    mapping = _mapping_of(values)
+    if mapping is None:
+        return
+    mapping.flush()
+    if hasattr(mapping, "madvise") and hasattr(mmap, "MADV_DONTNEED"):
+        mapping.madvise(mmap.MADV_DONTNEED)
 
 
 @dataclass(frozen=True, slots=True)
@@ -46,23 +74,16 @@ class AudioData:
         return int(self.samples.shape[1])
 
     def stereo(self) -> AudioData:
+        # __post_init__ rejects an empty channel axis, so the input is mono or wider.
         if self.channels == 1:
             return AudioData(
                 np.repeat(self.samples, 2, axis=0), self.sample_rate, self.backing_path
             )
-        if self.channels >= 2:
-            return AudioData(self.samples[:2], self.sample_rate, self.backing_path)
-        raise ValueError("audio has no channels")
+        return AudioData(self.samples[:2], self.sample_rate, self.backing_path)
 
     def cleanup(self) -> None:
         """Close and remove an owned temporary PCM mapping."""
-        base: object = self.samples
-        mapping = None
-        while isinstance(base, np.ndarray):
-            mapping = getattr(base, "_mmap", mapping)
-            if getattr(base, "base", None) is None:
-                break
-            base = base.base
+        mapping = _mapping_of(self.samples)
         if mapping is not None:
             mapping.close()
         if self.backing_path is not None:
@@ -70,17 +91,7 @@ class AudioData:
 
     def release_pages(self) -> None:
         """Flush a disk mapping and let the kernel evict its resident pages."""
-        base: object = self.samples
-        mapping = None
-        while isinstance(base, np.ndarray):
-            mapping = getattr(base, "_mmap", mapping)
-            if getattr(base, "base", None) is None:
-                break
-            base = base.base
-        if mapping is not None:
-            mapping.flush()
-            if hasattr(mapping, "madvise") and hasattr(mmap, "MADV_DONTNEED"):
-                mapping.madvise(mmap.MADV_DONTNEED)
+        release_mapped_pages(self.samples)
 
 
 def create_pcm_audio(channels: int, frames: int, sample_rate: int) -> AudioData:
@@ -106,7 +117,7 @@ def _read_with_soundfile(path: Path, token: CancellationToken) -> AudioData:
         audio = create_pcm_audio(source.channels, source.frames, source.samplerate)
         try:
             start = 0
-            for block in source.blocks(blocksize=262_144, dtype="float32", always_2d=True):
+            for block in source.blocks(blocksize=BLOCK_FRAMES, dtype="float32", always_2d=True):
                 token.raise_if_cancelled()
                 end = start + block.shape[0]
                 audio.samples[:, start:end] = block.T
@@ -255,7 +266,7 @@ def resample_audio(
     )
     frames = 0
     try:
-        block_size = 262_144
+        block_size = BLOCK_FRAMES
         for start in range(0, audio.frames, block_size):
             cancel.raise_if_cancelled()
             end = min(start + block_size, audio.frames)
@@ -309,9 +320,9 @@ def write_wav_atomic(
             subtype=subtype,
         ) as output:
             interleaved = np.nan_to_num(audio.samples.T, copy=False)
-            for start in range(0, audio.frames, 262_144):
+            for start in range(0, audio.frames, BLOCK_FRAMES):
                 cancel.raise_if_cancelled()
-                output.write(interleaved[start : start + 262_144])
+                output.write(interleaved[start : start + BLOCK_FRAMES])
         cancel.raise_if_cancelled()
         os.replace(temporary, destination)
         logger.info("wrote WAV atomically: %s", destination)

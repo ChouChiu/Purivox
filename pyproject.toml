@@ -124,6 +124,7 @@ files = [
   "src/shared/dsp/__init__.py",
   "src/shared/dsp/spectral.py",
   "src/shared/i18n.py",
+  "src/shared/jobs.py",
   "src/shared/logging.py",
   "src/shared/processing.py",
   "src/shared/progress.py",

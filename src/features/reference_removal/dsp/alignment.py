@@ -8,8 +8,9 @@ import numpy as np
 from scipy.fft import irfft, rfft
 from scipy.ndimage import median_filter
 from scipy.signal import correlate, correlation_lags, resample_poly
-from scipy.signal import stft as scipy_stft
 
+from shared.audio import BLOCK_FRAMES
+from shared.dsp import log_flux_bands
 from shared.processing import CancellationToken
 
 logger = logging.getLogger(__name__)
@@ -26,6 +27,8 @@ _LANCZOS_RADIUS = 3
 # 8192 fractional phases keep the table's quantisation error near -80 dBFS,
 # far below the residual that reference cancellation can reach in practice.
 _LANCZOS_PHASES = 8192
+# Below this median band scale a channel carries no usable attacks at all.
+_MINIMUM_FLUX_SCALE = 1e-4
 
 
 def _mono(channels: np.ndarray) -> np.ndarray:
@@ -132,36 +135,15 @@ def _spectral_flux_lag(
             axis=1,
         )
         n_fft = min(1024, values.shape[1])
-        if n_fft < 128:
-            return None
         hop = max(round(0.02 * feature_rate), 1)
-        overlap = max(n_fft - hop, 0)
         channel_features: list[np.ndarray] = []
         for channel in values[:2]:
-            _, _, spectrum = scipy_stft(
-                channel,
-                nperseg=n_fft,
-                noverlap=overlap,
-                boundary=None,
-                padded=False,
-            )
-            magnitude = np.log1p(20.0 * np.abs(spectrum))
-            flux = np.maximum(np.diff(magnitude, axis=1, prepend=magnitude[:, :1]), 0.0)
-            edges = np.unique(np.geomspace(2, magnitude.shape[0], 13).astype(int))
-            if edges.size < 3:
+            # A featureless channel would scale numerical noise up to full range
+            # and invent attacks, so a flat band set rejects the whole estimate.
+            bands = log_flux_bands(channel, n_fft, hop, minimum_scale=_MINIMUM_FLUX_SCALE)
+            if bands is None:
                 return None
-            bands = np.stack(
-                [
-                    np.mean(flux[edges[index] : edges[index + 1]], axis=0)
-                    for index in range(edges.size - 1)
-                ]
-            )
-            bands -= np.median(bands, axis=1, keepdims=True)
-            raw_scale = np.median(np.abs(bands), axis=1, keepdims=True)
-            if float(np.median(raw_scale)) < 1e-4:
-                return None
-            scale = raw_scale + 1e-6
-            channel_features.append(np.clip(bands / scale, -8.0, 8.0))
+            channel_features.append(bands)
         return np.concatenate(channel_features, axis=0)
 
     song_features = extract(song)
@@ -289,7 +271,7 @@ def _warp(
     result = output if output is not None else np.empty((reference.shape[0], length), np.float32)
     if result.shape != (reference.shape[0], length) or result.dtype != np.float32:
         raise ValueError("alignment output must be a float32 [channels, frames] array")
-    block_size = 262_144
+    block_size = BLOCK_FRAMES
     for start in range(0, length, block_size):
         token.raise_if_cancelled()
         end = min(start + block_size, length)

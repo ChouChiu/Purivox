@@ -5,6 +5,7 @@ from functools import lru_cache
 import numpy as np
 from scipy.fft import irfft, rfft
 from scipy.signal import get_window
+from scipy.signal import stft as scipy_stft
 
 
 @lru_cache(maxsize=16)
@@ -70,3 +71,42 @@ def fft_frequencies(sample_rate: int, n_fft: int) -> np.ndarray:
     if sample_rate <= 0 or n_fft <= 0:
         return np.empty(0, dtype=np.float64)
     return np.fft.rfftfreq(n_fft, 1.0 / sample_rate)
+
+
+def log_flux_bands(
+    signal: np.ndarray,
+    n_fft: int,
+    hop: int,
+    band_count: int = 12,
+    minimum_scale: float = 0.0,
+) -> np.ndarray | None:
+    """Summarise positive log-spectral flux in geometrically spaced bands.
+
+    Two masters of the same music can share note attacks while their waveforms,
+    EQ, compression, vocals and ambience differ, so both full-stage matching and
+    coarse alignment compare this feature instead of the raw waveform.  Returns
+    `None` when the input is too short or too flat to describe.
+    """
+    values = np.asarray(signal)
+    if values.ndim != 1 or n_fft < 128 or hop <= 0:
+        return None
+    _, _, spectrum = scipy_stft(
+        values,
+        nperseg=n_fft,
+        noverlap=max(n_fft - hop, 0),
+        boundary=None,
+        padded=False,
+    )
+    magnitude = np.log1p(20.0 * np.abs(spectrum))
+    flux = np.maximum(np.diff(magnitude, axis=1, prepend=magnitude[:, :1]), 0.0)
+    edges = np.unique(np.geomspace(2, magnitude.shape[0], band_count + 1).astype(int))
+    if edges.size < 3:
+        return None
+    bands = np.stack(
+        [np.mean(flux[edges[index] : edges[index + 1]], axis=0) for index in range(edges.size - 1)]
+    )
+    bands -= np.median(bands, axis=1, keepdims=True)
+    raw_scale = np.median(np.abs(bands), axis=1, keepdims=True)
+    if float(np.median(raw_scale)) < minimum_scale:
+        return None
+    return np.clip(bands / (raw_scale + 1e-6), -8.0, 8.0)

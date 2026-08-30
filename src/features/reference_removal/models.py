@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+from shared.jobs import validate_reference_settings
+
 
 @dataclass(frozen=True, slots=True)
 class ReferenceJob:
@@ -17,9 +19,9 @@ class ReferenceJob:
     open_mic_focus: bool = False
 
     def __post_init__(self) -> None:
-        if not 0 <= self.strength <= 100:
-            raise ValueError("strength must be in [0, 100]")
-        if self.sigma not in {1, 3, 8, 16}:
-            raise ValueError("sigma must be one of 1, 3, 8, 16")
-        if self.open_mic_focus and not self.center_extraction:
-            raise ValueError("open-mic focus requires center extraction")
+        validate_reference_settings(
+            self.strength,
+            self.sigma,
+            center_extraction=self.center_extraction,
+            open_mic_focus=self.open_mic_focus,
+        )

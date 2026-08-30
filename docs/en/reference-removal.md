@@ -60,9 +60,10 @@ flowchart LR
 
 A camera track recorded at the venue may have low waveform correlation with the matching song
 source even when note onsets remain similar. The implementation therefore starts with multi-band
-spectral-flux features and searches for a significant correlation peak over up to approximately
-60 seconds of shared material. If the feature peak is unreliable, it tries GCC-PHAT and ordinary
-cross-correlation in sequence.
+spectral-flux features (`shared.dsp.log_flux_bands()`, shared with full-stage matching) and searches
+for a significant correlation peak over up to approximately 60 seconds of shared material. A channel
+whose bands are too flat rejects the whole estimate; if the feature peak is unreliable, it tries
+GCC-PHAT and ordinary cross-correlation in sequence.
 
 GCC-PHAT retains only the phase of the cross-power spectrum:
 

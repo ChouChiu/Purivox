@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import math
-import mmap
 import os
 from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
 from scipy.ndimage import gaussian_filter, gaussian_filter1d, uniform_filter1d
 
+from shared.audio import BLOCK_FRAMES, release_mapped_pages
 from shared.dsp import fft_frequencies, istft, stft
 from shared.processing import CancellationToken
 
@@ -17,24 +17,9 @@ _CONFIDENCE_HIGH = 0.35
 _SPECTRAL_OVERSUBTRACTION = 1.5
 _SPECTRAL_CELL_BUDGET = 4_000_000
 _MAX_TRANSFER_GAIN = 2.0
-_DEFAULT_REFERENCE_TAPS = 2
 _MAX_PROCESSING_BLOCK_SECONDS = 48
 _MAX_PROCESSING_WORKERS = min(5, os.cpu_count() or 1)
 _MAX_PARALLEL_SPECTRAL_CELLS = 9_000_000
-
-
-def _release_mapped_pages(values: np.ndarray) -> None:
-    base: object = values
-    mapping = None
-    while isinstance(base, np.ndarray):
-        mapping = getattr(base, "_mmap", mapping)
-        if getattr(base, "base", None) is None:
-            break
-        base = base.base
-    if mapping is not None:
-        mapping.flush()
-        if hasattr(mapping, "madvise") and hasattr(mmap, "MADV_DONTNEED"):
-            mapping.madvise(mmap.MADV_DONTNEED)
 
 
 def _spectral_smooth(
@@ -157,16 +142,21 @@ def _analysis_fft_size(sample_rate: int) -> int:
     return int(np.clip(2**exponent, 512, 4096))
 
 
+def _context_frames(sample_rate: int, sigma: float) -> int:
+    """Frames a block must span before its smoothing context is representative."""
+    return max(
+        round((1.5 * float(sigma) + 4.0) * sample_rate),
+        12 * sample_rate,
+    )
+
+
 def _processing_block_frames(
     sample_rate: int,
     sigma: float,
     spectral_cell_budget: int = _SPECTRAL_CELL_BUDGET,
 ) -> int:
     """Use the 2 GiB working-set budget to reduce repeated overlap analysis."""
-    context_frames = max(
-        round((1.5 * float(sigma) + 4.0) * sample_rate),
-        12 * sample_rate,
-    )
+    context_frames = _context_frames(sample_rate, sigma)
     n_fft = _analysis_fft_size(sample_rate)
     hop = n_fft // 4
     bins = n_fft // 2 + 1
@@ -183,10 +173,7 @@ def _processing_block_frames(
 
 
 def _processing_workers(sample_rate: int, sigma: float, length: int) -> int:
-    context_frames = max(
-        round((1.5 * float(sigma) + 4.0) * sample_rate),
-        12 * sample_rate,
-    )
+    context_frames = _context_frames(sample_rate, sigma)
     n_fft = _analysis_fft_size(sample_rate)
     context_stft_frames = math.ceil(context_frames / (n_fft // 4)) + 2
     context_cells = context_stft_frames * (n_fft // 2 + 1)
@@ -491,11 +478,11 @@ def process_audio(
                         + processed[:, :fade] * new_weight
                     )
                 result[:, start + fade : end] = processed[:, fade : end - start]
-            _release_mapped_pages(mix)
-            _release_mapped_pages(accompaniment)
-            _release_mapped_pages(result)
+            release_mapped_pages(mix)
+            release_mapped_pages(accompaniment)
+            release_mapped_pages(result)
     peak = 0.0
-    cleanup_block = 262_144
+    cleanup_block = BLOCK_FRAMES
     for start in range(0, length, cleanup_block):
         view = result[:, start : start + cleanup_block]
         np.nan_to_num(view, copy=False)

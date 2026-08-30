@@ -5,10 +5,8 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from shared.audio.io import AudioData
+from shared.audio.io import BLOCK_FRAMES, AudioData
 from shared.processing import CancellationToken
-
-BLOCK_FRAMES = 262_144
 
 
 @dataclass(frozen=True, slots=True)

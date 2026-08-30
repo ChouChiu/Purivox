@@ -4,14 +4,18 @@ import hashlib
 import json
 from collections.abc import Callable
 from dataclasses import dataclass
+from functools import cache
 from pathlib import Path
 
 import numpy as np
 
 from resources import resource_path
-from shared.audio import create_pcm_audio
+from shared.audio import BLOCK_FRAMES, create_pcm_audio
 from shared.dsp import istft, stft
 from shared.processing import CancellationToken
+
+# Every shipped MDX-Net model is trained at this rate; input is resampled to it.
+MDXNET_SAMPLE_RATE = 44_100
 
 
 @dataclass(frozen=True, slots=True)
@@ -22,14 +26,27 @@ class MdxNetSpec:
     hop: int = 1024
     segment_size: int = 256
     compensate: float = 1.0
-    sample_rate: int = 44_100
+    sample_rate: int = MDXNET_SAMPLE_RATE
     primary_stem: str = "Vocals"
 
 
+@cache
+def _model_specifications() -> dict[str, dict]:
+    return json.loads(resource_path("model_data.json").read_text(encoding="utf-8"))
+
+
+def _model_digest(path: Path) -> str:
+    # A model file is tens of megabytes, so it is hashed in blocks rather than
+    # read into memory whole.
+    digest = hashlib.md5()
+    with path.open("rb") as stream:
+        while chunk := stream.read(1024 * 1024):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
 def spec_for_model(path: Path) -> MdxNetSpec:
-    digest = hashlib.md5(path.read_bytes()).hexdigest()
-    table = json.loads(resource_path("model_data.json").read_text(encoding="utf-8"))
-    entry = table.get(digest)
+    entry = _model_specifications().get(_model_digest(path))
     if not entry or "mdx_n_fft_scale_set" not in entry:
         raise ValueError(f"unknown MDX-Net model: {path.name}")
     return MdxNetSpec(
@@ -105,7 +122,7 @@ def demix_chunks(
                 divider[output_start : output_start + count] += weights
             if progress:
                 progress(index + 1, len(starts))
-        block_size = 262_144
+        block_size = BLOCK_FRAMES
         for start in range(0, total, block_size):
             token.raise_if_cancelled()
             end = min(start + block_size, total)
@@ -158,7 +175,7 @@ class MdxNet:
         output: np.ndarray | None = None,
     ) -> np.ndarray:
         result = demix_chunks(mix, self.spec, self._infer_chunk, token, progress, output)
-        block_size = 262_144
+        block_size = BLOCK_FRAMES
         for start in range(0, result.shape[1], block_size):
             result[:, start : start + block_size] *= self.spec.compensate
         return result

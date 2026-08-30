@@ -7,7 +7,6 @@ from pathlib import Path
 
 import numpy as np
 from scipy.signal import correlate, find_peaks, resample_poly
-from scipy.signal import stft as scipy_stft
 
 from features.full_stage.models import (
     ClipKind,
@@ -16,6 +15,7 @@ from features.full_stage.models import (
     TimelineClip,
 )
 from shared.audio import AudioData, read_audio
+from shared.dsp import log_flux_bands
 from shared.processing import CancellationToken, ProgressCallback
 from shared.progress import report_progress
 
@@ -24,6 +24,8 @@ logger = logging.getLogger(__name__)
 _FEATURE_RATE = 4_000
 _HOP_SECONDS = 0.04
 _ANCHORS = 7
+# Hits this close to each other describe the same placement, not two of them.
+_CLUSTER_TOLERANCE_SECONDS = 0.8
 
 
 @dataclass(frozen=True, slots=True)
@@ -67,27 +69,14 @@ def _proxy(audio: AudioData, token: CancellationToken) -> np.ndarray:
 
 
 def _features(proxy: np.ndarray) -> np.ndarray:
-    n_fft = min(512, proxy.size)
-    if n_fft < 128:
-        raise ValueError("audio is too short for full-stage matching")
-    hop = max(round(_HOP_SECONDS * _FEATURE_RATE), 1)
-    _, _, spectrum = scipy_stft(
+    bands = log_flux_bands(
         proxy,
-        fs=_FEATURE_RATE,
-        nperseg=n_fft,
-        noverlap=max(n_fft - hop, 0),
-        boundary=None,
-        padded=False,
+        min(512, proxy.size),
+        max(round(_HOP_SECONDS * _FEATURE_RATE), 1),
     )
-    magnitude = np.log1p(20.0 * np.abs(spectrum))
-    flux = np.maximum(np.diff(magnitude, axis=1, prepend=magnitude[:, :1]), 0.0)
-    edges = np.unique(np.geomspace(2, magnitude.shape[0], 13).astype(int))
-    bands = np.stack(
-        [np.mean(flux[edges[index] : edges[index + 1]], axis=0) for index in range(edges.size - 1)]
-    )
-    bands -= np.median(bands, axis=1, keepdims=True)
-    scale = np.median(np.abs(bands), axis=1, keepdims=True) + 1e-6
-    return np.clip(bands / scale, -8.0, 8.0)
+    if bands is None:
+        raise ValueError("audio is too short for full-stage matching")
+    return bands
 
 
 def _normalized_correlation(stage: np.ndarray, query: np.ndarray) -> np.ndarray:
@@ -105,6 +94,39 @@ def _normalized_correlation(stage: np.ndarray, query: np.ndarray) -> np.ndarray:
         score,
         np.sqrt(stage_energy * query_energy) + 1e-12,
         out=np.zeros_like(score),
+    )
+
+
+def _cluster_hits(
+    hits: list[_Hit],
+    source_duration: float,
+    anchor_duration: float,
+) -> list[_Candidate]:
+    """Group hits that predict the same timeline position, best score first.
+
+    Every anchor votes independently, so one real placement shows up as a spray
+    of hits within a second of each other.  Merging them turns those votes into
+    a single candidate whose confidence reflects how many anchors agreed.
+    """
+    clusters: list[_Candidate] = []
+    for hit in sorted(hits, key=lambda item: item.score, reverse=True):
+        cluster = next(
+            (
+                candidate
+                for candidate in clusters
+                if abs(candidate.timeline_start - hit.timeline_start) <= _CLUSTER_TOLERANCE_SECONDS
+            ),
+            None,
+        )
+        if cluster is None:
+            clusters.append(_Candidate(hit.timeline_start, source_duration, anchor_duration, [hit]))
+            continue
+        cluster.hits.append(hit)
+        cluster.timeline_start = float(np.median([item.timeline_start for item in cluster.hits]))
+    return sorted(
+        clusters,
+        key=lambda candidate: (candidate.votes, candidate.confidence),
+        reverse=True,
     )
 
 
@@ -147,28 +169,7 @@ def _source_candidates(
                 )
             )
 
-    clusters: list[_Candidate] = []
-    for hit in sorted(hits, key=lambda item: item.score, reverse=True):
-        cluster = next(
-            (
-                candidate
-                for candidate in clusters
-                if abs(candidate.timeline_start - hit.timeline_start) <= 0.8
-            ),
-            None,
-        )
-        if cluster is None:
-            clusters.append(
-                _Candidate(hit.timeline_start, source_duration, anchor_width / feature_rate, [hit])
-            )
-            continue
-        cluster.hits.append(hit)
-        cluster.timeline_start = float(np.median([item.timeline_start for item in cluster.hits]))
-    return sorted(
-        clusters,
-        key=lambda candidate: (candidate.votes, candidate.confidence),
-        reverse=True,
-    )
+    return _cluster_hits(hits, source_duration, anchor_width / feature_rate)
 
 
 def _boundary_fragment_candidates(
@@ -214,30 +215,7 @@ def _boundary_fragment_candidates(
                 )
             )
 
-    clusters: list[_Candidate] = []
-    for hit in sorted(hits, key=lambda item: item.score, reverse=True):
-        cluster = next(
-            (
-                candidate
-                for candidate in clusters
-                if abs(candidate.timeline_start - hit.timeline_start) <= 0.8
-            ),
-            None,
-        )
-        if cluster is None:
-            clusters.append(
-                _Candidate(hit.timeline_start, source_duration, width / feature_rate, [hit])
-            )
-        else:
-            cluster.hits.append(hit)
-            cluster.timeline_start = float(
-                np.median([item.timeline_start for item in cluster.hits])
-            )
-    return sorted(
-        clusters,
-        key=lambda candidate: (candidate.votes, candidate.confidence),
-        reverse=True,
-    )
+    return _cluster_hits(hits, source_duration, width / feature_rate)
 
 
 def _verify_boundary_candidates(
@@ -384,11 +362,15 @@ def _find_fragments(
     return fragments
 
 
+def _timeline(duration: float, occupied: list[TimelineClip]) -> tuple[TimelineClip, ...]:
+    """Order matched clips and the unmatched gaps between them into one track."""
+    gaps = _unmatched_clips(duration, occupied)
+    return tuple(sorted(occupied + gaps, key=lambda clip: (clip.stage_start, clip.kind.value)))
+
+
 def _rebuilt(analysis: FullStageAnalysis, occupied: list[TimelineClip]) -> FullStageAnalysis:
     """Recompute the unmatched gaps around a changed set of matched clips."""
-    gaps = _unmatched_clips(analysis.duration_seconds, occupied)
-    clips = tuple(sorted(occupied + gaps, key=lambda clip: (clip.stage_start, clip.kind.value)))
-    return replace(analysis, clips=clips)
+    return replace(analysis, clips=_timeline(analysis.duration_seconds, occupied))
 
 
 def add_manual_clip(analysis: FullStageAnalysis, clip: TimelineClip) -> FullStageAnalysis:
@@ -506,9 +488,7 @@ def analyze_full_stage(
             songs,
             duration,
         )
-        occupied = songs + fragments
-        gaps = _unmatched_clips(duration, occupied)
-        clips = tuple(sorted(occupied + gaps, key=lambda clip: (clip.stage_start, clip.kind.value)))
+        clips = _timeline(duration, songs + fragments)
         report_progress(progress, 100, job.language, "stage_analysis_done", count=len(songs))
         logger.info(
             "full-stage analysis completed: stage=%s songs=%d fragments=%d missing=%d",

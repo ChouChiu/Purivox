@@ -12,13 +12,16 @@ from qfluentwidgets import (
     qconfig,
 )
 
+from shared.i18n import SUPPORTED_LANGUAGES
+from shared.logging import LOG_LEVELS
+
 
 class AppConfig(QConfig):
     language = OptionsConfigItem(
         "General",
         "Language",
-        "zh_cn",
-        OptionsValidator(["zh_cn", "en_us", "ja_jp", "ko_kr"]),
+        SUPPORTED_LANGUAGES[0],
+        OptionsValidator(list(SUPPORTED_LANGUAGES)),
     )
     theme = OptionsConfigItem(
         "General", "Theme", "auto", OptionsValidator(["light", "dark", "auto"])
@@ -27,7 +30,7 @@ class AppConfig(QConfig):
         "General",
         "LogLevel",
         "INFO",
-        OptionsValidator(["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]),
+        OptionsValidator(list(LOG_LEVELS)),
     )
     auto_find = ConfigItem("Reference", "AutoFind", True, BoolValidator())
     center_extraction = ConfigItem("Reference", "CenterExtraction", False, BoolValidator())
