@@ -46,19 +46,19 @@ def run_reference_job(
     _validate_reference_paths(job.song, job.accompaniment, job.output)
     song = reference = processed_audio = hi_res_audio = None
     try:
-        report_progress(progress, 0, job.language, "loading_song")
+        report_progress(progress, 0, "loading_song")
         song = read_audio(job.song, token).stereo()
         token.raise_if_cancelled()
-        report_progress(progress, 10, job.language, "loading_acc")
+        report_progress(progress, 10, "loading_acc")
         reference = read_audio(job.accompaniment, token).stereo()
         if reference.sample_rate != song.sample_rate:
-            report_progress(progress, 18, job.language, "resampling")
+            report_progress(progress, 18, "resampling")
             resampled = resample_audio(reference, song.sample_rate, token)
             reference.cleanup()
             reference = resampled
         token.raise_if_cancelled()
         if job.auto_align:
-            report_progress(progress, 25, job.language, "aligning")
+            report_progress(progress, 25, "aligning")
             alignment = create_pcm_audio(reference.channels, song.frames, song.sample_rate)
             try:
                 aligned = align_audio(
@@ -76,13 +76,13 @@ def run_reference_job(
             except (ArithmeticError, ValueError) as error:
                 alignment.cleanup()
                 logger.warning("alignment failed; using original timeline: %s", error)
-                report_progress(progress, 28, job.language, "align_fail")
+                report_progress(progress, 28, "align_fail")
             except BaseException:
                 alignment.cleanup()
                 raise
         length = song.frames
         processed_audio = create_pcm_audio(song.channels, length, song.sample_rate)
-        report_progress(progress, 32, job.language, "processing")
+        report_progress(progress, 32, "processing")
         process_audio(
             song.samples,
             reference.samples,
@@ -94,15 +94,15 @@ def run_reference_job(
             center_extraction=job.center_extraction,
             open_mic_focus=job.open_mic_focus,
         )
-        report_progress(progress, 84, job.language, "preparing_hi_res")
+        report_progress(progress, 84, "preparing_hi_res")
         hi_res_audio = prepare_hi_res_output(processed_audio, token)
         bit_depth = HI_RES_BIT_DEPTH
-        report_progress(progress, 86, job.language, "analyzing_output")
+        report_progress(progress, 86, "analyzing_output")
         stats = analyze_audio(hi_res_audio, bit_depth, token)
-        report_progress(progress, 90, job.language, "saving")
+        report_progress(progress, 90, "saving")
         write_wav_atomic(job.output, hi_res_audio, bit_depth, token)
         stats = replace(stats, file_size=job.output.stat().st_size)
-        report_progress(progress, 100, job.language, "done_status", path=job.output)
+        report_progress(progress, 100, "done_status", path=job.output)
         logger.info("reference job completed: %s", job.output.resolve())
         return ProcessingResult((job.output.resolve(),), (stats,))
     finally:

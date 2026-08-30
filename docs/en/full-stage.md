@@ -46,6 +46,11 @@ geometrically spaced frequency bands.
 Each band has its median removed, is normalized by median absolute magnitude, and is clipped to
 $[-8,8]$. Matching therefore focuses on onset changes rather than mastering loudness.
 
+The feature itself lives in `shared.dsp.log_flux_bands()`. Coarse alignment in reference removal
+needs the same onset description and the two feature packages must not import each other, so the
+band layout, normalization and clipping exist once; full-stage matching and coarse alignment differ
+only in window length and rejection threshold.
+
 ## Full-Song Candidates
 
 Each source contributes up to seven distributed anchors. Anchor duration adapts to source length

@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from collections.abc import Callable
-
 from PySide6.QtCore import QObject, Signal
 from PySide6.QtWidgets import QWidget
 from qfluentwidgets import InfoBar, InfoBarPosition, StateToolTip
@@ -22,14 +20,9 @@ class JobPresenter(QObject):
 
     finished = Signal()
 
-    def __init__(
-        self,
-        parent: QWidget,
-        language: Callable[[], str],
-    ):
+    def __init__(self, parent: QWidget):
         super().__init__(parent)
         self._parent = parent
-        self._language = language
         self._runner = JobRunner(self)
         self._active_page: ProcessingPage | None = None
         self._state_tip: StateToolTip | None = None
@@ -49,10 +42,7 @@ class JobPresenter(QObject):
         self._active_page = page
         page.progress.setValue(0)
         page.set_running(True)
-        language = self._language()
-        self._state_tip = StateToolTip(
-            tr(language, "processing"), tr(language, "loading_song"), self._parent
-        )
+        self._state_tip = StateToolTip(tr("processing"), tr("loading_song"), self._parent)
         self._state_tip.move(self._state_tip.getSuitablePos())
         self._state_tip.show()
         try:
@@ -77,7 +67,6 @@ class JobPresenter(QObject):
         if self._state_tip is not None:
             self._state_tip.setState(True)
             self._state_tip = None
-        language = self._language()
         outputs = "\n".join(map(str, result.outputs))
         if isinstance(self._active_page, MrPage) and result.outputs:
             stats = result.audio_stats[0] if result.audio_stats else None
@@ -85,19 +74,16 @@ class JobPresenter(QObject):
         if isinstance(self._active_page, FullStagePage) and isinstance(result, FullStageResult):
             self._active_page.set_analysis(result.analysis)
             if result.outputs:
-                self._active_page.status.setText(
-                    tr(language, "done_status", path=result.outputs[0])
-                )
+                self._active_page.status.setText(tr("done_status", path=result.outputs[0]))
             else:
                 outputs = tr(
-                    language,
                     "stage_analysis_summary",
                     songs=len(result.analysis.song_clips),
                     fragments=sum(clip.kind.value == "fragment" for clip in result.analysis.clips),
                     missing=len(result.analysis.missing_sources),
                 )
         InfoBar.success(
-            tr(language, "done_title"),
+            tr("done_title"),
             outputs,
             duration=5000,
             position=InfoBarPosition.TOP_RIGHT,
@@ -106,11 +92,10 @@ class JobPresenter(QObject):
 
     def _failure(self, message: str) -> None:
         self._discard_state_tip()
-        language = self._language()
         if self._active_page is not None:
-            self._active_page.status.setText(tr(language, "err_status", msg=message))
+            self._active_page.status.setText(tr("err_status", msg=message))
         InfoBar.error(
-            tr(language, "err_title"),
+            tr("err_title"),
             message,
             duration=6000,
             position=InfoBarPosition.TOP_RIGHT,
@@ -119,7 +104,7 @@ class JobPresenter(QObject):
 
     def _cancelled(self) -> None:
         if self._active_page is not None:
-            self._active_page.status.setText(tr(self._language(), "cancelled"))
+            self._active_page.status.setText(tr("cancelled"))
         self._discard_state_tip()
 
     def _discard_state_tip(self) -> None:

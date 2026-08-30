@@ -37,13 +37,18 @@ environment. This project specifically uses `PySide6-Fluent-Widgets[full]`.
   merely for reuse.
 - Data models consumed by multiple features should move down to `shared`; models used by only one
   feature must not be re-exported from another feature for convenience.
+- Constants, accepted ranges, and algorithms follow the same rule: a value that appears in two
+  features, or in both the GUI and the CLI, is defined once in `shared` and referenced from there —
+  for example `shared.audio.BLOCK_FRAMES`, `shared.audio.AUDIO_EXTENSIONS`,
+  `shared.jobs.SIGMA_CHOICES`, `shared.i18n.SUPPORTED_LANGUAGES`, and `shared.logging.LOG_LEVELS`.
 - Qt background tasks are coordinated by `app/job_presenter.py`, which manages page state, and
   then passed to `app/job_runner.py` for thread ownership. Pages and processing pipelines must not
   create their own threads.
 - Independent interactive widgets on a page should live in a small module inside the same feature
   package. The preview-seek widget, for example, is in `reference_removal/preview.py`.
-- Use `create_pcm_audio` and chunked loops for long audio; do not copy an entire file into an
-  ordinary in-memory array.
+- Use `create_pcm_audio` and chunked loops for long audio, sized by `shared.audio.BLOCK_FRAMES`;
+  do not copy an entire file into an ordinary in-memory array, and release mapped pages through
+  `shared.audio.release_mapped_pages()`.
 - Cancellable loops must call `CancellationToken.raise_if_cancelled()` periodically and must not
   swallow cancellation exceptions.
 - Use `write_wav_atomic` for output instead of overwriting the destination directly.
@@ -57,18 +62,39 @@ formatting and review.
 
 ## Translation and Configuration
 
-Interface strings are stored in:
+Interface strings live in Qt Linguist `.ts` sources (XML), compiled to the `.qm` catalogues that
+`QTranslator` loads:
 
 ```text
-src/resources/i18n/zh_cn.json
-src/resources/i18n/en_us.json
-src/resources/i18n/ja_jp.json
-src/resources/i18n/ko_kr.json
+src/resources/i18n/zh_cn.ts   src/resources/i18n/zh_cn.qm
+src/resources/i18n/en_us.ts   src/resources/i18n/en_us.qm
+src/resources/i18n/ja_jp.ts   src/resources/i18n/ja_jp.qm
+src/resources/i18n/ko_kr.ts   src/resources/i18n/ko_kr.qm
 ```
 
-Adding, removing, or renaming a translation key requires updating all four files; tests enforce
-identical key sets. Calls to `tr(language, key, **values)` must not depend on the fallback that
-returns an unknown key unchanged.
+The catalogues are keyed by identifier rather than by source text: `<source>` holds a short key such
+as `nav_mr`, `<translation>` holds the text for that language, and all four files share the single
+`Purivox` context. Rewording Chinese therefore leaves the other languages untouched, `pyside6-lupdate`
+does not apply (it extracts literals from source code), and entries are maintained by hand.
+
+After editing any `.ts`, recompile and commit the `.ts` and `.qm` together:
+
+```bash
+for locale in zh_cn en_us ja_jp ko_kr; do
+  uv run --locked pyside6-lrelease "src/resources/i18n/$locale.ts" \
+    -qm "src/resources/i18n/$locale.qm"
+done
+```
+
+Adding, removing, or renaming a key requires updating all four `.ts` files. Tests enforce identical
+key sets, check that no `.qm` is stale, and check that every literal key used in the sources exists
+in every language. Calls to `tr(key, **values)` must not depend on the fallback that returns an
+unknown key unchanged.
+
+Translation is application state: `shared.i18n.install_language()` installs that language's
+`QTranslator`, and `tr()` resolves through `QCoreApplication.translate()`. Job objects and
+processing pipelines therefore no longer carry a language parameter. The GUI reinstalls and calls
+`retranslate()` when the setting changes; the CLI installs `--lang` once at startup.
 
 Configuration is managed by the `QConfig` singleton in `src/shared/config.py`. When changing a
 persistent option, account for its default value, validator, page retranslation, and tests.

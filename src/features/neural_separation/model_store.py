@@ -54,7 +54,6 @@ def _sha256(path: Path, token: CancellationToken) -> str:
 def ensure_model(
     entry: ModelEntry,
     override: Path | None,
-    language: str,
     token: CancellationToken,
     progress: ProgressCallback,
 ) -> Path:
@@ -74,9 +73,7 @@ def ensure_model(
                 output.write(chunk)
                 downloaded += len(chunk)
                 value = 15 + int(10 * downloaded / max(total, 1))
-                progress(
-                    ProgressEvent(min(value, 24), tr(language, "ai_downloading", name=entry.name))
-                )
+                progress(ProgressEvent(min(value, 24), tr("ai_downloading", name=entry.name)))
         if partial.stat().st_size != entry.size:
             raise RuntimeError("downloaded model size does not match catalog")
         if _sha256(partial, token) != entry.sha256:
@@ -86,6 +83,6 @@ def ensure_model(
     except ProcessingCancelled:
         raise
     except Exception as error:
-        raise RuntimeError(tr(language, "ai_download_failed", msg=error)) from error
+        raise RuntimeError(tr("ai_download_failed", msg=error)) from error
     finally:
         partial.unlink(missing_ok=True)

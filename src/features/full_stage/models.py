@@ -72,7 +72,6 @@ class FullStageJob:
     output: Path
     strength: int = 75
     sigma: int = 3
-    language: str = "zh_cn"
     include_fragments: bool = True
     auto_align: bool = True
     center_extraction: bool = False

@@ -12,4 +12,3 @@ class NeuralJob:
     output_dir: Path
     model_id: str = DEFAULT_MODEL_ID
     models_dir: Path | None = None
-    language: str = "zh_cn"

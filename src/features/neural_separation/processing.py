@@ -4,10 +4,11 @@ import logging
 from pathlib import Path
 
 from features.neural_separation.catalog import get_model
-from features.neural_separation.inference import MdxNet
+from features.neural_separation.inference import MDXNET_SAMPLE_RATE, MdxNet
 from features.neural_separation.model_store import ensure_model
 from features.neural_separation.models import NeuralJob
 from shared.audio import (
+    BLOCK_FRAMES,
     HI_RES_BIT_DEPTH,
     create_pcm_audio,
     prepare_hi_res_output,
@@ -46,54 +47,53 @@ def run_neural_job(
     _validate_distinct(job.song, vocal_path, background_path)
     song = vocal_audio = background_audio = hi_res_vocal = hi_res_background = None
     try:
-        report_progress(progress, 0, job.language, "loading_song")
+        report_progress(progress, 0, "loading_song")
         song = read_audio(job.song, token).stereo()
-        if song.sample_rate != 44_100:
-            report_progress(progress, 10, job.language, "ai_resampling")
-            resampled = resample_audio(song, 44_100, token)
+        if song.sample_rate != MDXNET_SAMPLE_RATE:
+            report_progress(progress, 10, "ai_resampling")
+            resampled = resample_audio(song, MDXNET_SAMPLE_RATE, token)
             song.cleanup()
             song = resampled
-        model_path = ensure_model(entry, job.models_dir, job.language, token, progress)
-        report_progress(progress, 25, job.language, "ai_loading_model")
+        model_path = ensure_model(entry, job.models_dir, token, progress)
+        report_progress(progress, 25, "ai_loading_model")
         try:
             network = MdxNet(model_path)
         except ProcessingCancelled:
             raise
         except Exception as error:
-            raise RuntimeError(tr(job.language, "ai_err_model_load", msg=error)) from error
-        report_progress(progress, 27, job.language, "ai_inferring")
+            raise RuntimeError(tr("ai_err_model_load", msg=error)) from error
+        report_progress(progress, 27, "ai_inferring")
 
         def model_progress(current: int, total: int) -> None:
             value = 27 + int(58 * current / max(total, 1))
-            report_progress(progress, value, job.language, "ai_inferring")
+            report_progress(progress, value, "ai_inferring")
 
-        vocal_audio = create_pcm_audio(2, song.frames, 44_100)
+        vocal_audio = create_pcm_audio(2, song.frames, MDXNET_SAMPLE_RATE)
         try:
             network.separate(song.samples, token, model_progress, vocal_audio.samples)
         except ProcessingCancelled:
             raise
         except Exception as error:
-            raise RuntimeError(tr(job.language, "ai_err_infer", msg=error)) from error
-        background_audio = create_pcm_audio(2, song.frames, 44_100)
-        block_size = 262_144
+            raise RuntimeError(tr("ai_err_infer", msg=error)) from error
+        background_audio = create_pcm_audio(2, song.frames, MDXNET_SAMPLE_RATE)
+        block_size = BLOCK_FRAMES
         for start in range(0, song.frames, block_size):
             token.raise_if_cancelled()
             end = min(start + block_size, song.frames)
             background_audio.samples[:, start:end] = (
                 song.samples[:, start:end] - vocal_audio.samples[:, start:end]
             )
-        report_progress(progress, 86, job.language, "preparing_hi_res")
+        report_progress(progress, 86, "preparing_hi_res")
         hi_res_vocal = prepare_hi_res_output(vocal_audio, token)
-        report_progress(progress, 90, job.language, "ai_saving")
+        report_progress(progress, 90, "ai_saving")
         write_wav_atomic(vocal_path, hi_res_vocal, HI_RES_BIT_DEPTH, token)
-        report_progress(progress, 93, job.language, "preparing_hi_res")
+        report_progress(progress, 93, "preparing_hi_res")
         hi_res_background = prepare_hi_res_output(background_audio, token)
-        report_progress(progress, 96, job.language, "ai_saving")
+        report_progress(progress, 96, "ai_saving")
         write_wav_atomic(background_path, hi_res_background, HI_RES_BIT_DEPTH, token)
         report_progress(
             progress,
             100,
-            job.language,
             "ai_done",
             vocal=vocal_path,
             background=background_path,

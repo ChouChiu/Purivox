@@ -19,6 +19,31 @@ def test_pyside_project_lists_every_python_source():
     assert not stale, f"stale pyside6-project entries: {sorted(stale)}"
 
 
+def test_pyside_project_lists_the_standalone_entry_point():
+    """pyside6-deploy resolves the Nuitka entry from this roster, not from src/."""
+    configured = {Path(path) for path in _project_config()["tool"]["pyside6-project"]["files"]}
+    assert Path("deployment/main.py") in configured
+
+
+def test_pyside_project_lists_every_translation_source():
+    configured = {Path(path) for path in _project_config()["tool"]["pyside6-project"]["files"]}
+    catalogues = {path.relative_to(ROOT) for path in (ROOT / "src/resources/i18n").glob("*.ts")}
+    assert catalogues
+    assert not catalogues - configured, (
+        f"translation sources missing from pyside6-project: {sorted(catalogues - configured)}"
+    )
+
+
+def test_every_translation_source_is_compiled():
+    """The application loads `.qm`, so an uncompiled `.ts` would ship nothing."""
+    uncompiled = [
+        path.name
+        for path in (ROOT / "src/resources/i18n").glob("*.ts")
+        if not path.with_suffix(".qm").is_file()
+    ]
+    assert not uncompiled, f"translation sources without a compiled catalogue: {uncompiled}"
+
+
 def test_distribution_includes_runtime_packages_and_documentation():
     config = _project_config()
     assert config["project"]["name"] == "purivox"

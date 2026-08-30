@@ -3,6 +3,8 @@ import os
 import pytest
 from PySide6.QtCore import QStandardPaths
 
+from shared.i18n import DEFAULT_LANGUAGE, install_language
+
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 QStandardPaths.setTestModeEnabled(True)
 
@@ -18,3 +20,14 @@ def pytest_collection_modifyitems(config, items):
     for item in items:
         if "slow" in item.keywords:
             item.add_marker(skip)
+
+
+@pytest.fixture(autouse=True)
+def installed_translation(qapp):
+    """Start every test from the default translation.
+
+    Translations are application state now, so a test that switches language
+    would otherwise leak that choice into whatever runs next.
+    """
+    install_language(DEFAULT_LANGUAGE)
+    return qapp

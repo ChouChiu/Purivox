@@ -73,8 +73,8 @@ class MrWorkspace(QWidget):
     def show_full_stage(self) -> None:
         self.set_current("full_stage")
 
-    def retranslate(self, language: str) -> None:
-        self.tabs.setItemText("single", tr(language, "mr_tab_single"))
-        self.tabs.setItemText("full_stage", tr(language, "mr_tab_full_stage"))
-        self.single_page.retranslate(language)
-        self.full_stage_page.retranslate(language)
+    def retranslate(self) -> None:
+        self.tabs.setItemText("single", tr("mr_tab_single"))
+        self.tabs.setItemText("full_stage", tr("mr_tab_full_stage"))
+        self.single_page.retranslate()
+        self.full_stage_page.retranslate()

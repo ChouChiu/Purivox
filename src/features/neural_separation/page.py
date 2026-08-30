@@ -13,11 +13,11 @@ from qfluentwidgets import (
     TitleLabel,
 )
 
-from features.neural_separation.catalog import DEFAULT_MODEL_ID, model_catalog
+from features.neural_separation.catalog import DEFAULT_MODEL_ID, get_model, model_catalog
 from features.neural_separation.model_store import find_model
 from shared.config import cfg
 from shared.i18n import tr
-from shared.ui import FormCard, PageScrollArea, SmoothComboBox
+from shared.ui import AUDIO_FILE_FILTER, FormCard, PageScrollArea, SmoothComboBox
 
 
 class AiPage(PageScrollArea):
@@ -27,7 +27,6 @@ class AiPage(PageScrollArea):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("aiPage")
-        self.language = "zh_cn"
         self.title = TitleLabel()
         self.layout.addWidget(self.title)
         self.form = FormCard()
@@ -58,34 +57,31 @@ class AiPage(PageScrollArea):
         self.cancel_button.clicked.connect(self.cancel_requested)
         self.model.currentIndexChanged.connect(lambda _index: self._update_model_status())
 
-    def retranslate(self, language: str) -> None:
-        self.language = language
-        self.title.setText(tr(language, "ai_title"))
-        self.form.title_label.setText(tr(language, "file_select"))
-        self.status_card.title_label.setText(tr(language, "status_group"))
-        self.song_label.setText(tr(language, "song_label"))
-        self.song_button.setText(tr(language, "browse"))
-        self.model_label.setText(tr(language, "ai_model_label"))
-        self.cancel_button.setText(tr(language, "cancel"))
-        self.start_button.setText(tr(language, "ai_extract"))
+    def retranslate(self) -> None:
+        self.title.setText(tr("ai_title"))
+        self.form.title_label.setText(tr("file_select"))
+        self.status_card.title_label.setText(tr("status_group"))
+        self.song_label.setText(tr("song_label"))
+        self.song_button.setText(tr("browse"))
+        self.model_label.setText(tr("ai_model_label"))
+        self.cancel_button.setText(tr("cancel"))
+        self.start_button.setText(tr("ai_extract"))
         if self.progress.value() == 0:
-            self.status.setText(tr(language, "ready"))
+            self.status.setText(tr("ready"))
         previous = self.model.currentData() or cfg.model.value or DEFAULT_MODEL_ID
         self.model.clear()
         for entry in model_catalog():
-            self.model.addItem(
-                f"{entry.name} — {tr(language, entry.description_key)}", userData=entry.id
-            )
+            self.model.addItem(f"{entry.name} — {tr(entry.description_key)}", userData=entry.id)
         self.model.setCurrentIndex(max(0, self.model.findData(previous)))
         self._update_model_status()
 
     def _update_model_status(self) -> None:
         try:
-            entry = next(item for item in model_catalog() if item.id == self.model.currentData())
-        except StopIteration:
+            entry = get_model(str(self.model.currentData()))
+        except KeyError:
             return
         key = "ai_model_ready" if find_model(entry) else "ai_model_need_download"
-        self.model_status.setText(tr(self.language, key))
+        self.model_status.setText(tr(key))
 
     def set_running(self, running: bool) -> None:
         self.start_button.setEnabled(not running)
@@ -96,8 +92,8 @@ class AiPage(PageScrollArea):
     def _select_song(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
             self,
-            tr(self.language, "song_label"),
-            filter="Audio (*.wav *.flac *.mp3 *.m4a *.ogg *.opus)",
+            tr("song_label"),
+            filter=AUDIO_FILE_FILTER,
         )
         if path:
             self.song_edit.setText(str(Path(path)))

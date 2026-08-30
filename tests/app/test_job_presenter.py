@@ -11,7 +11,7 @@ def test_job_presenter_owns_page_running_and_progress_state(qtbot, monkeypatch):
     parent = QWidget()
     page = MrPage(parent)
     qtbot.addWidget(parent)
-    presenter = JobPresenter(parent, lambda: "zh_cn")
+    presenter = JobPresenter(parent)
     monkeypatch.setattr("app.job_presenter.InfoBar.success", lambda *_args, **_kwargs: None)
 
     def operation(_token, report):

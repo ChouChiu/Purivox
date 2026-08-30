@@ -31,7 +31,13 @@ from features.full_stage.matching import add_manual_clip, remove_manual_clip
 from features.full_stage.models import ClipKind, FullStageAnalysis, TimelineClip
 from shared.config import cfg
 from shared.i18n import tr
-from shared.ui import FormCard, PageScrollArea
+from shared.ui import (
+    AUDIO_FILE_FILTER,
+    WAV_FILE_FILTER,
+    FormCard,
+    PageScrollArea,
+    sync_dependent_switch,
+)
 
 
 class FullStagePage(PageScrollArea):
@@ -42,7 +48,6 @@ class FullStagePage(PageScrollArea):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("fullStagePage")
-        self.language = "zh_cn"
         self.analysis: FullStageAnalysis | None = None
         self._updating_timeline = False
 
@@ -166,62 +171,58 @@ class FullStagePage(PageScrollArea):
         self.add_clip.clicked.connect(self._add_clip)
         self.remove_clip.clicked.connect(self._remove_clip)
 
-    def retranslate(self, language: str) -> None:
-        self.language = language
-        self.title.setText(tr(language, "nav_full_stage"))
-        self.files.title_label.setText(tr(language, "stage_files"))
-        self.stage_label.setText(tr(language, "stage_audio"))
-        self.output_label.setText(tr(language, "output_file"))
-        self.output_edit.setPlaceholderText(tr(language, "stage_output_hint"))
-        self.stage_button.setText(tr(language, "browse"))
-        self.output_button.setText(tr(language, "browse"))
-        self.sources_card.title_label.setText(tr(language, "stage_sources"))
-        self.sources_hint.setText(tr(language, "stage_sources_hint"))
-        self.add_sources.setText(tr(language, "stage_add_sources"))
-        self.remove_source.setText(tr(language, "stage_remove_source"))
-        self.add_clip.setText(tr(language, "stage_add_clip"))
-        self.remove_clip.setText(tr(language, "stage_remove_clip"))
-        self.parameters.title_label.setText(tr(language, "params"))
-        self.strength_label.setText(tr(language, "strength"))
-        self.center_extraction_label.setText(tr(language, "center_extraction"))
-        self.open_mic_focus_label.setText(tr(language, "open_mic_focus"))
-        self.include_fragments_label.setText(tr(language, "stage_include_fragments"))
+    def retranslate(self) -> None:
+        self.title.setText(tr("nav_full_stage"))
+        self.files.title_label.setText(tr("stage_files"))
+        self.stage_label.setText(tr("stage_audio"))
+        self.output_label.setText(tr("output_file"))
+        self.output_edit.setPlaceholderText(tr("stage_output_hint"))
+        self.stage_button.setText(tr("browse"))
+        self.output_button.setText(tr("browse"))
+        self.sources_card.title_label.setText(tr("stage_sources"))
+        self.sources_hint.setText(tr("stage_sources_hint"))
+        self.add_sources.setText(tr("stage_add_sources"))
+        self.remove_source.setText(tr("stage_remove_source"))
+        self.add_clip.setText(tr("stage_add_clip"))
+        self.remove_clip.setText(tr("stage_remove_clip"))
+        self.parameters.title_label.setText(tr("params"))
+        self.strength_label.setText(tr("strength"))
+        self.center_extraction_label.setText(tr("center_extraction"))
+        self.open_mic_focus_label.setText(tr("open_mic_focus"))
+        self.include_fragments_label.setText(tr("stage_include_fragments"))
         for switch in (
             self.center_extraction,
             self.open_mic_focus,
             self.include_fragments,
         ):
-            switch.setOnText(tr(language, "switch_on"))
-            switch.setOffText(tr(language, "switch_off"))
-        self.center_extraction.setToolTip(tr(language, "center_extraction_tip"))
-        self.open_mic_focus.setToolTip(tr(language, "open_mic_focus_tip"))
-        self.timeline_card.title_label.setText(tr(language, "stage_timeline"))
-        self.timeline_hint.setText(tr(language, "stage_timeline_hint"))
+            switch.setOnText(tr("switch_on"))
+            switch.setOffText(tr("switch_off"))
+        self.center_extraction.setToolTip(tr("center_extraction_tip"))
+        self.open_mic_focus.setToolTip(tr("open_mic_focus_tip"))
+        self.timeline_card.title_label.setText(tr("stage_timeline"))
+        self.timeline_hint.setText(tr("stage_timeline_hint"))
         self.timeline.setHorizontalHeaderLabels(
             [
-                tr(language, "stage_clip_enabled"),
-                tr(language, "stage_clip_type"),
-                tr(language, "stage_clip_time"),
-                tr(language, "stage_source_time"),
-                tr(language, "stage_confidence"),
-                tr(language, "stage_clip_source"),
+                tr("stage_clip_enabled"),
+                tr("stage_clip_type"),
+                tr("stage_clip_time"),
+                tr("stage_source_time"),
+                tr("stage_confidence"),
+                tr("stage_clip_source"),
             ]
         )
-        self.status_card.title_label.setText(tr(language, "status_group"))
-        self.cancel_button.setText(tr(language, "cancel"))
-        self.analyze_button.setText(tr(language, "stage_analyze"))
-        self.start_button.setText(tr(language, "stage_start"))
+        self.status_card.title_label.setText(tr("status_group"))
+        self.cancel_button.setText(tr("cancel"))
+        self.analyze_button.setText(tr("stage_analyze"))
+        self.start_button.setText(tr("stage_start"))
         if self.progress.value() == 0:
-            self.status.setText(tr(language, "stage_ready"))
+            self.status.setText(tr("stage_ready"))
         if self.analysis is not None:
             self._render_timeline()
         self._sync_enhancement_controls()
 
     def _sync_enhancement_controls(self, _checked: bool | None = None) -> None:
-        center_enabled = self.center_extraction.isChecked()
-        if not center_enabled:
-            self.open_mic_focus.setChecked(False)
-        self.open_mic_focus.setEnabled(center_enabled)
+        sync_dependent_switch(self.center_extraction, self.open_mic_focus)
 
     def source_paths(self) -> tuple[Path, ...]:
         return tuple(
@@ -276,7 +277,6 @@ class FullStagePage(PageScrollArea):
         self.start_button.setEnabled(True)
         self.status.setText(
             tr(
-                self.language,
                 "stage_analysis_summary",
                 songs=len(analysis.song_clips),
                 fragments=sum(clip.kind == ClipKind.FRAGMENT for clip in analysis.clips),
@@ -293,8 +293,8 @@ class FullStagePage(PageScrollArea):
     def _select_stage(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
             self,
-            tr(self.language, "stage_audio"),
-            filter="Audio (*.wav *.flac *.mp3 *.m4a *.ogg *.opus)",
+            tr("stage_audio"),
+            filter=AUDIO_FILE_FILTER,
         )
         if not path:
             return
@@ -307,9 +307,9 @@ class FullStagePage(PageScrollArea):
     def _select_output(self) -> None:
         path, _ = QFileDialog.getSaveFileName(
             self,
-            tr(self.language, "output_file"),
+            tr("output_file"),
             self.output_edit.text(),
-            "WAV (*.wav)",
+            WAV_FILE_FILTER,
         )
         if path:
             self.output_edit.setText(path)
@@ -317,8 +317,8 @@ class FullStagePage(PageScrollArea):
     def _add_sources(self) -> None:
         paths, _ = QFileDialog.getOpenFileNames(
             self,
-            tr(self.language, "stage_sources"),
-            filter="Audio (*.wav *.flac *.mp3 *.m4a *.ogg *.opus)",
+            tr("stage_sources"),
+            filter=AUDIO_FILE_FILTER,
         )
         existing = {str(path.resolve()) for path in self.source_paths()}
         for path_text in paths:
@@ -385,11 +385,11 @@ class FullStagePage(PageScrollArea):
 
     def _add_clip(self) -> None:
         if self.analysis is None:
-            self.status.setText(tr(self.language, "stage_need_analysis"))
+            self.status.setText(tr("stage_need_analysis"))
             return
         sources = self.source_paths()
         if not sources:
-            self.status.setText(tr(self.language, "stage_need_sources"))
+            self.status.setText(tr("stage_need_sources"))
             return
         index = self.sources.currentRow()
         if not 0 <= index < len(sources):
@@ -404,7 +404,7 @@ class FullStagePage(PageScrollArea):
                 break
         length = min(30.0, limit - start)
         if length <= 0.0:
-            self.status.setText(tr(self.language, "stage_no_room_for_clip"))
+            self.status.setText(tr("stage_no_room_for_clip"))
             return
         try:
             self.analysis = add_manual_clip(
@@ -421,10 +421,10 @@ class FullStagePage(PageScrollArea):
                 ),
             )
         except (IndexError, ValueError):
-            self.status.setText(tr(self.language, "stage_invalid_edit"))
+            self.status.setText(tr("stage_invalid_edit"))
             return
         self._render_timeline()
-        self.status.setText(tr(self.language, "stage_manual_added"))
+        self.status.setText(tr("stage_manual_added"))
 
     def _remove_clip(self) -> None:
         row = self._selected_manual_row()
@@ -433,10 +433,10 @@ class FullStagePage(PageScrollArea):
         try:
             self.analysis = remove_manual_clip(self.analysis, row)
         except (IndexError, ValueError):
-            self.status.setText(tr(self.language, "stage_invalid_edit"))
+            self.status.setText(tr("stage_invalid_edit"))
             return
         self._render_timeline()
-        self.status.setText(tr(self.language, "stage_manual_removed"))
+        self.status.setText(tr("stage_manual_removed"))
 
     def _timeline_item_changed(self, item: QTableWidgetItem) -> None:
         if self._updating_timeline or self.analysis is None:
@@ -459,13 +459,13 @@ class FullStagePage(PageScrollArea):
             else:
                 return
         except ValueError:
-            self.status.setText(tr(self.language, "stage_invalid_edit"))
+            self.status.setText(tr("stage_invalid_edit"))
             self._render_timeline()
             return
         clips = list(self.analysis.clips)
         clips[row] = updated
         self.analysis = replace(self.analysis, clips=tuple(clips))
-        self.status.setText(tr(self.language, "stage_manual_updated"))
+        self.status.setText(tr("stage_manual_updated"))
         if item.column() == 0:
             self._render_timeline()
 
@@ -500,17 +500,15 @@ class FullStagePage(PageScrollArea):
                     else f"{self._clock(clip.source_start)} - {self._clock(clip.source_end)}"
                 )
                 values = (
-                    tr(self.language, type_keys[clip.kind]),
+                    tr(type_keys[clip.kind]),
                     f"{self._clock(clip.stage_start)} - {self._clock(clip.stage_end)}",
                     source_range,
-                    tr(self.language, "stage_manual_label")
+                    tr("stage_manual_label")
                     if clip.manual
                     else "—"
                     if clip.kind == ClipKind.UNMATCHED
                     else f"{clip.confidence:.0%}",
-                    tr(self.language, "stage_unmatched_label")
-                    if clip.source is None
-                    else clip.source.name,
+                    tr("stage_unmatched_label") if clip.source is None else clip.source.name,
                 )
                 for column, value in enumerate(values, start=1):
                     item = QTableWidgetItem(value)

@@ -18,8 +18,13 @@ from features.neural_separation import (
     run_neural_job,
 )
 from features.reference_removal import ReferenceJob, run_reference_job
+from shared.branding import APPLICATION_NAME, ORGANIZATION_NAME
+from shared.i18n import SUPPORTED_LANGUAGES, install_language
+from shared.jobs import SIGMA_CHOICES, STRENGTH_MAXIMUM, STRENGTH_MINIMUM, STRENGTH_RANGE
 from shared.logging import configure_logging, set_log_level
 from shared.processing import CancellationToken, ProcessingCancelled, ProgressEvent
+
+logger = logging.getLogger(__name__)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -35,9 +40,13 @@ def build_parser() -> argparse.ArgumentParser:
     reference.add_argument("accompaniment", type=Path)
     reference.add_argument("output", type=Path)
     reference.add_argument(
-        "--strength", type=int, choices=range(0, 101), default=75, metavar="0..100"
+        "--strength",
+        type=int,
+        choices=STRENGTH_RANGE,
+        default=75,
+        metavar=f"{STRENGTH_MINIMUM}..{STRENGTH_MAXIMUM}",
     )
-    reference.add_argument("--sigma", type=int, choices=(1, 3, 8, 16), default=3)
+    reference.add_argument("--sigma", type=int, choices=SIGMA_CHOICES, default=3)
     reference.add_argument("--align", action=argparse.BooleanOptionalAction, default=True)
     reference.add_argument(
         "--center-extraction",
@@ -51,7 +60,7 @@ def build_parser() -> argparse.ArgumentParser:
         default=False,
         help="preserve a quiet open mic while suppressing closed-mic sections; requires --center-extraction",
     )
-    reference.add_argument("--lang", choices=("zh_cn", "en_us", "ja_jp", "ko_kr"), default="zh_cn")
+    reference.add_argument("--lang", choices=SUPPORTED_LANGUAGES, default=SUPPORTED_LANGUAGES[0])
 
     neural = commands.add_parser("ai", help="MDX-Net vocal extraction")
     neural.add_argument("song", type=Path)
@@ -60,12 +69,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--model", choices=[entry.id for entry in model_catalog()], default=DEFAULT_MODEL_ID
     )
     neural.add_argument("--models-dir", type=Path)
-    neural.add_argument("--lang", choices=("zh_cn", "en_us", "ja_jp", "ko_kr"), default="zh_cn")
+    neural.add_argument("--lang", choices=SUPPORTED_LANGUAGES, default=SUPPORTED_LANGUAGES[0])
     return parser
 
 
 def _print_progress(event: ProgressEvent) -> None:
-    logging.getLogger(__name__).info("progress: %3d%%  %s", event.value, event.message)
+    logger.info("progress: %3d%%  %s", event.value, event.message)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -80,13 +89,14 @@ def main(argv: list[str] | None = None) -> int:
 
         return run_gui(args.selftest)
     app = QCoreApplication.instance() or QCoreApplication(sys.argv[:1])
-    app.setApplicationName("Purivox")
-    app.setOrganizationName("Purivox")
+    app.setApplicationName(APPLICATION_NAME)
+    app.setOrganizationName(ORGANIZATION_NAME)
     with redirect_stdout(io.StringIO()):
         from shared.config import cfg, load_config
 
     load_config()
     set_log_level(str(cfg.log_level.value))
+    install_language(args.lang)
     token = CancellationToken()
     previous_handler = signal.signal(signal.SIGINT, lambda *_unused: token.cancel())
     try:
@@ -98,26 +108,25 @@ def main(argv: list[str] | None = None) -> int:
                 strength=args.strength,
                 sigma=args.sigma,
                 auto_align=args.align,
-                language=args.lang,
                 center_extraction=args.center_extraction,
                 open_mic_focus=args.open_mic_focus,
             )
             result = run_reference_job(job, token, _print_progress)
         else:
             output_dir = args.output_dir or args.song.expanduser().resolve().parent
-            job = NeuralJob(args.song, output_dir, args.model, args.models_dir, args.lang)
+            job = NeuralJob(args.song, output_dir, args.model, args.models_dir)
             result = run_neural_job(job, token, _print_progress)
         for output in result.outputs:
             print(output)
         return 0
     except ProcessingCancelled:
-        logging.getLogger(__name__).warning("cancelled")
+        logger.warning("cancelled")
         return 130
     except (FileNotFoundError, KeyError, ValueError) as error:
-        logging.getLogger(__name__).error("%s", error)
+        logger.error("%s", error)
         return 2
     except Exception as error:
-        logging.getLogger(__name__).exception("unhandled processing error: %s", error)
+        logger.exception("unhandled processing error: %s", error)
         return 1
     finally:
         signal.signal(signal.SIGINT, previous_handler)

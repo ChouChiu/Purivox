@@ -33,11 +33,11 @@ class SettingsPage(PageScrollArea):
         self.layout.addWidget(self.update_card)
         self.layout.addStretch()
 
-    def retranslate(self, language: str) -> None:
-        self.title.setText(tr(language, "nav_settings"))
-        self.language_card.card.setTitle(tr(language, "lang_label"))
-        self.theme_card.card.setTitle(tr(language, "theme_label"))
-        self.log_level_card.card.setTitle(tr(language, "log_level_label"))
-        self.log_level_card.card.setContent(tr(language, "log_level_description"))
-        self.update_card.setTitle(tr(language, "update_check"))
-        self.update_card.setContent(tr(language, "update_unavailable"))
+    def retranslate(self) -> None:
+        self.title.setText(tr("nav_settings"))
+        self.language_card.card.setTitle(tr("lang_label"))
+        self.theme_card.card.setTitle(tr("theme_label"))
+        self.log_level_card.card.setTitle(tr("log_level_label"))
+        self.log_level_card.card.setContent(tr("log_level_description"))
+        self.update_card.setTitle(tr("update_check"))
+        self.update_card.setContent(tr("update_unavailable"))

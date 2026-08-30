@@ -31,7 +31,13 @@ from features.reference_removal.preview import SeekSlider
 from shared.audio import AudioStats
 from shared.config import cfg
 from shared.i18n import tr
-from shared.ui import FormCard, PageScrollArea
+from shared.ui import (
+    AUDIO_FILE_FILTER,
+    WAV_FILE_FILTER,
+    FormCard,
+    PageScrollArea,
+    sync_dependent_switch,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +50,6 @@ class MrPage(PageScrollArea):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("mrPage")
-        self.language = "zh_cn"
         self.title = TitleLabel()
         self.layout.addWidget(self.title)
         self.files = FormCard()
@@ -193,51 +198,47 @@ class MrPage(PageScrollArea):
         self.player.playbackStateChanged.connect(lambda _state: self._update_preview_button())
         self.player.errorOccurred.connect(self._preview_error)
 
-    def retranslate(self, language: str) -> None:
-        self.language = language
-        self.title.setText(tr(language, "mr_single_title"))
-        self.files.title_label.setText(tr(language, "file_select"))
-        self.parameters.title_label.setText(tr(language, "params"))
-        self.status_card.title_label.setText(tr(language, "status_group"))
-        self.preview_card.title_label.setText(tr(language, "preview_title"))
-        self.data_card.title_label.setText(tr(language, "audio_data_title"))
-        self.song_label.setText(tr(language, "mr_audio_label"))
-        self.acc_label.setText(tr(language, "acc_label"))
-        self.output_label.setText(tr(language, "output_file"))
-        self.output_edit.setPlaceholderText(tr(language, "output_name_hint"))
-        self.strength_label.setText(tr(language, "strength"))
-        self.center_extraction_label.setText(tr(language, "center_extraction"))
-        self.open_mic_focus_label.setText(tr(language, "open_mic_focus"))
+    def retranslate(self) -> None:
+        self.title.setText(tr("mr_single_title"))
+        self.files.title_label.setText(tr("file_select"))
+        self.parameters.title_label.setText(tr("params"))
+        self.status_card.title_label.setText(tr("status_group"))
+        self.preview_card.title_label.setText(tr("preview_title"))
+        self.data_card.title_label.setText(tr("audio_data_title"))
+        self.song_label.setText(tr("mr_audio_label"))
+        self.acc_label.setText(tr("acc_label"))
+        self.output_label.setText(tr("output_file"))
+        self.output_edit.setPlaceholderText(tr("output_name_hint"))
+        self.strength_label.setText(tr("strength"))
+        self.center_extraction_label.setText(tr("center_extraction"))
+        self.open_mic_focus_label.setText(tr("open_mic_focus"))
         for button in (self.song_button, self.acc_button, self.output_button):
-            button.setText(tr(language, "browse"))
-        self.auto_find.setOnText(tr(language, "auto_find_on"))
-        self.auto_find.setOffText(tr(language, "auto_find_off"))
+            button.setText(tr("browse"))
+        self.auto_find.setOnText(tr("auto_find_on"))
+        self.auto_find.setOffText(tr("auto_find_off"))
         for switch in (self.center_extraction, self.open_mic_focus):
-            switch.setOnText(tr(language, "switch_on"))
-            switch.setOffText(tr(language, "switch_off"))
-        self.center_extraction.setToolTip(tr(language, "center_extraction_tip"))
-        self.center_extraction_label.setToolTip(tr(language, "center_extraction_tip"))
-        self.open_mic_focus.setToolTip(tr(language, "open_mic_focus_tip"))
-        self.open_mic_focus_label.setToolTip(tr(language, "open_mic_focus_tip"))
-        self.cancel_button.setText(tr(language, "cancel"))
-        self.start_button.setText(tr(language, "start"))
-        self.preview_stop.setText(tr(language, "preview_stop"))
-        self.preview_volume_label.setText(tr(language, "preview_volume"))
+            switch.setOnText(tr("switch_on"))
+            switch.setOffText(tr("switch_off"))
+        self.center_extraction.setToolTip(tr("center_extraction_tip"))
+        self.center_extraction_label.setToolTip(tr("center_extraction_tip"))
+        self.open_mic_focus.setToolTip(tr("open_mic_focus_tip"))
+        self.open_mic_focus_label.setToolTip(tr("open_mic_focus_tip"))
+        self.cancel_button.setText(tr("cancel"))
+        self.start_button.setText(tr("start"))
+        self.preview_stop.setText(tr("preview_stop"))
+        self.preview_volume_label.setText(tr("preview_volume"))
         for key, label in self.stat_labels.items():
-            label.setText(tr(language, f"audio_{key}"))
+            label.setText(tr(f"audio_{key}"))
         self._update_preview_button()
         self._render_stats()
         if self._result_path is None:
-            self.preview_status.setText(tr(language, "preview_empty"))
+            self.preview_status.setText(tr("preview_empty"))
         if self.progress.value() == 0:
-            self.status.setText(tr(language, "ready"))
+            self.status.setText(tr("ready"))
         self._sync_enhancement_controls()
 
     def _sync_enhancement_controls(self, _checked: bool | None = None) -> None:
-        center_enabled = self.center_extraction.isChecked()
-        if not center_enabled:
-            self.open_mic_focus.setChecked(False)
-        self.open_mic_focus.setEnabled(center_enabled)
+        sync_dependent_switch(self.center_extraction, self.open_mic_focus)
 
     def set_running(self, running: bool) -> None:
         self.start_button.setEnabled(not running)
@@ -259,8 +260,8 @@ class MrPage(PageScrollArea):
     def _select_song(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
             self,
-            tr(self.language, "mr_audio_label"),
-            filter="Audio (*.wav *.flac *.mp3 *.m4a *.ogg *.opus)",
+            tr("mr_audio_label"),
+            filter=AUDIO_FILE_FILTER,
         )
         if path:
             self.clear_result()
@@ -274,8 +275,8 @@ class MrPage(PageScrollArea):
     def _select_acc(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
             self,
-            tr(self.language, "acc_label"),
-            filter="Audio (*.wav *.flac *.mp3 *.m4a *.ogg *.opus)",
+            tr("acc_label"),
+            filter=AUDIO_FILE_FILTER,
         )
         if path:
             self.clear_result()
@@ -283,7 +284,7 @@ class MrPage(PageScrollArea):
 
     def _select_output(self) -> None:
         path, _ = QFileDialog.getSaveFileName(
-            self, tr(self.language, "output_file"), self.output_edit.text(), "WAV (*.wav)"
+            self, tr("output_file"), self.output_edit.text(), WAV_FILE_FILTER
         )
         if path:
             self.clear_result()
@@ -351,7 +352,7 @@ class MrPage(PageScrollArea):
         self.preview_seek.setEnabled(False)
         self.preview_play.setEnabled(False)
         self.preview_stop.setEnabled(False)
-        self.preview_status.setText(tr(self.language, "preview_empty"))
+        self.preview_status.setText(tr("preview_empty"))
         self.preview_status.setToolTip("")
         self.preview_time.setText("00:00 / 00:00")
         self._render_stats()
@@ -407,11 +408,11 @@ class MrPage(PageScrollArea):
             if self.player.playbackState() == QMediaPlayer.PlaybackState.PlayingState
             else "preview_play"
         )
-        self.preview_play.setText(tr(self.language, key))
+        self.preview_play.setText(tr(key))
 
     def _preview_error(self, *_unused: object) -> None:
         if self._result_path is not None:
-            self.preview_status.setText(tr(self.language, "preview_error"))
+            self.preview_status.setText(tr("preview_error"))
 
     @staticmethod
     def _db(value: float) -> str:
@@ -430,11 +431,11 @@ class MrPage(PageScrollArea):
                 value.setText("--")
             return
         channels = (
-            tr(self.language, "audio_mono")
+            tr("audio_mono")
             if stats.channels == 1
-            else tr(self.language, "audio_stereo")
+            else tr("audio_stereo")
             if stats.channels == 2
-            else tr(self.language, "audio_channel_count", count=stats.channels)
+            else tr("audio_channel_count", count=stats.channels)
         )
         values = {
             "duration": self._clock(round(stats.duration_seconds * 1000)),

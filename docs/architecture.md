@@ -19,7 +19,7 @@ src/features/                    各功能自包含的页面、模型与处理�
 ├── neural_separation/           MDX-Net 模型、模型仓库与推理
 ├── home/                        首页
 └── settings/                    设置页
-src/shared/                      音频、频谱、配置、日志、任务协议和通用控件
+src/shared/                      音频、频谱、任务参数校验、配置、日志、任务协议和通用控件
 src/resources/                   翻译和模型规格等只读资源
 ```
 
@@ -43,6 +43,11 @@ flowchart LR
 公共数据模型按“由谁消费”归属，而不是按最早出现的位置归属。例如 `AudioStats` 同时用于单曲和完整舞台，定义在
 `shared.audio`；`ReferenceJob` 只服务单曲参考对消，保留在 `features/reference_removal`。功能模块之间不通过
 重导出公共类型建立隐式依赖。
+
+同一条规则适用于代码：被多个功能重复实现的取值和算法下沉到 `shared`，而不是在功能之间互相导入。
+单曲与完整舞台任务共用 `shared.jobs.validate_reference_settings()` 校验强度、统计窗口和中置处理组合；
+两者的起音特征共用 `shared.dsp.log_flux_bands()`；文件对话框过滤器与自动查找的扩展名共用
+`shared.audio.AUDIO_EXTENSIONS`。
 
 ## 任务执行模型
 
@@ -74,14 +79,16 @@ CLI 创建相同的任务数据类并同步调用同一处理函数。`SIGINT` �
 公共音频类型 `AudioData` 使用 `[声道, 帧]` 排列的 `float32` 平面数据。长音频不常驻普通 NumPy 数组，而是写入临时
 `np.memmap`：
 
-- 解码、统计和多数复制操作以 262,144 帧为一块。
+- 解码、统计、重采样、写出和多数复制操作以 262,144 帧为一块（`shared.audio.BLOCK_FRAMES`）。
 - libsndfile 无法读取的格式回退到 Qt Multimedia 解码。
 - 重采样使用 soxr 的高质量流式接口。
 - 单声道输入会扩展为双声道；多于两个声道时处理前取前两个声道。
 - 临时音频通过 `cleanup()` 关闭并删除；长循环可调用 `release_pages()` 释放已处理映射页。
 
-`shared.audio.analysis` 提供分块复制、峰值/RMS 统计和跨工作流共用的 `AudioStats`。这些操作使用相同的
-262,144 帧块大小并响应取消，避免每条管线各自维护一套容易漂移的实现。
+`shared.audio.analysis` 提供分块复制、峰值/RMS 统计和跨工作流共用的 `AudioStats`。块大小只在
+`shared.audio.BLOCK_FRAMES` 定义一次，由所有流式循环共用，避免每条管线各自维护一套容易漂移的实现。
+映射页的查找与释放同样只有 `shared.audio.release_mapped_pages()` 一份实现，`AudioData` 与参考对消
+的分块循环都调用它。
 
 WAV 写出先生成同目录临时文件，成功后使用 `os.replace` 原子替换目标。取消或异常不会留下半写入的正式输出。
 
@@ -130,7 +137,10 @@ Hi-Res 在这里描述导出文件的采样率与位深，不代表低采样率�
 ## 配置、翻译与日志
 
 - 配置由 QFluentWidgets 的 `QConfig` 持久化。
-- 翻译文件位于 `src/resources/i18n/`，采用扁平键；中文、英文、日文、韩文的键集合必须完全一致。
+- 翻译使用 Qt 原生体系：`src/resources/i18n/*.ts`（Qt Linguist XML）经 `pyside6-lrelease` 编译成
+  `*.qm`，由 `QTranslator` 加载并安装到 `QCoreApplication`。键按标识符组织，四种语言的键集合必须完全一致。
+- `shared.i18n.tr(key, **values)` 通过 `QCoreApplication.translate()` 取当前安装语言的文本，再填充
+  `{name}` 占位符；未知键返回键名本身。语言是应用级状态，任务对象不再携带语言字段。
 - 日志使用单行格式 `日期 时间 [级别] 模块: 消息`，Qt 与 FFmpeg 消息也会进入统一日志系统。
 - GUI 切换语言时，各页面通过 `retranslate()` 更新控件文本和下拉列表。
 - 各处理管线通过 `shared.progress.report_progress()` 统一翻译并生成 `ProgressEvent`，避免每个功能重复拼装进度协议。

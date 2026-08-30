@@ -23,7 +23,8 @@ src/features/                    Self-contained pages, models, and processing lo
 ├── neural_separation/           MDX-Net models, model store, and inference
 ├── home/                        Home page
 └── settings/                    Settings page
-src/shared/                      Audio, spectra, configuration, logging, task protocol, and widgets
+src/shared/                      Audio, spectra, job validation, configuration, logging,
+                                 task protocol, and widgets
 src/resources/                   Read-only resources such as translations and model specifications
 ```
 
@@ -51,6 +52,13 @@ appeared. `AudioStats`, for example, is used by both Single and Full Stage and i
 `shared.audio`; `ReferenceJob` serves only single-track reference cancellation and remains in
 `features/reference_removal`. Feature modules must not create implicit dependencies by
 re-exporting shared types from one another.
+
+The same rule applies to code: values and algorithms that more than one feature would otherwise
+reimplement move down into `shared` rather than being imported across features. Single-track and
+full-stage jobs validate strength, statistics window, and the center-processing combination through
+`shared.jobs.validate_reference_settings()`; both derive onset features from
+`shared.dsp.log_flux_bands()`; the file-dialog filters and the automatic accompaniment finder share
+`shared.audio.AUDIO_EXTENSIONS`.
 
 ## Task Execution Model
 
@@ -88,7 +96,8 @@ output loops call `raise_if_cancelled()` periodically, so cancellation is cooper
 The shared `AudioData` type stores planar `float32` data in `[channel, frame]` order. Long audio is
 written to temporary `np.memmap` storage instead of remaining in ordinary NumPy arrays:
 
-- Decoding, analysis, and most copy operations use blocks of 262,144 frames.
+- Decoding, analysis, resampling, writing, and most copy operations use blocks of 262,144
+  frames (`shared.audio.BLOCK_FRAMES`).
 - Formats that libsndfile cannot read fall back to Qt Multimedia decoding.
 - Resampling uses soxr's high-quality streaming interface.
 - Mono input is expanded to stereo; inputs with more than two channels use the first two channels
@@ -97,8 +106,11 @@ written to temporary `np.memmap` storage instead of remaining in ordinary NumPy 
   `release_pages()` to release processed mapped pages.
 
 `shared.audio.analysis` provides chunked copying, peak/RMS analysis, and the `AudioStats` model
-shared across workflows. These operations use the same 262,144-frame block size and respond to
-cancellation, avoiding separate implementations that could drift between pipelines.
+shared across workflows. The block size is defined once as `shared.audio.BLOCK_FRAMES` and reused by
+every streaming loop; finding and releasing mapped pages likewise has a single implementation,
+`shared.audio.release_mapped_pages()`, called by both `AudioData` and the reference-cancellation
+block loop. All of these operations respond to cancellation, avoiding separate implementations that
+could drift between pipelines.
 
 WAV output is first written to a temporary file in the destination directory, then atomically
 replaces the destination with `os.replace`. Cancellation or failure therefore does not leave a
@@ -157,8 +169,12 @@ claim of Hi-Res Audio Logo certification.
 ## Configuration, Translation, and Logging
 
 - QFluentWidgets `QConfig` persists application configuration.
-- Translation files are stored in `src/resources/i18n/` with flat keys. Chinese, English,
-  Japanese, and Korean must have identical key sets.
+- Translation uses the native Qt system: `src/resources/i18n/*.ts` (Qt Linguist XML) is compiled by
+  `pyside6-lrelease` into `*.qm`, which `QTranslator` loads and installs into `QCoreApplication`.
+  Catalogues are keyed by identifier, and all four languages must have identical key sets.
+- `shared.i18n.tr(key, **values)` resolves through `QCoreApplication.translate()` against the
+  installed language and then fills `{name}` placeholders; an unknown key returns the key itself.
+  Language is application state, so job objects no longer carry a language field.
 - Logs use the single-line format `date time [level] module: message`; Qt and FFmpeg messages also
   enter the unified logging system.
 - When the GUI language changes, each page updates its widget text and combo boxes through

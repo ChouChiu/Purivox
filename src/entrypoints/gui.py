@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import logging
 import signal
 import sys
 from contextlib import redirect_stdout
@@ -9,16 +10,19 @@ from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import QApplication
 
 from app.version import __version__
-from shared.branding import application_icon
+from shared.branding import APPLICATION_NAME, ORGANIZATION_NAME, application_icon
+from shared.i18n import install_language
 from shared.logging import configure_logging, set_log_level
+
+logger = logging.getLogger(__name__)
 
 
 def run_gui(selftest: bool = False) -> int:
     configure_logging()
     app = QApplication.instance() or QApplication(sys.argv[:1])
-    app.setApplicationName("Purivox")
+    app.setApplicationName(APPLICATION_NAME)
     app.setApplicationVersion(__version__)
-    app.setOrganizationName("Purivox")
+    app.setOrganizationName(ORGANIZATION_NAME)
     app.setWindowIcon(application_icon())
     # QFluentWidgets prints a Pro advertisement while its package is imported.
     # Keep stdout reserved for CLI result data even in standalone builds.
@@ -27,9 +31,8 @@ def run_gui(selftest: bool = False) -> int:
 
     load_config()
     set_log_level(str(cfg.log_level.value))
-    import logging
-
-    logging.getLogger(__name__).info("starting GUI")
+    install_language(str(cfg.language.value))
+    logger.info("starting GUI")
     from app.main_window import MainWindow
 
     window = MainWindow()

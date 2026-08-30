@@ -34,7 +34,7 @@ from features.reference_removal.page import MrPage
 from features.settings import SettingsPage
 from shared.branding import application_icon
 from shared.config import cfg
-from shared.i18n import tr
+from shared.i18n import install_language, tr
 from shared.logging import set_log_level
 from shared.processing import ProcessingOperation
 
@@ -45,8 +45,8 @@ class MainWindow(FluentWindow):
     def __init__(self):
         super().__init__()
         self.setWindowIcon(application_icon())
-        self.language = str(cfg.language.value)
-        self.jobs = JobPresenter(self, lambda: self.language)
+        install_language(str(cfg.language.value))
+        self.jobs = JobPresenter(self)
         self.close_pending = False
         self.home = HomePage(self)
         self.mr = MrPage()
@@ -86,7 +86,7 @@ class MainWindow(FluentWindow):
         self.jobs.finished.connect(self._job_finished)
 
     def _language_changed(self, value: object) -> None:
-        self.language = str(value)
+        install_language(str(value))
         self.retranslate()
 
     def _open_mr(self) -> None:
@@ -115,21 +115,21 @@ class MainWindow(FluentWindow):
         return super().event(event)
 
     def retranslate(self) -> None:
-        self.setWindowTitle(tr(self.language, "window_title"))
+        self.setWindowTitle(tr("window_title"))
         for page in (self.home, self.mr_workspace, self.ai, self.settings):
-            page.retranslate(self.language)
+            page.retranslate()
         for navigation, key in (
             (self.home_nav, "nav_home"),
             (self.mr_nav, "nav_mr"),
             (self.ai_nav, "nav_ai"),
             (self.settings_nav, "nav_settings"),
         ):
-            navigation.setText(tr(self.language, key))
+            navigation.setText(tr(key))
 
     def _warning(self, key: str) -> None:
         InfoBar.warning(
-            tr(self.language, "warn_title"),
-            tr(self.language, key),
+            tr("warn_title"),
+            tr(key),
             duration=3500,
             position=InfoBarPosition.TOP_RIGHT,
             parent=self,
@@ -141,10 +141,10 @@ class MainWindow(FluentWindow):
         match = find_best_match(Path(song))
         if match.found:
             self.mr.acc_edit.setText(str(match.path))
-            self.mr.status.setText(tr(self.language, "auto_found"))
+            self.mr.status.setText(tr("auto_found"))
         else:
             self.mr.acc_edit.clear()
-            self.mr.status.setText(tr(self.language, "auto_not_found"))
+            self.mr.status.setText(tr("auto_not_found"))
 
     def start_reference(self) -> None:
         if self.jobs.running:
@@ -175,7 +175,6 @@ class MainWindow(FluentWindow):
                 strength=self.mr.strength.value(),
                 sigma=_GUI_REFERENCE_SIGMA_SECONDS,
                 auto_align=True,
-                language=self.language,
                 center_extraction=self.mr.center_extraction.isChecked(),
                 open_mic_focus=self.mr.open_mic_focus.isChecked(),
             )
@@ -202,7 +201,7 @@ class MainWindow(FluentWindow):
             return
         cfg.set(cfg.model, model_id)
         song = Path(self.ai.song_edit.text())
-        job = NeuralJob(song, song.resolve().parent, model_id, language=self.language)
+        job = NeuralJob(song, song.resolve().parent, model_id)
         self._start_worker(self.ai, partial(run_neural_job, job))
 
     def _full_stage_job(self) -> FullStageJob | None:
@@ -224,7 +223,6 @@ class MainWindow(FluentWindow):
                 output=output,
                 strength=self.full_stage.strength.value(),
                 sigma=_GUI_REFERENCE_SIGMA_SECONDS,
-                language=self.language,
                 include_fragments=self.full_stage.include_fragments.isChecked(),
                 auto_align=True,
                 center_extraction=self.full_stage.center_extraction.isChecked(),
@@ -265,6 +263,9 @@ class MainWindow(FluentWindow):
         page: MrPage | AiPage | FullStagePage,
         operation: ProcessingOperation,
     ) -> None:
+        # Kept as the single interception point for starting a job: the GUI
+        # tests replace it to assert that validation rejects a job before any
+        # thread is created.
         self.jobs.start(page, operation)
 
     def _job_finished(self) -> None:

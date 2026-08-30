@@ -432,10 +432,10 @@ def analyze_full_stage(
 ) -> FullStageAnalysis:
     stage_audio = None
     try:
-        report_progress(progress, 0, job.language, "stage_loading")
+        report_progress(progress, 0, "stage_loading")
         stage_audio = read_audio(job.stage, token)
         duration = stage_audio.frames / stage_audio.sample_rate
-        report_progress(progress, 8, job.language, "stage_fingerprinting")
+        report_progress(progress, 8, "stage_fingerprinting")
         stage_proxy = _proxy(stage_audio, token)
         stage_features = _features(stage_proxy)
         stage_audio.cleanup()
@@ -450,7 +450,6 @@ def analyze_full_stage(
             report_progress(
                 progress,
                 value,
-                job.language,
                 "stage_matching_source",
                 current=index + 1,
                 total=len(source_paths),
@@ -489,7 +488,7 @@ def analyze_full_stage(
             duration,
         )
         clips = _timeline(duration, songs + fragments)
-        report_progress(progress, 100, job.language, "stage_analysis_done", count=len(songs))
+        report_progress(progress, 100, "stage_analysis_done", count=len(songs))
         logger.info(
             "full-stage analysis completed: stage=%s songs=%d fragments=%d missing=%d",
             job.stage,

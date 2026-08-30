@@ -88,21 +88,21 @@ class HomePage(PageScrollArea):
         self.mr_card.open_button.clicked.connect(self.mr_requested.emit)
         self.ai_card.open_button.clicked.connect(self.ai_requested.emit)
 
-    def retranslate(self, language: str) -> None:
-        self.title.setText(tr(language, "home_greeting"))
-        self.intro.setText(tr(language, "home_intro"))
-        self.section_title.setText(tr(language, "home_choose_title"))
-        self.section_hint.setText(tr(language, "home_choose_hint"))
+    def retranslate(self) -> None:
+        self.title.setText(tr("home_greeting"))
+        self.intro.setText(tr("home_intro"))
+        self.section_title.setText(tr("home_choose_title"))
+        self.section_hint.setText(tr("home_choose_hint"))
 
-        self.mr_card.title.setText(tr(language, "nav_mr"))
-        self.mr_card.meta.setText(tr(language, "home_mr_meta"))
-        self.mr_card.description.setText(tr(language, "home_mr_description"))
-        self.mr_card.open_button.setText(tr(language, "home_open_mr"))
+        self.mr_card.title.setText(tr("nav_mr"))
+        self.mr_card.meta.setText(tr("home_mr_meta"))
+        self.mr_card.description.setText(tr("home_mr_description"))
+        self.mr_card.open_button.setText(tr("home_open_mr"))
 
-        self.ai_card.title.setText(tr(language, "nav_ai"))
-        self.ai_card.meta.setText(tr(language, "home_ai_meta"))
-        self.ai_card.description.setText(tr(language, "home_ai_description"))
-        self.ai_card.open_button.setText(tr(language, "home_open_ai"))
+        self.ai_card.title.setText(tr("nav_ai"))
+        self.ai_card.meta.setText(tr("home_ai_meta"))
+        self.ai_card.description.setText(tr("home_ai_description"))
+        self.ai_card.open_button.setText(tr("home_open_ai"))
 
         self.mr_card.setAccessibleName(self.mr_card.title.text())
         self.ai_card.setAccessibleName(self.ai_card.title.text())

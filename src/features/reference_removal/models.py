@@ -14,7 +14,6 @@ class ReferenceJob:
     strength: int = 75
     sigma: int = 3
     auto_align: bool = True
-    language: str = "zh_cn"
     center_extraction: bool = False
     open_mic_focus: bool = False
 

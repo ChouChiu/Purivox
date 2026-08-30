@@ -119,7 +119,7 @@ def run_full_stage_job(
 
     stage = output = hi_res_output = None
     try:
-        report_progress(progress, 31, job.language, "stage_render_loading")
+        report_progress(progress, 31, "stage_render_loading")
         stage = read_audio(job.stage, token).stereo()
         output = create_pcm_audio(stage.channels, stage.frames, stage.sample_rate)
         copy_audio(stage, output, token)
@@ -128,7 +128,6 @@ def run_full_stage_job(
             report_progress(
                 progress,
                 35 + round(48 * index / max(len(matched), 1)),
-                job.language,
                 "stage_render_clip",
                 current=index + 1,
                 total=len(matched),
@@ -213,15 +212,15 @@ def run_full_stage_job(
                     if audio is not None:
                         audio.cleanup()
 
-        report_progress(progress, 84, job.language, "preparing_hi_res")
+        report_progress(progress, 84, "preparing_hi_res")
         hi_res_output = prepare_hi_res_output(output, token)
-        report_progress(progress, 86, job.language, "analyzing_output")
+        report_progress(progress, 86, "analyzing_output")
         stats = analyze_audio(hi_res_output, HI_RES_BIT_DEPTH, token)
         output.release_pages()
-        report_progress(progress, 91, job.language, "saving")
+        report_progress(progress, 91, "saving")
         write_wav_atomic(job.output, hi_res_output, HI_RES_BIT_DEPTH, token)
         stats = replace(stats, file_size=job.output.stat().st_size)
-        report_progress(progress, 100, job.language, "done_status", path=job.output)
+        report_progress(progress, 100, "done_status", path=job.output)
         logger.info("full-stage render completed: %s", job.output.resolve())
         return FullStageResult(analysis, (job.output.resolve(),), (stats,))
     finally:

@@ -58,7 +58,7 @@ def test_home_page_presents_mr_workspace_and_ai(qtbot):
     load_config()
     window = MainWindow()
     qtbot.addWidget(window)
-    window.home.retranslate("zh_cn")
+    window.home.retranslate()
 
     assert window.home.section_title.text() == "选择处理方式"
     meta = window.home.mr_card.meta.text()
@@ -78,7 +78,7 @@ def test_home_page_presents_mr_workspace_and_ai(qtbot):
 def test_full_stage_page_orders_sources_and_renders_analysis(qtbot, tmp_path: Path):
     page = FullStagePage()
     qtbot.addWidget(page)
-    page.retranslate("zh_cn")
+    page.retranslate()
     for name in ("first.wav", "second.wav"):
         path = (tmp_path / name).resolve()
         item = QListWidgetItem(path.name)
@@ -122,7 +122,7 @@ def test_full_stage_page_adds_and_removes_a_manual_clip(qtbot, tmp_path: Path):
     """Spliced backing tracks need timeline rows the matcher cannot produce."""
     page = FullStagePage()
     qtbot.addWidget(page)
-    page.retranslate("zh_cn")
+    page.retranslate()
     source = (tmp_path / "song.wav").resolve()
     item = QListWidgetItem(source.name)
     item.setData(Qt.ItemDataRole.UserRole, str(source))
@@ -161,7 +161,7 @@ def test_full_stage_page_adds_and_removes_a_manual_clip(qtbot, tmp_path: Path):
 def test_full_stage_page_will_not_remove_a_detected_clip(qtbot, tmp_path: Path):
     page = FullStagePage()
     qtbot.addWidget(page)
-    page.retranslate("zh_cn")
+    page.retranslate()
     source = (tmp_path / "song.wav").resolve()
     page.set_analysis(
         FullStageAnalysis(
@@ -295,7 +295,7 @@ def test_mr_output_rename_preview_and_audio_data(qtbot, tmp_path: Path):
     page = MrPage()
     qtbot.addWidget(page)
     assert page.audio_output.device().id() == QMediaDevices.defaultAudioOutput().id()
-    page.retranslate("zh_cn")
+    page.retranslate()
     page.song_edit.setText(str(tmp_path / "concert.wav"))
     page.output_edit.setText("自定义消音结果")
     output = page.normalized_output_path()
@@ -374,7 +374,7 @@ def test_long_output_path_does_not_expand_page_width(qtbot, tmp_path: Path):
     page.resize(800, 700)
     page.show()
     qtbot.waitExposed(page)
-    page.retranslate("zh_cn")
+    page.retranslate()
     QApplication.processEvents()
     baseline = page.content.sizeHint().width()
     long_path = tmp_path.joinpath(*(["very-long-directory-name"] * 40), "result.wav")

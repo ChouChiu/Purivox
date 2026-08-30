@@ -31,9 +31,13 @@ uv sync --locked --group deploy
 - 公共基础设施放在 `shared`；功能专属页面、模型和处理逻辑放在对应 `features/<功能>/`。
 - 跨功能编排放在 `app`，不要为了复用而让功能包互相导入。
 - 被多个功能消费的数据模型应下沉到 `shared`；只在单个功能内部使用的模型不得为了方便从别的功能重导出。
+- 常量、取值范围和算法同理：同一个取值若出现在两个功能或 GUI 与 CLI 中，应在 `shared` 定义一次再引用，
+  例如 `shared.audio.BLOCK_FRAMES`、`shared.audio.AUDIO_EXTENSIONS`、`shared.jobs.SIGMA_CHOICES`、
+  `shared.i18n.SUPPORTED_LANGUAGES` 和 `shared.logging.LOG_LEVELS`。
 - Qt 后台任务统一由 `app/job_presenter.py` 协调页面状态，再交给 `app/job_runner.py` 管理线程；页面和业务管线不得自行创建线程。
 - 页面中的独立交互控件拆成同功能包内的小模块，例如试听跳转控件位于 `reference_removal/preview.py`。
-- 长音频使用 `create_pcm_audio` 与分块循环，不要把整个文件复制到普通内存数组。
+- 长音频使用 `create_pcm_audio` 与分块循环（块大小取 `shared.audio.BLOCK_FRAMES`），不要把整个文件
+  复制到普通内存数组；映射页用 `shared.audio.release_mapped_pages()` 释放。
 - 可取消循环必须定期调用 `CancellationToken.raise_if_cancelled()`，且不得吞掉取消异常。
 - 输出使用 `write_wav_atomic`，不要直接覆盖目标文件。
 - 所有产品管线在写出前使用 `prepare_hi_res_output`，确保输出为至少 96 kHz、24-bit PCM WAV；不得把升采样描述为新增音频细节。
@@ -43,17 +47,35 @@ Ruff 行宽为 100，启用 E、F、I、UP、B、SIM 和 RUF 规则，E501 由�
 
 ## 翻译与配置
 
-界面字符串位于：
+界面字符串使用 Qt Linguist 的 `.ts`（XML）作为可编辑来源，编译产物 `.qm` 由 `QTranslator` 加载：
 
 ```text
-src/resources/i18n/zh_cn.json
-src/resources/i18n/en_us.json
-src/resources/i18n/ja_jp.json
-src/resources/i18n/ko_kr.json
+src/resources/i18n/zh_cn.ts   src/resources/i18n/zh_cn.qm
+src/resources/i18n/en_us.ts   src/resources/i18n/en_us.qm
+src/resources/i18n/ja_jp.ts   src/resources/i18n/ja_jp.qm
+src/resources/i18n/ko_kr.ts   src/resources/i18n/ko_kr.qm
 ```
 
-增加、删除或重命名翻译键时必须同步修改四个文件；测试会检查键集合完全一致。调用
-`tr(language, key, **values)` 时不得依赖“未知键返回键名”的回退行为。
+`.ts` 采用按键索引而非按原文索引：`<source>` 是 `nav_mr` 这样的短标识，`<translation>` 是各语言文本，
+四个文件同属 `Purivox` 这一个 context。因此中文改词不会牵动其他语言的条目，`pyside6-lupdate` 也不适用
+（它按源码中的字面量提取），翻译条目由人工维护。
+
+修改任一 `.ts` 后必须重新编译，并把 `.ts` 与 `.qm` 一起提交：
+
+```bash
+for locale in zh_cn en_us ja_jp ko_kr; do
+  uv run --locked pyside6-lrelease "src/resources/i18n/$locale.ts" \
+    -qm "src/resources/i18n/$locale.qm"
+done
+```
+
+增加、删除或重命名翻译键时必须同步修改四个 `.ts`；测试会检查键集合完全一致、`.qm` 与 `.ts` 未过期，
+并且源码中出现的每个字面量键都存在于所有语言。调用 `tr(key, **values)` 时不得依赖“未知键返回键名”的
+回退行为。
+
+翻译是应用级状态：`shared.i18n.install_language()` 安装对应语言的 `QTranslator`，`tr()` 经
+`QCoreApplication.translate()` 查表，因此任务对象和处理管线不再传递语言参数。GUI 在设置页切换语言时
+重新安装并调用 `retranslate()`，CLI 则在启动时按 `--lang` 安装一次。
 
 配置由 `src/shared/config.py` 中的 QConfig 单例管理。修改持久化选项时要同时考虑默认值、验证器、页面重译和测试。
 
