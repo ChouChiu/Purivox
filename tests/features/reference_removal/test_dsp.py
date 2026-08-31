@@ -146,7 +146,7 @@ def test_reference_cancellation_stereo_mimo_cancels_crossfeed():
     assert max(abs(corr(output[0], left_ref)), abs(corr(output[1], right_ref))) < 0.12
 
 
-def test_reference_cancellation_cancels_inverted_reference_then_enhances_center():
+def test_reference_cancellation_cancels_inverted_reference():
     sample_rate = 16_000
     length = sample_rate * 4
     rng = np.random.default_rng(93)
@@ -161,19 +161,10 @@ def test_reference_cancellation_cancels_inverted_reference_then_enhances_center(
     inverted_transfer = np.asarray([[-0.72, 0.18], [-0.11, -0.83]])
     mixture = live + inverted_transfer @ reference
 
-    output = process_audio(
-        mixture,
-        reference,
-        sample_rate,
-        1.0,
-        8,
-        center_extraction=True,
-    )
+    output = process_audio(mixture, reference, sample_rate, 1.0, 8)
 
     assert corr(output.ravel(), live.ravel()) > 0.995
     assert abs(corr(output.ravel(), reference.ravel())) < 0.01
-    center_gain = np.dot(output.ravel(), live.ravel()) / np.dot(live.ravel(), live.ravel())
-    assert 1.1 < center_gain < 1.3
 
 
 def test_silent_reference_leaves_mix_nearly_bypassed():
@@ -252,42 +243,6 @@ def test_reference_cancellation_applies_linked_minus_one_db_peak_protection():
     assert np.max(np.abs(output)) <= ceiling + 1e-6
     assert np.max(np.abs(output[0])) == pytest.approx(ceiling, abs=1e-6)
     assert np.max(np.abs(output[1])) < ceiling
-
-
-def test_reference_cancellation_strength_fades_center_enhancement_from_bypass():
-    sample_rate = 16_000
-    length = sample_rate * 2
-    time = np.arange(length) / sample_rate
-    centered = 0.25 * np.sin(2 * np.pi * 431 * time)
-    wide = np.stack(
-        [
-            0.08 * np.sin(2 * np.pi * 173 * time),
-            0.08 * np.sin(2 * np.pi * 227 * time),
-        ]
-    )
-    mixture = np.stack([centered, centered]) + wide
-    silent_reference = np.zeros_like(mixture)
-
-    low = process_audio(
-        mixture,
-        silent_reference,
-        sample_rate,
-        0.01,
-        8,
-        center_extraction=True,
-    )
-    default = process_audio(
-        mixture,
-        silent_reference,
-        sample_rate,
-        0.75,
-        8,
-        center_extraction=True,
-    )
-
-    low_change = np.sqrt(np.mean((low - mixture) ** 2))
-    default_change = np.sqrt(np.mean((default - mixture) ** 2))
-    assert low_change < 0.03 * default_change
 
 
 def test_reference_cancellation_clamps_strength_above_one(scene):

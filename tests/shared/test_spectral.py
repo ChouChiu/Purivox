@@ -1,6 +1,6 @@
 import numpy as np
 
-from shared.dsp import fft_frequencies, hann, istft, stft
+from shared.dsp import hann, istft, stft
 
 
 def test_stft_round_trip_and_helpers():
@@ -11,7 +11,6 @@ def test_stft_round_trip_and_helpers():
     assert spectra.shape[1] == 257
     assert np.max(np.abs(restored - signal)) < 1e-10
     assert hann(0).size == 0
-    assert fft_frequencies(16_000, 512)[-1] == 8_000
 
 
 def test_stft_preserves_single_precision_fast_path():

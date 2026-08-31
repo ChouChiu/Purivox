@@ -52,22 +52,6 @@
         <translation>ボーカル抽出強度:</translation>
     </message>
     <message>
-        <source>center_extraction</source>
-        <translation>ライブボーカルを強調:</translation>
-    </message>
-    <message>
-        <source>center_extraction_tip</source>
-        <translation>左右チャンネルの中央にあるライブボーカルをさらに強調しますが、ステレオの広がりは狭くなります。オフでは楽曲音源を使った通常のボーカル抽出のみを実行します</translation>
-    </message>
-    <message>
-        <source>open_mic_focus</source>
-        <translation>オープンマイク重視:</translation>
-    </message>
-    <message>
-        <source>open_mic_focus_tip</source>
-        <translation>ボーカル強調時に、マイクが開いている区間や歌唱区間を保ちつつ、マイクが閉じている区間や伴奏のみの区間を引き続き抑えます。中央のライブ成分が多く残る場合があります</translation>
-    </message>
-    <message>
         <source>switch_on</source>
         <translation>オン</translation>
     </message>

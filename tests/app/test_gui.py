@@ -42,10 +42,8 @@ def test_main_window_has_mr_workspace_with_two_subpages(qtbot):
     assert not hasattr(window.full_stage, "sigma")
     assert not hasattr(window.mr, "align")
     assert not hasattr(window.full_stage, "align")
-    window.mr.center_extraction.setChecked(False)
-    assert not window.mr.open_mic_focus.isEnabled()
-    window.mr.center_extraction.setChecked(True)
-    assert window.mr.open_mic_focus.isEnabled()
+    assert not hasattr(window.mr, "center_extraction")
+    assert not hasattr(window.mr, "open_mic_focus")
     assert window.ai.model.count() == 4
     assert window.settings.log_level_card.configItem is cfg.log_level
     previous_level = cfg.log_level.value
@@ -107,10 +105,8 @@ def test_full_stage_page_orders_sources_and_renders_analysis(qtbot, tmp_path: Pa
         page.sources.addItem(item)
     assert [path.name for path in page.source_paths()] == ["first.wav", "second.wav"]
     assert not hasattr(page, "move_up")
-    page.center_extraction.setChecked(False)
-    assert not page.open_mic_focus.isEnabled()
-    page.center_extraction.setChecked(True)
-    assert page.open_mic_focus.isEnabled()
+    assert not hasattr(page, "center_extraction")
+    assert not hasattr(page, "open_mic_focus")
 
     source = (tmp_path / "second.wav").resolve()
     analysis = FullStageAnalysis(
@@ -210,16 +206,14 @@ def test_full_stage_job_forwards_normal_mr_parameters(qtbot, tmp_path: Path):
     item = QListWidgetItem(source.name)
     item.setData(Qt.ItemDataRole.UserRole, str(source))
     window.full_stage.sources.addItem(item)
-    window.full_stage.center_extraction.setChecked(True)
-    window.full_stage.open_mic_focus.setChecked(True)
 
     job = window._full_stage_job()
 
     assert job is not None
     assert job.sigma == 3
     assert job.auto_align
-    assert job.center_extraction
-    assert job.open_mic_focus
+    assert not hasattr(job, "center_extraction")
+    assert not hasattr(job, "open_mic_focus")
 
 
 def test_system_accent_color_is_applied_and_tracks_palette_changes(qtbot, monkeypatch):
@@ -283,15 +277,13 @@ def test_reference_start_rejects_same_input_before_worker(qtbot, tmp_path: Path,
     assert warnings == ["warn_same_inputs"]
 
 
-def test_reference_start_forwards_explicit_enhancement_switches(qtbot, tmp_path: Path, monkeypatch):
+def test_reference_start_forwards_fixed_job_settings(qtbot, tmp_path: Path, monkeypatch):
     load_config()
     window = MainWindow()
     qtbot.addWidget(window)
     window.mr.song_edit.setText(str(tmp_path / "song.wav"))
     window.mr.acc_edit.setText(str(tmp_path / "reference.wav"))
     window.mr.output_edit.setText(str(tmp_path / "output.wav"))
-    window.mr.center_extraction.setChecked(True)
-    window.mr.open_mic_focus.setChecked(True)
     started = []
     monkeypatch.setattr(window, "_start_worker", lambda page, operation: started.append(operation))
 
@@ -301,8 +293,8 @@ def test_reference_start_forwards_explicit_enhancement_switches(qtbot, tmp_path:
     job = started[0].args[0]
     assert job.sigma == 3
     assert job.auto_align
-    assert job.center_extraction
-    assert job.open_mic_focus
+    assert not hasattr(job, "center_extraction")
+    assert not hasattr(job, "open_mic_focus")
 
 
 def test_combo_boxes_use_stable_menu_without_opacity_animation(qtbot):

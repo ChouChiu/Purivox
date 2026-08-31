@@ -48,18 +48,6 @@ def build_parser() -> argparse.ArgumentParser:
     )
     reference.add_argument("--sigma", type=int, choices=SIGMA_CHOICES, default=3)
     reference.add_argument("--align", action=argparse.BooleanOptionalAction, default=True)
-    reference.add_argument(
-        "--center-extraction",
-        action=argparse.BooleanOptionalAction,
-        default=False,
-        help="apply phantom-center vocal extraction after reference cancellation",
-    )
-    reference.add_argument(
-        "--open-mic-focus",
-        action=argparse.BooleanOptionalAction,
-        default=False,
-        help="preserve a quiet open mic while suppressing closed-mic sections; requires --center-extraction",
-    )
     reference.add_argument("--lang", choices=SUPPORTED_LANGUAGES, default=SUPPORTED_LANGUAGES[0])
 
     neural = commands.add_parser("ai", help="MDX-Net vocal extraction")
@@ -109,8 +97,6 @@ def main(argv: list[str] | None = None) -> int:
                 strength=args.strength,
                 sigma=args.sigma,
                 auto_align=args.align,
-                center_extraction=args.center_extraction,
-                open_mic_focus=args.open_mic_focus,
             )
             result = run_reference_job(job, token, _print_progress)
         else:

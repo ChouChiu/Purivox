@@ -25,7 +25,6 @@ from qfluentwidgets import (
 
 from features.full_stage.models import ClipKind, FullStageAnalysis, TimelineClip
 from features.full_stage.timeline_model import TimelineModel
-from shared.config import cfg
 from shared.i18n import tr
 from shared.ui import (
     AUDIO_FILE_FILTER,
@@ -34,7 +33,6 @@ from shared.ui import (
     AudioDropListWidget,
     FormCard,
     PageScrollArea,
-    sync_dependent_switch,
 )
 
 
@@ -88,20 +86,9 @@ class FullStagePage(PageScrollArea):
         self.strength = Slider(Qt.Orientation.Horizontal)
         self.strength.setRange(0, 100)
         self.strength.setValue(75)
-        self.center_extraction_label, self.center_extraction = BodyLabel(), SwitchButton()
-        self.center_extraction.setChecked(bool(cfg.center_extraction.value))
-        self.open_mic_focus_label, self.open_mic_focus = (
-            BodyLabel(),
-            SwitchButton(),
-        )
-        self.open_mic_focus.setChecked(
-            bool(cfg.open_mic_focus.value) and self.center_extraction.isChecked()
-        )
         self.include_fragments_label, self.include_fragments = BodyLabel(), SwitchButton()
         self.include_fragments.setChecked(True)
         self.parameters.add_row(self.strength_label, self.strength, self.strength_value)
-        self.parameters.add_row(self.center_extraction_label, self.center_extraction)
-        self.parameters.add_row(self.open_mic_focus_label, self.open_mic_focus)
         self.parameters.add_row(self.include_fragments_label, self.include_fragments)
         self.layout.addWidget(self.parameters)
 
@@ -168,7 +155,6 @@ class FullStagePage(PageScrollArea):
         self.start_button.clicked.connect(self.start_requested)
         self.cancel_button.clicked.connect(self.cancel_requested)
         self.strength.valueChanged.connect(lambda value: self.strength_value.setText(f"{value}%"))
-        self.center_extraction.checkedChanged.connect(self._sync_enhancement_controls)
         self.timeline.selectionModel().selectionChanged.connect(self._selection_changed)
         self.timeline_model.clip_edited.connect(self._clip_edited)
         self.timeline_model.edit_rejected.connect(self._edit_rejected)
@@ -197,18 +183,9 @@ class FullStagePage(PageScrollArea):
         self.remove_clip.setText(tr("stage_remove_clip"))
         self.parameters.title_label.setText(tr("params"))
         self.strength_label.setText(tr("strength"))
-        self.center_extraction_label.setText(tr("center_extraction"))
-        self.open_mic_focus_label.setText(tr("open_mic_focus"))
         self.include_fragments_label.setText(tr("stage_include_fragments"))
-        for switch in (
-            self.center_extraction,
-            self.open_mic_focus,
-            self.include_fragments,
-        ):
-            switch.setOnText(tr("switch_on"))
-            switch.setOffText(tr("switch_off"))
-        self.center_extraction.setToolTip(tr("center_extraction_tip"))
-        self.open_mic_focus.setToolTip(tr("open_mic_focus_tip"))
+        self.include_fragments.setOnText(tr("switch_on"))
+        self.include_fragments.setOffText(tr("switch_off"))
         self.timeline_card.title_label.setText(tr("stage_timeline"))
         self.timeline_hint.setText(tr("stage_timeline_hint"))
         self.timeline_model.retranslate()
@@ -218,10 +195,6 @@ class FullStagePage(PageScrollArea):
         self.start_button.setText(tr("stage_start"))
         if self.progress.value() == 0:
             self.status.setText(tr("stage_ready"))
-        self._sync_enhancement_controls()
-
-    def _sync_enhancement_controls(self, _checked: bool | None = None) -> None:
-        sync_dependent_switch(self.center_extraction, self.open_mic_focus)
 
     def source_paths(self) -> tuple[Path, ...]:
         return tuple(
@@ -259,16 +232,12 @@ class FullStagePage(PageScrollArea):
             self.remove_source,
             self.sources,
             self.strength,
-            self.center_extraction,
-            self.open_mic_focus,
             self.include_fragments,
             self.timeline,
             self.add_clip,
         ):
             control.setEnabled(not running)
         self.remove_clip.setEnabled(not running and self._selected_manual_row() is not None)
-        if not running:
-            self._sync_enhancement_controls()
 
     def set_analysis(self, analysis: FullStageAnalysis) -> None:
         self.timeline_model.set_analysis(analysis)

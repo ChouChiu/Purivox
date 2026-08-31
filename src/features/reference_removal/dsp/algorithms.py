@@ -8,7 +8,7 @@ import numpy as np
 from scipy.ndimage import gaussian_filter
 
 from shared.audio import BLOCK_FRAMES, release_mapped_pages
-from shared.dsp import fft_frequencies, istft, stft
+from shared.dsp import istft, stft
 from shared.processing import CancellationToken
 
 from .transfer import (
@@ -64,77 +64,6 @@ _SPECTRAL_CELL_BUDGET = 4_000_000
 _MAX_PROCESSING_BLOCK_SECONDS = 48
 _MAX_PROCESSING_WORKERS = min(5, os.cpu_count() or 1)
 _MAX_PARALLEL_SPECTRAL_CELLS = 9_000_000
-
-
-def _phantom_center_enhance(
-    audio: np.ndarray,
-    sample_rate: int,
-    amount: float,
-    open_mic_focus: bool,
-    token: CancellationToken,
-) -> np.ndarray:
-    """Apply the confirmed Audition/PhantomCenter-style vocal enhancement."""
-    mix = float(np.clip(amount, 0.0, 1.0))
-    if audio.shape[0] < 2 or mix <= 0.0:
-        return audio
-    # Match the core path's analysis size instead of a fixed 2048/512: at
-    # 96 kHz the fixed size was a 21 ms window, and the true Gaussian smoother
-    # then ran with a sigma near 17 frames.
-    n_fft = _analysis_fft_size(sample_rate)
-    hop = n_fft // 4
-    spectra = [stft(audio[channel], n_fft=n_fft, hop=hop) for channel in range(2)]
-    token.raise_if_cancelled()
-    left, right = spectra
-    epsilon = 1e-10
-    # Roughly 90 ms of temporal context at every sample rate suppresses musical
-    # noise while retaining syllable attacks.
-    smooth = max(0.09 * sample_rate / hop, 1.0)
-    left_power = spectral_smooth(np.abs(left) ** 2, smooth)
-    right_power = spectral_smooth(np.abs(right) ** 2, smooth)
-    cross = spectral_smooth(left * np.conj(right), smooth)
-    coherence = np.clip(
-        np.abs(cross) ** 2 / (left_power * right_power + epsilon),
-        0.0,
-        1.0,
-    )
-    phase_delta = np.angle(cross)
-    half_delta = 0.5 * np.abs(phase_delta)
-    phase_overlap = np.maximum(0.0, np.cos(half_delta) - np.sin(half_delta))
-    coherence_gate = smoothstep(0.03, 0.35, coherence)
-    left_amplitude = np.sqrt(left_power)
-    right_amplitude = np.sqrt(right_power)
-    common_amplitude = np.minimum(left_amplitude, right_amplitude) * phase_overlap * coherence_gate
-    mean_power = 0.5 * (left_power + right_power)
-    center_share = np.clip(common_amplitude**2 / (mean_power + epsilon), 0.0, 1.0)
-    # A quiet live mic can be buried below wide backing and crowd energy. Applying
-    # the fixed side floor in those bins reduced the already weak singer by up to
-    # 9 dB. Use conventional Mid as a fallback center instead of fading the whole
-    # spatial stage out: this keeps a buried center vocal while still suppressing
-    # wide backing in sections where nobody is singing.
-    center_presence = smoothstep(0.02, 0.18, center_share)
-    center = 0.5 * (
-        common_amplitude / (left_amplitude + epsilon) * np.exp(-0.5j * phase_delta) * left
-        + common_amplitude / (right_amplitude + epsilon) * np.exp(0.5j * phase_delta) * right
-    )
-    frequencies = fft_frequencies(sample_rate, n_fft)
-    vocal_band = smoothstep(80.0, 160.0, frequencies) * (
-        1.0 - smoothstep(9_000.0, 14_000.0, frequencies)
-    )
-    side_floor = 0.35
-    center_gain = 1.25
-    fallback_center = 0.5 * (left + right)
-    focused = []
-    for channel in spectra:
-        full_target = side_floor * channel + (center_gain - side_floor) * center
-        if open_mic_focus:
-            full_target += (1.0 - side_floor) * (1.0 - center_presence) * fallback_center
-        target = channel + mix * (full_target - channel)
-        focused.append(channel + vocal_band[None, :] * (target - channel))
-    token.raise_if_cancelled()
-    return np.asarray(
-        [istft(channel, hop=hop, length=audio.shape[1]) for channel in focused],
-        dtype=np.float32,
-    )
 
 
 def _analysis_fft_size(sample_rate: int) -> int:
@@ -374,9 +303,6 @@ def process_audio(
     sigma: float,
     token: CancellationToken | None = None,
     output: np.ndarray | None = None,
-    *,
-    center_extraction: bool = False,
-    open_mic_focus: bool = False,
 ) -> np.ndarray:
     cancel = token or CancellationToken()
     mix = np.asarray(song, dtype=np.float32)
@@ -430,18 +356,6 @@ def process_audio(
             sigma,
             cancel,
         )
-        if center_extraction:
-            # Preserve the confirmed 75% enhancement sound while making the
-            # strength slider continuous near bypass. Above 75%, only the core
-            # extractor becomes stronger instead of narrowing the image further.
-            center_amount = min(strength / 0.75, 1.0)
-            processed = _phantom_center_enhance(
-                processed,
-                sample_rate,
-                center_amount,
-                open_mic_focus,
-                cancel,
-            )
         return index, start, end, processed
 
     with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="purivox-dsp") as executor:

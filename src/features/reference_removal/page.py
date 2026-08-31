@@ -37,7 +37,6 @@ from shared.ui import (
     AudioDropLineEdit,
     FormCard,
     PageScrollArea,
-    sync_dependent_switch,
 )
 
 logger = logging.getLogger(__name__)
@@ -85,18 +84,7 @@ class MrPage(PageScrollArea):
         self.strength = Slider(Qt.Orientation.Horizontal)
         self.strength.setRange(0, 100)
         self.strength.setValue(75)
-        self.center_extraction_label, self.center_extraction = BodyLabel(), SwitchButton()
-        self.center_extraction.setChecked(bool(cfg.center_extraction.value))
-        self.open_mic_focus_label, self.open_mic_focus = (
-            BodyLabel(),
-            SwitchButton(),
-        )
-        self.open_mic_focus.setChecked(
-            bool(cfg.open_mic_focus.value) and self.center_extraction.isChecked()
-        )
         self.parameters.add_row(self.strength_label, self.strength, self.strength_value)
-        self.parameters.add_row(self.center_extraction_label, self.center_extraction)
-        self.parameters.add_row(self.open_mic_focus_label, self.open_mic_focus)
         self.layout.addWidget(self.parameters)
 
         self.status_card = FormCard()
@@ -194,7 +182,6 @@ class MrPage(PageScrollArea):
         self.start_button.clicked.connect(self.start_requested)
         self.cancel_button.clicked.connect(self.cancel_requested)
         self.strength.valueChanged.connect(lambda value: self.strength_value.setText(f"{value}%"))
-        self.center_extraction.checkedChanged.connect(self._sync_enhancement_controls)
         self.preview_play.clicked.connect(self.toggle_preview)
         self.preview_stop.clicked.connect(self.stop_preview)
         self.preview_volume.valueChanged.connect(
@@ -221,21 +208,12 @@ class MrPage(PageScrollArea):
         self.output_label.setText(tr("output_file"))
         self.output_edit.setPlaceholderText(tr("output_name_hint"))
         self.strength_label.setText(tr("strength"))
-        self.center_extraction_label.setText(tr("center_extraction"))
-        self.open_mic_focus_label.setText(tr("open_mic_focus"))
         for button in (self.song_button, self.acc_button, self.output_button):
             button.setText(tr("browse"))
         for edit in (self.song_edit, self.acc_edit):
             edit.setToolTip(tr("drop_hint"))
         self.auto_find.setOnText(tr("auto_find_on"))
         self.auto_find.setOffText(tr("auto_find_off"))
-        for switch in (self.center_extraction, self.open_mic_focus):
-            switch.setOnText(tr("switch_on"))
-            switch.setOffText(tr("switch_off"))
-        self.center_extraction.setToolTip(tr("center_extraction_tip"))
-        self.center_extraction_label.setToolTip(tr("center_extraction_tip"))
-        self.open_mic_focus.setToolTip(tr("open_mic_focus_tip"))
-        self.open_mic_focus_label.setToolTip(tr("open_mic_focus_tip"))
         self.cancel_button.setText(tr("cancel"))
         self.start_button.setText(tr("start"))
         self.preview_stop.setText(tr("preview_stop"))
@@ -248,10 +226,6 @@ class MrPage(PageScrollArea):
             self.preview_status.setText(tr("preview_empty"))
         if self.progress.value() == 0:
             self.status.setText(tr("ready"))
-        self._sync_enhancement_controls()
-
-    def _sync_enhancement_controls(self, _checked: bool | None = None) -> None:
-        sync_dependent_switch(self.center_extraction, self.open_mic_focus)
 
     def set_running(self, running: bool) -> None:
         self.start_button.setEnabled(not running)
@@ -263,12 +237,8 @@ class MrPage(PageScrollArea):
             self.output_edit,
             self.strength,
             self.auto_find,
-            self.center_extraction,
-            self.open_mic_focus,
         ):
             control.setEnabled(not running)
-        if not running:
-            self._sync_enhancement_controls()
 
     def browse_primary_input(self) -> None:
         """Open the file dialog a page-level shortcut should reach."""

@@ -67,12 +67,6 @@ def istft(spectra: np.ndarray, hop: int = 512, length: int | None = None) -> np.
     return output[:length]
 
 
-def fft_frequencies(sample_rate: int, n_fft: int) -> np.ndarray:
-    if sample_rate <= 0 or n_fft <= 0:
-        return np.empty(0, dtype=np.float64)
-    return np.fft.rfftfreq(n_fft, 1.0 / sample_rate)
-
-
 def log_flux_bands(
     signal: np.ndarray,
     n_fft: int,

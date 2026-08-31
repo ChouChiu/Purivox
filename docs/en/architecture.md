@@ -55,7 +55,7 @@ re-exporting shared types from one another.
 
 The same rule applies to code: values and algorithms that more than one feature would otherwise
 reimplement move down into `shared` rather than being imported across features. Single-track and
-full-stage jobs validate strength, statistics window, and the center-processing combination through
+full-stage jobs validate strength and the statistics window through
 `shared.jobs.validate_reference_settings()`; both derive onset features from
 `shared.dsp.log_flux_bands()`; the file-dialog filters and the automatic accompaniment finder share
 `shared.audio.AUDIO_EXTENSIONS`.

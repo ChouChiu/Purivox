@@ -52,22 +52,6 @@
         <translation>垫音消除强度:</translation>
     </message>
     <message>
-        <source>center_extraction</source>
-        <translation>突出人声:</translation>
-    </message>
-    <message>
-        <source>center_extraction_tip</source>
-        <translation>进一步突出位于左右声道中央的人声，但会收窄立体声；关闭时只进行垫音消除</translation>
-    </message>
-    <message>
-        <source>open_mic_focus</source>
-        <translation>开麦聚焦:</translation>
-    </message>
-    <message>
-        <source>open_mic_focus_tip</source>
-        <translation>突出人声时，增强开麦或有人声片段，并继续压低未开麦或只有垫音的片段；可能保留更多中置现场内容</translation>
-    </message>
-    <message>
         <source>switch_on</source>
         <translation>开启</translation>
     </message>

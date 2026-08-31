@@ -33,8 +33,6 @@ class AppConfig(QConfig):
         OptionsValidator(list(LOG_LEVELS)),
     )
     auto_find = ConfigItem("Reference", "AutoFind", True, BoolValidator())
-    center_extraction = ConfigItem("Reference", "CenterExtraction", False, BoolValidator())
-    open_mic_focus = ConfigItem("Reference", "OpenMicFocus", False, BoolValidator())
     model = OptionsConfigItem(
         "Neural",
         "Model",

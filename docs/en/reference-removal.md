@@ -72,10 +72,7 @@ flowchart LR
     drift --> warp["Lanczos time warp"]
     enabled -->|no| mask["Complex transfer estimate<br/>confidence-weighted Wiener mask"]
     warp --> mask
-    mask --> center{"Center-focused processing?"}
-    center -->|yes| focus["Center focus<br/>optional open-mic focus"]
-    center -->|no| protect["Peak protection"]
-    focus --> protect
+    mask --> protect["Peak protection"]
     protect --> output["At least 96 kHz / 24-bit WAV"]
 ```
 
@@ -266,7 +263,7 @@ confidence.
 
 - Gorlow, Ramona, and Pachet's [live accompaniment-cancellation study](https://arxiv.org/abs/1611.08905) compares adaptive noise cancellation, spectral subtraction, and short-time ERB-band Wiener filtering. This implementation uses a simpler coherence-weighted frequency-domain soft mask rather than time-domain LMS or a separate ERB voting layer.
 - Boll's [classic spectral-subtraction paper](https://doi.org/10.1109/TASSP.1979.1163209) describes magnitude subtraction and residual-noise problems. This implementation retains a subtractive power target while adding reference-conditioned coherence, a mask floor, and narrow time-frequency smoothing instead of directly applying hard spectral subtraction.
-- Avery Lee's [Center Cut](https://www.virtualdub.org/blog2/entry_102.html) and ADRess-style methods depend on center imaging, inter-channel level differences, or phase differences. They apply only to the explicit optional center processing below and are not part of the default reference-cancellation path.
+- Avery Lee's [Center Cut](https://www.virtualdub.org/blog2/entry_102.html) and ADRess-style methods depend on center imaging, inter-channel level differences, or phase differences, and are unrelated to this implementation: they read only the spatial relationship between two channels, whereas reference cancellation reads the evidence the song source provides. The project once offered such a center stage behind optional switches; it was measured and removed outright, because on a recording whose phase had been destroyed it suppressed the vocal itself and left the reverberation and the audience behind.
 - The convolutive transfer function (CTF) literature explains why the multiplicative narrowband approximation fails under long reverberation and how a finite set of frame taps replaces it, for example [joint dereverberation and blind source separation with a hybrid CTF model](https://doi.org/10.1016/j.apacoust.2024.110168). That idea was implemented here as frame taps and removed again after measurement; see below. Schröter et al.'s [DeepFilterNet](https://arxiv.org/abs/2110.05588) and Tammen and Doclo's [deep multi-frame MVDR](https://arxiv.org/abs/2011.10345) are the learned form of the same idea: a complex filter across frames per time-frequency bin rather than a point-wise mask.
 - Engineering systems with the same structure are useful references. WebRTC's AEC3 is likewise "known reference plus unknown transfer plus double-talk", and its partitioned-block frequency-domain adaptive filter, delay estimation, and residual echo suppressor map onto the alignment, transfer estimation, and coherence-weighted mask here. Enzner and Vary's [frequency-domain adaptive Kalman filter](https://doi.org/10.1016/j.sigpro.2005.09.005) points to replacing the current two-pass robust fit with a state-space model; it is not implemented.
 
@@ -344,21 +341,6 @@ Also rejected: sub-sample refinement of the local delay (see Local Drift), and r
 
 These papers provide algorithm structure and failure boundaries; they do not guarantee an improvement on every real performance. Matched-segment, loudness-matched A/B listening remains the acceptance criterion.
 
-## Optional Center-Focused Processing
-
-After basic cancellation, **Emphasize live vocals** can be enabled explicitly. The implementation
-applies a short-time Fourier transform to the left and right channels, estimates the phantom-center
-share from left/right power, cross-spectral coherence, and phase difference, and primarily retains
-coherent center content between approximately 80 Hz and 14 kHz.
-
-**Open-mic focus** is effective only when vocal emphasis is enabled. In open-mic or vocal-active
-regions with low center confidence, it adds ordinary Mid content instead of restoring the full
-left and right channels. Closed-mic and backing-only regions retain Side attenuation. This helps
-preserve quiet live vocals without bringing back the entire wide source-derived layer.
-
-Both options alter spatial presentation and are outside the core cancellation path. Decide
-whether to enable them by comparing the same source material through listening.
-
 ## Output Protection and Validation
 
 After processing, non-finite values are replaced with finite values and peaks are kept within
@@ -368,8 +350,7 @@ standardizes the export format but cannot restore high-frequency detail absent f
 
 Algorithm tests cover time offsets, local drift, inverted polarity, frequency-dependent room
 transfer, unrelated sources, rejection of source-only replacement lyrics, matrix crosstalk,
-normal-equation orientation on a phase-correlated stereo reference, block seams, center focus, and
-open-mic focus. Synthetic metrics only detect implementation
-regressions. Real material must still be exported with identical input and settings for direct
+normal-equation orientation on a phase-correlated stereo reference, and block seams. Synthetic
+metrics only detect implementation regressions. Real material must still be exported with identical input and settings for direct
 comparison, listening closely to vocal level, sibilance, breathing, harmonies, reverb tails, and
 audience sound.

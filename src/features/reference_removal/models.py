@@ -14,13 +14,6 @@ class ReferenceJob:
     strength: int = 75
     sigma: int = 3
     auto_align: bool = True
-    center_extraction: bool = False
-    open_mic_focus: bool = False
 
     def __post_init__(self) -> None:
-        validate_reference_settings(
-            self.strength,
-            self.sigma,
-            center_extraction=self.center_extraction,
-            open_mic_focus=self.open_mic_focus,
-        )
+        validate_reference_settings(self.strength, self.sigma)

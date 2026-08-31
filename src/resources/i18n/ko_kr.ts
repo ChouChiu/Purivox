@@ -52,22 +52,6 @@
         <translation>보컬 추출 강도:</translation>
     </message>
     <message>
-        <source>center_extraction</source>
-        <translation>라이브 보컬 강조:</translation>
-    </message>
-    <message>
-        <source>center_extraction_tip</source>
-        <translation>좌우 채널 중앙의 라이브 보컬을 더 강조하지만 스테레오 폭이 좁아집니다. 끄면 곡 음원을 이용한 일반 보컬 추출만 실행합니다</translation>
-    </message>
-    <message>
-        <source>open_mic_focus</source>
-        <translation>오픈 마이크 집중:</translation>
-    </message>
-    <message>
-        <source>open_mic_focus_tip</source>
-        <translation>보컬 강조를 켰을 때 마이크가 열린 구간이나 보컬 활성 구간은 보존하고, 마이크가 닫힌 구간이나 반주만 있는 구간은 계속 낮춥니다. 중앙의 라이브 성분이 더 남을 수 있습니다</translation>
-    </message>
-    <message>
         <source>switch_on</source>
         <translation>켜기</translation>
     </message>

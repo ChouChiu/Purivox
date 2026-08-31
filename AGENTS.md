@@ -9,7 +9,7 @@ codebase serves three workflows:
 - **MR Remove** (`purivox mr`): reference-guided cancellation. Given the known accompaniment as a
   reference, it aligns the two recordings (GCC-PHAT plus clock-drift tracking), estimates a complex
   transfer, subtracts the prediction, and applies a residual soft mask to whatever is left.
-  Phantom-center focus is opt-in.
+  There is no optional spatial post-processing: the output is the cancellation result.
 - **Full Stage** (GUI): matches multiple song sources against a continuous stage recording, exposes
   an editable timeline, and applies reference cancellation only to the matched clips that are
   enabled.
@@ -189,7 +189,7 @@ Language keys: `zh_cn`, `en_us`, `ja_jp`, `ko_kr`.
 | `src/shared/jobs.py` | Reference-job settings contract shared by `ReferenceJob`, `FullStageJob` and the CLI parser |
 | `src/shared/audio/io.py` | memmap audio loading, soxr resample, ≥96 kHz / 24-bit Hi-Res preparation, atomic WAV write |
 | `src/shared/config.py` / `i18n.py` / `logging.py` | settings persistence, `QTranslator` install + `tr()`, single-line log format |
-| `src/features/reference_removal/dsp/algorithms.py` | Coherent cancellation (complex subtraction + residual mask), optional center focus, and linked peak protection |
+| `src/features/reference_removal/dsp/algorithms.py` | Coherent cancellation (complex subtraction + residual mask) and linked peak protection |
 | `src/features/reference_removal/dsp/transfer.py` | Smoothed spectral statistics, the vectorised LDL^{H} solve, and the complex transfer with its adjusted multiple coherence |
 | `src/features/reference_removal/dsp/alignment.py` | GCC-PHAT coarse alignment + local drift tracking + Lanczos warp |
 | `src/features/neural_separation/inference.py` / `model_store.py` | MdxNet ONNX wrapper (chunked overlap-add); model search, Qt-network download, incremental SHA-256 verified before `QSaveFile.commit()` |
@@ -226,7 +226,7 @@ Language keys: `zh_cn`, `en_us`, `ja_jp`, `ko_kr`.
 - **Layout**: `tests/` mirrors `src/` path-for-path. Per-area coverage: audio
   IO/resample/atomic-write (`tests/shared/test_audio.py`), STFT round-trip (`test_spectral.py`),
   i18n key parity (`test_i18n.py`), log format (`test_logging.py`), coherent cancellation +
-  alignment/MIMO (`tests/features/reference_removal/test_dsp.py`), drift/focus/jitter regressions
+  alignment/MIMO (`tests/features/reference_removal/test_dsp.py`), drift/jitter regressions
   (`test_dsp_regression.py`), finder similarity (`test_finder.py`), end-to-end reference job +
   AudioStats + same-input rejection (`test_processing.py`), neural chunked overlap-add identity
   (`test_neural.py`), CLI option handling (`tests/entrypoints/test_cli.py`), GUI

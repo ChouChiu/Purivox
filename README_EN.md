@@ -28,7 +28,6 @@ Vocal Isolation, and their results should not be compared directly.
 - Fluent Design desktop interface with light, dark, and system themes
 - Instant switching among Chinese, English, Japanese, and Korean interfaces
 - Global time alignment, local clock-drift tracking, and coherent reference cancellation
-- Optional **Emphasize live vocals** and **Open-mic focus** processing
 - Song identification, repeated-segment detection, and editable processing ranges for full-stage
   recordings
 - Four optional MDX-Net separation models, downloaded on demand and verified with SHA-256
@@ -64,8 +63,6 @@ uv run --locked purivox
    interface uses a fixed statistical window.
 4. Preview the result before adjusting the strength. If you hear obvious pumping or thinning of
    the live vocal, reduce the strength or confirm that the song source is correct.
-5. **Emphasize live vocals** and **Open-mic focus** are optional. The latter is available only
-   when vocal emphasis is enabled.
 
 Use a song source that matches the version played at the venue as closely as possible. Different
 masters, edits, speeds, keys, or extra content will reduce removal quality.
@@ -117,13 +114,11 @@ Run reference cancellation with the default settings:
 uv run --locked purivox mr "live-recording.wav" "song-source.wav" "live-vocal.wav"
 ```
 
-The CLI also lets you set the removal strength and statistical window, or enable center-focused
-processing:
+The CLI also lets you set the removal strength and statistical window:
 
 ```bash
 uv run --locked purivox mr "live-recording.wav" "song-source.wav" "live-vocal.wav" \
-  --strength 75 --sigma 8 --align \
-  --center-extraction --open-mic-focus
+  --strength 75 --sigma 8 --align
 ```
 
 Common reference-cancellation options:
@@ -133,8 +128,6 @@ Common reference-cancellation options:
 | `--strength` | `0`–`100` | Vocal isolation strength; default: `75` |
 | `--sigma` | `1`, `3`, `8`, `16` | Statistical window in seconds (advanced option); default: `3`; the GUI always uses `3` |
 | `--align` / `--no-align` | on / off | Automatic alignment; enabled by default |
-| `--center-extraction` | flag | Further emphasize vocals located at the center of the stereo image |
-| `--open-mic-focus` | flag | Preserve more centered vocal in open-mic sections while continuing to attenuate closed-mic or backing-only sections; requires center-focused processing |
 | `--lang` | `zh_cn`, `en_us`, `ja_jp`, `ko_kr` | Language used for progress messages |
 
 Run the AI separation tool independently:

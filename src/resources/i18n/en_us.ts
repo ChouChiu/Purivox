@@ -52,22 +52,6 @@
         <translation>Vocal isolation strength:</translation>
     </message>
     <message>
-        <source>center_extraction</source>
-        <translation>Emphasize live vocals:</translation>
-    </message>
-    <message>
-        <source>center_extraction_tip</source>
-        <translation>Further emphasizes live vocals in the center of the stereo image, but narrows the stereo image; when off, only source-guided vocal isolation runs</translation>
-    </message>
-    <message>
-        <source>open_mic_focus</source>
-        <translation>Open-mic focus:</translation>
-    </message>
-    <message>
-        <source>open_mic_focus_tip</source>
-        <translation>With vocal emphasis enabled, preserves open-mic or vocal-active sections while continuing to attenuate closed-mic or backing-only sections; may retain more centered live content</translation>
-    </message>
-    <message>
         <source>switch_on</source>
         <translation>On</translation>
     </message>

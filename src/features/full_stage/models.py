@@ -74,18 +74,11 @@ class FullStageJob:
     sigma: int = 3
     include_fragments: bool = True
     auto_align: bool = True
-    center_extraction: bool = False
-    open_mic_focus: bool = False
 
     def __post_init__(self) -> None:
         if not self.sources:
             raise ValueError("at least one source is required")
-        validate_reference_settings(
-            self.strength,
-            self.sigma,
-            center_extraction=self.center_extraction,
-            open_mic_focus=self.open_mic_focus,
-        )
+        validate_reference_settings(self.strength, self.sigma)
         resolved_stage = self.stage.expanduser().resolve()
         resolved_output = self.output.expanduser().resolve()
         resolved_sources = tuple(source.expanduser().resolve() for source in self.sources)

@@ -48,7 +48,7 @@ flowchart LR
 功能模块之间不通过再导出公共类型建立隐式依赖。
 
 同一条规则适用于代码：被多个功能重复实现的取值和算法统一放到 `shared`，而不是在功能之间互相导入。
-单曲与完整舞台任务共用 `shared.jobs.validate_reference_settings()` 校验强度、统计窗口和中置处理组合；
+单曲与完整舞台任务共用 `shared.jobs.validate_reference_settings()` 校验强度与统计窗口；
 两者的起音特征共用 `shared.dsp.log_flux_bands()`；文件对话框过滤器与自动查找的扩展名共用
 `shared.audio.AUDIO_EXTENSIONS`。
 

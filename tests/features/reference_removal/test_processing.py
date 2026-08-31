@@ -80,13 +80,3 @@ def test_reference_pipeline_rejects_same_song_and_accompaniment(tmp_path: Path):
 
     with pytest.raises(ValueError, match="song and accompaniment must be different"):
         run_reference_job(job, CancellationToken())
-
-
-def test_open_mic_focus_requires_center_extraction(tmp_path: Path):
-    with pytest.raises(ValueError, match="requires center extraction"):
-        ReferenceJob(
-            song=tmp_path / "song.wav",
-            accompaniment=tmp_path / "reference.wav",
-            output=tmp_path / "output.wav",
-            open_mic_focus=True,
-        )
