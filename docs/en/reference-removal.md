@@ -73,7 +73,7 @@ flowchart LR
     enabled -->|no| mask["Complex transfer estimate<br/>confidence-weighted Wiener mask"]
     warp --> mask
     mask --> protect["Peak protection"]
-    protect --> output["At least 96 kHz / 24-bit WAV"]
+    protect --> output["WAV in the song's own format"]
 ```
 
 ## Time Alignment
@@ -344,9 +344,9 @@ These papers provide algorithm structure and failure boundaries; they do not gua
 ## Output Protection and Validation
 
 After processing, non-finite values are replaced with finite values and peaks are kept within
-range when necessary. Results below 96 kHz are resampled to 96 kHz with high-quality soxr, while
-higher original rates are preserved, and output is written as 24-bit PCM WAV. This resampling
-standardizes the export format but cannot restore high-frequency detail absent from the input.
+range when necessary. The result is written as PCM WAV at the song's own sample rate and bit
+depth: cancellation neither changes the time base nor creates new spectrum, so raising the export
+to a fixed floor would only enlarge the file.
 
 Algorithm tests cover time offsets, local drift, inverted polarity, frequency-dependent room
 transfer, unrelated sources, rejection of source-only replacement lyrics, matrix crosstalk,

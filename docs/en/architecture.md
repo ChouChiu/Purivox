@@ -125,9 +125,9 @@ flowchart TB
     choice -->|Single| mr["Align song source<br/>coherent reference cancellation"]
     choice -->|Full Stage| stage["Multi-source matching<br/>timeline-based cancellation"]
     choice -->|AI Track Separation| ai["Chunked model inference<br/>calculate vocals and background"]
-    mr --> mrout["Vocal WAV<br/>at least 96 kHz / 24-bit"]
-    stage --> stageout["Full Stage WAV<br/>at least 96 kHz / 24-bit"]
-    ai --> aiout["Two 96 kHz / 24-bit WAV files"]
+    mr --> mrout["Vocal WAV<br/>in the song's own format"]
+    stage --> stageout["Full Stage WAV<br/>in the stage's own format"]
+    ai --> aiout["Two WAV files<br/>in the song's own format"]
 ```
 
 ### Single
@@ -138,9 +138,8 @@ Read both files → convert to stereo → resample the song source → optional 
 ```
 
 The output always retains the complete input-audio duration. If the song source is shorter, its
-remaining region is treated as a silent reference and the original input tail is preserved. A result below
-96 kHz is upsampled to 96 kHz before being written as a 24-bit WAV; a higher original sample rate
-is preserved.
+remaining region is treated as a silent reference and the original input tail is preserved. The
+result is written at the song's own sample rate and bit depth; there is no export floor.
 
 ### Full Stage
 
@@ -152,20 +151,22 @@ Extract fingerprints from the full recording and sources → match independently
 
 Unmatched ranges come from the copy of the original full recording, so failed identification does
 not introduce silence or shorten the output.
-Internal Full Stage processing retains the stage/live audio sample rate, while final output also
-uses PCM WAV at 96 kHz / 24-bit or higher.
+Internal Full Stage processing and the final export both retain the stage/live audio's own sample
+rate and bit depth.
 
 ### AI Track Separation
 
 ```text
 Read and convert to stereo → resample to 44.1 kHz → find or download the model
 → chunked MDX-Net inference → background = mix - vocals
-→ upsample to 96 kHz → write two 24-bit WAV files
+→ resample back to the song's own rate → write two WAV files
 ```
 
-Here, Hi-Res describes the output file's sample rate and bit depth. It does not mean that a
-low-rate input or 44.1 kHz model inference gains new high-frequency information, and it is not a
-claim of Hi-Res Audio Logo certification.
+An export matches the file it came from. Model inference is fixed at 44.1 kHz, so upsampling the
+result to a higher export format would only enlarge the file without producing spectral detail
+absent from the input or the model, and the pipeline no longer does it. For bit depth, an 8- or
+16-bit PCM input is written at 16 bits, and wider 24-/32-bit PCM, float and every lossy format are
+written at 24.
 
 ## Responsive Layout
 

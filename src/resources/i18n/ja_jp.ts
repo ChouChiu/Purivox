@@ -208,10 +208,6 @@
         <translation>出力オーディオ情報を読み取り中...</translation>
     </message>
     <message>
-        <source>preparing_hi_res</source>
-        <translation>Hi-Res 出力を準備中...</translation>
-    </message>
-    <message>
         <source>saving</source>
         <translation>出力ファイルを保存中...</translation>
     </message>

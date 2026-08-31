@@ -149,10 +149,10 @@ optional short fragment:
    stage mix and never mixes the source waveform into the result.
 6. Blend the result into the full-recording copy with fades of up to 50 ms at both boundaries.
 
-After all segments are complete, a Full Stage result below 96 kHz is resampled to 96 kHz with
-high-quality soxr; a higher original rate is preserved. The result is then written atomically as
-24-bit PCM WAV. Upsampling changes the export format but does not add spectral detail absent from
-the original recording.
+After all segments are complete, the Full Stage result is written atomically as PCM WAV at the
+stage recording's own sample rate and bit depth. Unmatched ranges are already a bit-exact copy of
+the original, so raising the export to a fixed floor would only enlarge the file without adding
+spectral detail absent from the original recording.
 
 Explanatory power is calculated by fitting small $2\times2$ direct models in multiple windows,
 measuring their residual ratios, and taking the median, so that one abnormal window cannot

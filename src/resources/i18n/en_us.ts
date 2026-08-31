@@ -208,10 +208,6 @@
         <translation>Reading output audio information...</translation>
     </message>
     <message>
-        <source>preparing_hi_res</source>
-        <translation>Preparing Hi-Res output...</translation>
-    </message>
-    <message>
         <source>saving</source>
         <translation>Saving output file...</translation>
     </message>

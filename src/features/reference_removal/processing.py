@@ -7,10 +7,8 @@ from pathlib import Path
 from features.reference_removal.dsp import align_audio, process_audio
 from features.reference_removal.models import ReferenceJob
 from shared.audio import (
-    HI_RES_BIT_DEPTH,
     analyze_audio,
     create_pcm_audio,
-    prepare_hi_res_output,
     read_audio,
     resample_audio,
     write_wav_atomic,
@@ -42,7 +40,7 @@ def run_reference_job(
         job.accompaniment,
     )
     _validate_reference_paths(job.song, job.accompaniment, job.output)
-    song = reference = processed_audio = hi_res_audio = None
+    song = reference = processed_audio = None
     try:
         report_progress(progress, 0, "loading_song")
         song = read_audio(job.song, token).stereo()
@@ -79,7 +77,10 @@ def run_reference_job(
                 alignment.cleanup()
                 raise
         length = song.frames
-        processed_audio = create_pcm_audio(song.channels, length, song.sample_rate)
+        # The result is the song with the accompaniment taken out of it, so it
+        # is exported at the song's own rate and depth rather than at a fixed
+        # export format: resampling it up would only make the file larger.
+        processed_audio = create_pcm_audio(song.channels, length, song.sample_rate, song.bit_depth)
         report_progress(progress, 32, "processing")
         process_audio(
             song.samples,
@@ -90,19 +91,15 @@ def run_reference_job(
             token,
             processed_audio.samples,
         )
-        report_progress(progress, 84, "preparing_hi_res")
-        hi_res_audio = prepare_hi_res_output(processed_audio, token)
         report_progress(progress, 86, "analyzing_output")
-        stats = analyze_audio(hi_res_audio, HI_RES_BIT_DEPTH, token)
+        stats = analyze_audio(processed_audio, token)
         report_progress(progress, 90, "saving")
-        write_wav_atomic(job.output, hi_res_audio, HI_RES_BIT_DEPTH, token)
+        write_wav_atomic(job.output, processed_audio, token)
         stats = replace(stats, file_size=job.output.stat().st_size)
         report_progress(progress, 100, "done_status", path=job.output)
         logger.info("reference job completed: %s", job.output.resolve())
         return ProcessingResult((job.output.resolve(),), (stats,))
     finally:
-        if hi_res_audio is processed_audio:
-            hi_res_audio = None
-        for audio in (hi_res_audio, processed_audio, reference, song):
+        for audio in (processed_audio, reference, song):
             if audio is not None:
                 audio.cleanup()

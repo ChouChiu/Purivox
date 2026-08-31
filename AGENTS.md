@@ -44,14 +44,14 @@ imported by other features.
 with a Qt Multimedia fallback) → upmix to stereo → resample the song source to the stage rate
 (soxr) → optional `align_audio` (GCC-PHAT coarse lag + Lanczos warp) → `process_audio` (blocks
 sized by the spectral-cell budget, ~45 s at 44.1 kHz, at least 2 s overlap, cos²/sin² crossfade) →
-resample to the 96 kHz Hi-Res export floor when needed → audio stats (peak/RMS dBFS) → atomic
-24-bit WAV write.
+audio stats (peak/RMS dBFS) → atomic WAV write at the song's own sample rate and bit depth.
 
 **Neural pipeline** (`features/neural_separation/processing.py`): resample input to 44.1 kHz →
 `ensure_model` (search: `--models-dir` override → `PURIVOX_MODELS` env → system app-data dir →
 repo `models/`; download from TRvlvr releases with SHA-256 verification) → `MdxNet.separate`
 (chunked overlap-add with a hanning divider accumulator) → background = mix − vocal → resample both
-stems to 96 kHz → write 24-bit `<stem>_vocal.wav` + `<stem>_background.wav`.
+stems back to the song's own rate → write `<stem>_vocal.wav` + `<stem>_background.wav` at the
+song's bit depth.
 
 **Concurrency**: pages declare Qt `Signal()`s (`start_requested`, `cancel_requested`);
 `MainWindow` builds a job dataclass and hands it to `JobPresenter`, which owns page state and
@@ -175,6 +175,12 @@ Language keys: `zh_cn`, `en_us`, `ja_jp`, `ko_kr`.
   one method (`set_song`, `set_stage`, `add_source_paths`) that also does the follow-up work — a
   default output name, an invalidated analysis. The AI page keeps a `QFileSystemWatcher` on the
   model directories to refresh its ready/needs-download label.
+- **Output format**: an export matches the file it came from. `AudioData` carries the decoded
+  source's `bit_depth` alongside its `sample_rate`, `resample_audio` and `stereo()` carry both
+  forward, and `write_wav_atomic`/`analyze_audio` read them off the audio rather than taking a
+  format argument. `WAV_BIT_DEPTHS` is `(16, 24)`: an 8- or 16-bit PCM source stays 16-bit,
+  everything wider — 24-/32-bit PCM, float, and every lossy format — is written at 24. There is no
+  export floor; never resample a result upwards just to reach a nicer-looking number.
 - **Memory discipline** (long audio): stream in `shared.audio.BLOCK_FRAMES` (262 144) blocks —
   never re-spell the literal — use `create_pcm_audio` memmap + `cleanup()`/`release_pages()`;
   never accumulate whole files in RAM; add a `QTimer` poll for cancellation inside decoder loops.
@@ -198,7 +204,7 @@ Language keys: `zh_cn`, `en_us`, `ja_jp`, `ko_kr`.
 | `src/app/job_runner.py` / `worker.py` | Single-job QThread lifecycle and QObject operation adapter |
 | `src/shared/processing.py` | `CancellationToken`, `ProcessingCancelled`, `ProgressEvent`, `ProcessingResult`, `ProgressCallback` |
 | `src/shared/jobs.py` | Reference-job settings contract shared by `ReferenceJob`, `FullStageJob` and the CLI parser |
-| `src/shared/audio/io.py` | memmap audio loading, soxr resample, ≥96 kHz / 24-bit Hi-Res preparation, atomic WAV write |
+| `src/shared/audio/io.py` | memmap audio loading, soxr resample, source sample rate and bit depth carried on `AudioData`, atomic WAV write |
 | `src/shared/config.py` / `i18n.py` / `logging.py` | settings persistence, `QTranslator` install + `tr()`, single-line log format |
 | `src/features/reference_removal/dsp/algorithms.py` | Coherent cancellation (complex subtraction + residual mask) and linked peak protection |
 | `src/features/reference_removal/dsp/transfer.py` | Smoothed spectral statistics, the vectorised LDL^{H} solve, and the complex transfer with its adjusted multiple coherence |
@@ -206,7 +212,7 @@ Language keys: `zh_cn`, `en_us`, `ja_jp`, `ko_kr`.
 | `src/features/neural_separation/inference.py` / `model_store.py` | MdxNet ONNX wrapper (chunked overlap-add); model search, Qt-network download, incremental SHA-256 verified before `QSaveFile.commit()` |
 | `src/features/full_stage/timeline_model.py` | `TimelineModel`: the analysis as an editable `QAbstractTableModel` (`data`/`flags`/`setData`), with `clip_edited` / `edit_rejected` for page status text |
 | `src/resources/model_data.json` | 65-entry MDX-Net spec table keyed by model-MD5 (`compensate`, `mdx_dim_f_set`, `mdx_dim_t_set`, `mdx_n_fft_scale_set`, `primary_stem`) |
-| `src/resources/i18n/*.ts` / `*.qm` | UI strings: Qt Linguist XML sources keyed by snake_case identifiers in one `Purivox` context, plus the `pyside6-lrelease` output the app loads (144 keys; parity, freshness and literal-key use all tested). Edit the `.ts`, recompile, commit both |
+| `src/resources/i18n/*.ts` / `*.qm` | UI strings: Qt Linguist XML sources keyed by snake_case identifiers in one `Purivox` context, plus the `pyside6-lrelease` output the app loads (143 keys; parity, freshness and literal-key use all tested). Edit the `.ts`, recompile, commit both |
 | `tests/test_architecture.py` | AST import-boundary gate (shared isolation, feature isolation) |
 | `tests/conftest.py` | forces `QT_QPA_PLATFORM=offscreen`, adds `--runslow`, auto-skips `slow` tests |
 

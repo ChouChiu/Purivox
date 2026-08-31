@@ -49,8 +49,10 @@ uv sync --locked --group deploy
   复制到普通内存数组；映射页用 `shared.audio.release_mapped_pages()` 释放。
 - 可取消循环必须定期调用 `CancellationToken.raise_if_cancelled()`，且不得忽略取消异常。
 - 输出使用 `write_wav_atomic`，不要直接覆盖目标文件。
-- 所有产品管线在写出前使用 `prepare_hi_res_output`，确保输出为至少 96 kHz、24-bit PCM WAV；不得把
-  升采样描述为新增音频细节。
+- 导出规格跟随输入文件：`AudioData` 同时携带解码源的 `sample_rate` 与 `bit_depth`，`resample_audio`
+  与 `stereo()` 逐级传递，`write_wav_atomic` 与 `analyze_audio` 直接读取，不再接收格式参数。
+  `WAV_BIT_DEPTHS` 为 `(16, 24)`：8-bit 与 16-bit PCM 输入写出 16-bit，更宽的 24/32-bit PCM、浮点
+  以及所有有损格式写出 24-bit。不存在导出规格下限，也不得为凑规格而向上重采样。
 - 日志通过 `logging.getLogger(__name__)` 写入；只有明确记录的降级路径可以忽略局部失败。
 
 Ruff 行宽为 100，启用 E、F、I、UP、B、SIM 和 RUF 规则，E501 由格式化与评审控制。
@@ -130,7 +132,7 @@ QT_QPA_PLATFORM=offscreen uv run --locked pytest tests/benchmarks --runslow
 测试目录与源码结构一一对应，主要覆盖：
 
 - 公共音频读写、重采样、原子写出、短时傅里叶变换和日志；
-- 三条产品管线的至少 96 kHz、24-bit Hi-Res 导出契约；
+- 三条产品管线沿用输入采样率与位深的导出契约；
 - 参考对消算法、时间对齐、立体声矩阵、回归场景和端到端任务；
 - 完整舞台匹配、时间线与分段渲染；
 - MDX-Net 分块重叠相加和模型管线；

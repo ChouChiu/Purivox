@@ -15,14 +15,27 @@ from shared.processing import CancellationToken
 
 logger = logging.getLogger(__name__)
 
-HI_RES_SAMPLE_RATE = 96_000
-HI_RES_BIT_DEPTH = 24
+# The PCM depths the WAV writer can produce.  Anything decoded from a wider or
+# floating-point source is written at 24 bits, which is the practical ceiling
+# for a delivery file.
+WAV_BIT_DEPTHS = (16, 24)
+DEFAULT_BIT_DEPTH = 24
 # Every streaming loop in the project reads, writes and copies audio in blocks
 # of this many frames, so a long recording never becomes a resident array.
 BLOCK_FRAMES = 262_144
 # Container suffixes offered by the file dialogs and accepted by the automatic
 # accompaniment finder.
 AUDIO_EXTENSIONS = (".wav", ".flac", ".mp3", ".m4a", ".ogg", ".opus")
+
+
+def _subtype_bit_depth(subtype: str) -> int:
+    """The WAV depth a source of this libsndfile subtype is written back out at.
+
+    libsndfile names its PCM subtypes by width, so an 8- or 16-bit recording
+    keeps 16 bits.  Everything else - wider PCM, float, and every lossy format,
+    which all decode to float - is written at 24.
+    """
+    return 16 if subtype in {"PCM_S8", "PCM_U8", "PCM_16"} else DEFAULT_BIT_DEPTH
 
 
 def _mapping_of(values: np.ndarray) -> mmap.mmap | None:
@@ -54,6 +67,8 @@ class AudioData:
     samples: np.ndarray
     sample_rate: int
     backing_path: Path | None = None
+    bit_depth: int = DEFAULT_BIT_DEPTH
+    """What the source was recorded at, and what an export of it is written at."""
 
     def __post_init__(self) -> None:
         samples = np.asarray(self.samples)
@@ -61,6 +76,8 @@ class AudioData:
             raise ValueError("audio samples must have shape [channels, frames]")
         if self.sample_rate <= 0:
             raise ValueError("sample rate must be positive")
+        if self.bit_depth not in WAV_BIT_DEPTHS:
+            raise ValueError(f"bit depth must be one of {WAV_BIT_DEPTHS}")
         if samples.dtype != np.float32:
             samples = samples.astype(np.float32)
         object.__setattr__(self, "samples", samples)
@@ -77,9 +94,12 @@ class AudioData:
         # __post_init__ rejects an empty channel axis, so the input is mono or wider.
         if self.channels == 1:
             return AudioData(
-                np.repeat(self.samples, 2, axis=0), self.sample_rate, self.backing_path
+                np.repeat(self.samples, 2, axis=0),
+                self.sample_rate,
+                self.backing_path,
+                self.bit_depth,
             )
-        return AudioData(self.samples[:2], self.sample_rate, self.backing_path)
+        return AudioData(self.samples[:2], self.sample_rate, self.backing_path, self.bit_depth)
 
     def cleanup(self) -> None:
         """Close and remove an owned temporary PCM mapping."""
@@ -94,7 +114,12 @@ class AudioData:
         release_mapped_pages(self.samples)
 
 
-def create_pcm_audio(channels: int, frames: int, sample_rate: int) -> AudioData:
+def create_pcm_audio(
+    channels: int,
+    frames: int,
+    sample_rate: int,
+    bit_depth: int = DEFAULT_BIT_DEPTH,
+) -> AudioData:
     """Allocate a planar float32 audio buffer in a temporary disk mapping."""
     if channels <= 0 or frames <= 0 or sample_rate <= 0:
         raise ValueError("channels, frames and sample rate must be positive")
@@ -103,7 +128,7 @@ def create_pcm_audio(channels: int, frames: int, sample_rate: int) -> AudioData:
     path = Path(name)
     try:
         samples = np.memmap(path, mode="w+", dtype=np.float32, shape=(channels, frames))
-        return AudioData(samples, sample_rate, path)
+        return AudioData(samples, sample_rate, path, bit_depth)
     except BaseException:
         path.unlink(missing_ok=True)
         raise
@@ -114,7 +139,9 @@ def _read_with_soundfile(path: Path, token: CancellationToken) -> AudioData:
     with sf.SoundFile(path) as source:
         if source.frames <= 0 or source.channels <= 0:
             raise ValueError(f"audio file contains no samples: {path}")
-        audio = create_pcm_audio(source.channels, source.frames, source.samplerate)
+        audio = create_pcm_audio(
+            source.channels, source.frames, source.samplerate, _subtype_bit_depth(source.subtype)
+        )
         try:
             start = 0
             for block in source.blocks(blocksize=BLOCK_FRAMES, dtype="float32", always_2d=True):
@@ -124,11 +151,12 @@ def _read_with_soundfile(path: Path, token: CancellationToken) -> AudioData:
                 start = end
             audio.release_pages()
             logger.info(
-                "decoded with SoundFile: %s (%d Hz, %d channels, %d frames)",
+                "decoded with SoundFile: %s (%d Hz, %d channels, %d frames, %d-bit)",
                 path,
                 audio.sample_rate,
                 audio.channels,
                 audio.frames,
+                audio.bit_depth,
             )
             return audio
         except BaseException:
@@ -222,13 +250,17 @@ def _read_with_qt(path: Path, token: CancellationToken) -> AudioData:
         interleaved = np.memmap(
             temporary_path, mode="r+", dtype=np.float32, shape=(frames, channels)
         )
+        # The depth stays at the default: `QAudioFormat.SampleFormat` describes
+        # what this decoder chose to hand back, not what the file holds, and it
+        # only ever sees the compressed containers libsndfile turned down.
         audio = AudioData(interleaved.T, sample_rate, temporary_path)
         logger.info(
-            "decoded with Qt Multimedia: %s (%d Hz, %d channels, %d frames)",
+            "decoded with Qt Multimedia: %s (%d Hz, %d channels, %d frames, %d-bit)",
             path,
             audio.sample_rate,
             audio.channels,
             audio.frames,
+            audio.bit_depth,
         )
         return audio
     except BaseException:
@@ -280,7 +312,7 @@ def resample_audio(
         interleaved = np.memmap(
             temporary, mode="r+", dtype=np.float32, shape=(frames, audio.channels)
         )
-        return AudioData(interleaved.T, target_rate, temporary)
+        return AudioData(interleaved.T, target_rate, temporary, audio.bit_depth)
     except BaseException:
         if not output.closed:
             output.close()
@@ -288,19 +320,12 @@ def resample_audio(
         raise
 
 
-def prepare_hi_res_output(audio: AudioData, token: CancellationToken | None = None) -> AudioData:
-    """Return audio at the original rate or the 96 kHz Hi-Res export floor."""
-    return resample_audio(audio, max(audio.sample_rate, HI_RES_SAMPLE_RATE), token)
-
-
 def write_wav_atomic(
     path: str | Path,
     audio: AudioData,
-    bits: int,
     token: CancellationToken | None = None,
 ) -> None:
-    if bits not in {16, 24}:
-        raise ValueError("bits must be 16 or 24")
+    """Write `audio` at its own rate and depth, appearing only once complete."""
     cancel = token or CancellationToken()
     destination = Path(path).expanduser().resolve()
     destination.parent.mkdir(parents=True, exist_ok=True)
@@ -309,7 +334,7 @@ def write_wav_atomic(
     )
     os.close(fd)
     temporary = Path(temporary_name)
-    subtype = "PCM_24" if bits == 24 else "PCM_16"
+    subtype = "PCM_24" if audio.bit_depth == 24 else "PCM_16"
     try:
         with sf.SoundFile(
             temporary,

@@ -20,8 +20,8 @@ $$
 $$
 
 Model computation remains at 44.1 kHz. After inference, vocals and background are independently
-resampled to 96 kHz with high-quality soxr. The pipeline then writes two 24-bit stereo WAV files:
-`<song-name>_vocal.wav` and `<song-name>_background.wav`.
+resampled back to the song's own rate with high-quality soxr. The pipeline then writes two stereo
+WAV files at the song's own bit depth: `<song-name>_vocal.wav` and `<song-name>_background.wav`.
 
 ```mermaid
 flowchart LR
@@ -33,10 +33,10 @@ flowchart LR
     infer --> vocal["Predicted vocals"]
     stereo --> subtract["Mix minus predicted vocals"]
     vocal --> subtract
-    vocal --> hires["Resample to 96 kHz<br/>write 24-bit WAV"]
-    subtract --> hires
-    hires --> vocalout["Vocal WAV"]
-    hires --> background["Background WAV"]
+    vocal --> export["Resample back to the source rate<br/>write WAV at the source depth"]
+    subtract --> export
+    export --> vocalout["Vocal WAV"]
+    export --> background["Background WAV"]
 ```
 
 ## Model Locations and Downloads
@@ -120,5 +120,6 @@ change loudness. The compensation factor from the model specification is applied
   differ. A model name does not imply a fixed ranking across all material.
 - The background is the original mix minus the predicted vocals, not the output of a second
   independent model. Vocal-prediction errors therefore appear directly in the background.
-- The 96 kHz / 24-bit values describe the exported files. Model inference remains at 44.1 kHz,
-  and upsampling cannot create high-frequency detail that the model did not predict.
+- The exported files match the input file's sample rate and bit depth. Model inference is fixed at
+  44.1 kHz, so upsampling to a higher export format would only enlarge the file without creating
+  high-frequency detail the model did not predict, and the pipeline no longer does it.

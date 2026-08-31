@@ -208,10 +208,6 @@
         <translation>출력 오디오 정보 읽는 중...</translation>
     </message>
     <message>
-        <source>preparing_hi_res</source>
-        <translation>Hi-Res 출력 준비 중...</translation>
-    </message>
-    <message>
         <source>saving</source>
         <translation>출력 파일 저장 중...</translation>
     </message>

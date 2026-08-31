@@ -8,7 +8,7 @@ from features.neural_separation.inference import MdxNetSpec, demix_chunks
 from features.neural_separation.model_store import candidate_model_dirs
 from features.neural_separation.models import NeuralJob
 from features.neural_separation.processing import run_neural_job
-from shared.audio import HI_RES_SAMPLE_RATE, create_pcm_audio
+from shared.audio import create_pcm_audio
 from shared.processing import CancellationToken
 
 
@@ -69,7 +69,7 @@ def test_demix_identity_writes_supplied_disk_buffer():
         target.cleanup()
 
 
-def test_neural_job_writes_hi_res_outputs(monkeypatch, tmp_path: Path):
+def test_neural_job_writes_stems_at_the_source_format(monkeypatch, tmp_path: Path):
     sample_rate = 8_000
     time = np.arange(sample_rate) / sample_rate
     input_path = tmp_path / "input.wav"
@@ -95,7 +95,9 @@ def test_neural_job_writes_hi_res_outputs(monkeypatch, tmp_path: Path):
     assert len(result.outputs) == 2
     for output in result.outputs:
         info = sf.info(output)
-        assert info.samplerate == HI_RES_SAMPLE_RATE
-        assert info.frames == HI_RES_SAMPLE_RATE
+        # The model runs at 44.1 kHz, but both stems come back at the rate and
+        # depth the song arrived in rather than at a fixed export format.
+        assert info.samplerate == sample_rate
+        assert abs(info.frames - sample_rate) <= 2
         assert info.channels == 2
-        assert info.subtype == "PCM_24"
+        assert info.subtype == "PCM_16"

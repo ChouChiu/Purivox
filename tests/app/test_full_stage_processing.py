@@ -7,7 +7,7 @@ import soundfile as sf
 
 from app.full_stage_processing import _alignment_quality, run_full_stage_job
 from features.full_stage import ClipKind, FullStageAnalysis, FullStageJob, TimelineClip
-from shared.audio import HI_RES_SAMPLE_RATE, AudioData, prepare_hi_res_output
+from shared.audio import AudioData
 from shared.processing import CancellationToken
 
 
@@ -75,24 +75,22 @@ def test_full_stage_render_keeps_unmatched_audio_and_processes_song(tmp_path: Pa
 
     rendered, rendered_rate = sf.read(output_path, always_2d=True, dtype="float32")
     original, _ = sf.read(stage_path, always_2d=True, dtype="float32")
-    original_hi_res = prepare_hi_res_output(AudioData(original.T.copy(), sample_rate))
+    expected_audio = AudioData(original.T.copy(), sample_rate)
     try:
-        expected = original_hi_res.samples.T
-        assert rendered_rate == HI_RES_SAMPLE_RATE
+        expected = expected_audio.samples.T
+        assert rendered_rate == sample_rate
         assert rendered.shape == expected.shape
-        assert np.allclose(rendered[:HI_RES_SAMPLE_RATE], expected[:HI_RES_SAMPLE_RATE], atol=2e-6)
-        assert np.allclose(
-            rendered[-HI_RES_SAMPLE_RATE:], expected[-HI_RES_SAMPLE_RATE:], atol=2e-6
+        assert np.allclose(rendered[:sample_rate], expected[:sample_rate], atol=2e-6)
+        assert np.allclose(rendered[-sample_rate:], expected[-sample_rate:], atol=2e-6)
+        assert np.sqrt(np.mean(rendered[3 * sample_rate : 5 * sample_rate] ** 2)) < 0.5 * np.sqrt(
+            np.mean(expected[3 * sample_rate : 5 * sample_rate] ** 2)
         )
-        assert np.sqrt(
-            np.mean(rendered[3 * HI_RES_SAMPLE_RATE : 5 * HI_RES_SAMPLE_RATE] ** 2)
-        ) < 0.5 * np.sqrt(np.mean(expected[3 * HI_RES_SAMPLE_RATE : 5 * HI_RES_SAMPLE_RATE] ** 2))
     finally:
-        original_hi_res.cleanup()
-    assert sf.info(output_path).subtype == "PCM_24"
+        expected_audio.cleanup()
+    assert sf.info(output_path).subtype == "PCM_16", "the stage's own depth must survive"
     assert result.outputs == (output_path.resolve(),)
-    assert result.audio_stats[0].sample_rate == HI_RES_SAMPLE_RATE
-    assert result.audio_stats[0].bit_depth == 24
+    assert result.audio_stats[0].sample_rate == sample_rate
+    assert result.audio_stats[0].bit_depth == 16
     assert result.audio_stats[0].duration_seconds == 8
     assert result.analysis is analysis
 

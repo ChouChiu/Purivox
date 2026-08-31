@@ -9,9 +9,7 @@ from features.neural_separation.model_store import ensure_model
 from features.neural_separation.models import NeuralJob
 from shared.audio import (
     BLOCK_FRAMES,
-    HI_RES_BIT_DEPTH,
     create_pcm_audio,
-    prepare_hi_res_output,
     read_audio,
     resample_audio,
     write_wav_atomic,
@@ -45,10 +43,14 @@ def run_neural_job(
     vocal_path = Path(str(base) + "_vocal.wav")
     background_path = Path(str(base) + "_background.wav")
     _validate_distinct(job.song, vocal_path, background_path)
-    song = vocal_audio = background_audio = hi_res_vocal = hi_res_background = None
+    song = vocal_audio = background_audio = vocal_output = background_output = None
     try:
         report_progress(progress, 0, "loading_song")
         song = read_audio(job.song, token).stereo()
+        # Every shipped model is trained at 44.1 kHz, so the pipeline runs
+        # there and both stems are handed back at the format the song arrived
+        # in.  Remember it before the input is resampled away.
+        source_rate, source_bit_depth = song.sample_rate, song.bit_depth
         if song.sample_rate != MDXNET_SAMPLE_RATE:
             report_progress(progress, 10, "ai_resampling")
             resampled = resample_audio(song, MDXNET_SAMPLE_RATE, token)
@@ -68,14 +70,14 @@ def run_neural_job(
             value = 27 + int(58 * current / max(total, 1))
             report_progress(progress, value, "ai_inferring")
 
-        vocal_audio = create_pcm_audio(2, song.frames, MDXNET_SAMPLE_RATE)
+        vocal_audio = create_pcm_audio(2, song.frames, MDXNET_SAMPLE_RATE, source_bit_depth)
         try:
             network.separate(song.samples, token, model_progress, vocal_audio.samples)
         except ProcessingCancelled:
             raise
         except Exception as error:
             raise RuntimeError(tr("ai_err_infer", msg=error)) from error
-        background_audio = create_pcm_audio(2, song.frames, MDXNET_SAMPLE_RATE)
+        background_audio = create_pcm_audio(2, song.frames, MDXNET_SAMPLE_RATE, source_bit_depth)
         block_size = BLOCK_FRAMES
         for start in range(0, song.frames, block_size):
             token.raise_if_cancelled()
@@ -83,14 +85,12 @@ def run_neural_job(
             background_audio.samples[:, start:end] = (
                 song.samples[:, start:end] - vocal_audio.samples[:, start:end]
             )
-        report_progress(progress, 86, "preparing_hi_res")
-        hi_res_vocal = prepare_hi_res_output(vocal_audio, token)
         report_progress(progress, 90, "ai_saving")
-        write_wav_atomic(vocal_path, hi_res_vocal, HI_RES_BIT_DEPTH, token)
-        report_progress(progress, 93, "preparing_hi_res")
-        hi_res_background = prepare_hi_res_output(background_audio, token)
+        vocal_output = resample_audio(vocal_audio, source_rate, token)
+        write_wav_atomic(vocal_path, vocal_output, token)
         report_progress(progress, 96, "ai_saving")
-        write_wav_atomic(background_path, hi_res_background, HI_RES_BIT_DEPTH, token)
+        background_output = resample_audio(background_audio, source_rate, token)
+        write_wav_atomic(background_path, background_output, token)
         report_progress(
             progress,
             100,
@@ -101,10 +101,12 @@ def run_neural_job(
         logger.info("neural job completed: vocal=%s background=%s", vocal_path, background_path)
         return ProcessingResult((vocal_path, background_path))
     finally:
-        if hi_res_vocal is vocal_audio:
-            hi_res_vocal = None
-        if hi_res_background is background_audio:
-            hi_res_background = None
-        for audio in (hi_res_background, hi_res_vocal, background_audio, vocal_audio, song):
+        # `resample_audio` hands back the same object when the rate already
+        # matches, so a stem must not be cleaned up twice.
+        if vocal_output is vocal_audio:
+            vocal_output = None
+        if background_output is background_audio:
+            background_output = None
+        for audio in (background_output, vocal_output, background_audio, vocal_audio, song):
             if audio is not None:
                 audio.cleanup()

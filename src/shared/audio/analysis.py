@@ -26,7 +26,6 @@ def _dbfs(amplitude: float) -> float:
 
 def analyze_audio(
     audio: AudioData,
-    bit_depth: int,
     token: CancellationToken | None = None,
 ) -> AudioStats:
     """Calculate peak and RMS statistics without loading the whole file into RAM."""
@@ -46,7 +45,7 @@ def analyze_audio(
         duration_seconds=audio.frames / audio.sample_rate,
         sample_rate=audio.sample_rate,
         channels=audio.channels,
-        bit_depth=bit_depth,
+        bit_depth=audio.bit_depth,
         peak_dbfs=_dbfs(peak),
         rms_dbfs=_dbfs(rms),
     )
