@@ -1,6 +1,6 @@
 import numpy as np
 
-from shared.dsp import hann, istft, stft
+from shared.dsp import istft, stft
 
 
 def test_stft_round_trip_and_helpers():
@@ -10,7 +10,6 @@ def test_stft_round_trip_and_helpers():
     restored = istft(spectra, 128, signal.size)
     assert spectra.shape[1] == 257
     assert np.max(np.abs(restored - signal)) < 1e-10
-    assert hann(0).size == 0
 
 
 def test_stft_preserves_single_precision_fast_path():

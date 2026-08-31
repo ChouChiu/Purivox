@@ -23,14 +23,10 @@ from shared.audio import (
     resample_audio,
     write_wav_atomic,
 )
-from shared.processing import CancellationToken, ProgressCallback, ProgressEvent
+from shared.processing import CancellationToken, ProgressCallback
 from shared.progress import report_progress
 
 logger = logging.getLogger(__name__)
-
-
-def _analysis_progress(callback: ProgressCallback, event: ProgressEvent) -> None:
-    callback(ProgressEvent(round(event.value * 0.3), event.message))
 
 
 def analyze_full_stage_job(
@@ -89,7 +85,7 @@ def _blend_segment(destination: np.ndarray, processed: np.ndarray, sample_rate: 
 
 def run_full_stage_job(
     job: FullStageJob,
-    analysis: FullStageAnalysis | None,
+    analysis: FullStageAnalysis,
     token: CancellationToken,
     progress: ProgressCallback = lambda _event: None,
 ) -> FullStageResult:
@@ -100,12 +96,6 @@ def run_full_stage_job(
         job.auto_align,
         job.include_fragments,
     )
-    if analysis is None:
-        analysis = analyze_full_stage(
-            job,
-            token,
-            lambda event: _analysis_progress(progress, event),
-        )
     matched = tuple(
         clip
         for clip in analysis.matched_clips

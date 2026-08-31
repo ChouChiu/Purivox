@@ -311,7 +311,6 @@ def process_audio(
         raise ValueError("audio must have shape [channels, frames] and a positive sample rate")
     strength = float(np.clip(strength, 0.0, 1.0))
     length = mix.shape[1]
-    mix = mix[:, :length]
     if output is None:
         result = np.empty((mix.shape[0], length), dtype=np.float32)
     else:
@@ -335,17 +334,11 @@ def process_audio(
         cancel.raise_if_cancelled()
         end = min(start + block, length)
         reference_end = min(end, accompaniment.shape[1])
-        if start >= reference_end:
-            reference_block = np.zeros(
-                (accompaniment.shape[0], end - start),
-                dtype=np.float32,
-            )
-        elif reference_end < end:
-            reference_block = np.zeros(
-                (accompaniment.shape[0], end - start),
-                dtype=np.float32,
-            )
-            reference_block[:, : reference_end - start] = accompaniment[:, start:reference_end]
+        if reference_end < end:
+            # The reference ran out inside this block: pad the rest with silence.
+            reference_block = np.zeros((accompaniment.shape[0], end - start), dtype=np.float32)
+            if start < reference_end:
+                reference_block[:, : reference_end - start] = accompaniment[:, start:reference_end]
         else:
             reference_block = accompaniment[:, start:end]
         processed = _reference_cancel(

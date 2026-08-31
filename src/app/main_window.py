@@ -247,7 +247,7 @@ class MainWindow(FluentWindow):
                 sigma=_GUI_REFERENCE_SIGMA_SECONDS,
                 auto_align=True,
             )
-        except (ValueError, TypeError):
+        except ValueError:
             self._warning("warn_invalid_parameters")
             return
         cfg.set(cfg.auto_find, self.mr.auto_find.isChecked())
@@ -293,7 +293,7 @@ class MainWindow(FluentWindow):
                 include_fragments=self.full_stage.include_fragments.isChecked(),
                 auto_align=True,
             )
-        except (TypeError, ValueError):
+        except ValueError:
             self._warning("warn_output_conflict")
             return None
         return job

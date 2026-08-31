@@ -1,18 +1,15 @@
 """The plain widgets a page is assembled from, and the filters it opens.
 
-Each one is a small correction to what Fluent or Qt gives us: a combo box
-whose popup does not depend on the platform's window opacity, fields that
-take an audio file dragged onto them, and the filters the file dialogs are
-opened with.
+Each one is a small correction to what Fluent or Qt gives us: a combo box whose
+popup does not depend on the platform's window opacity, the filters the file
+dialogs are opened with, and the rules an output field is read by.
 """
 
 from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import QMimeData, Signal
-from PySide6.QtGui import QDragEnterEvent, QDragMoveEvent, QDropEvent
-from qfluentwidgets import ComboBox, LineEdit, ListWidget, MenuAnimationType
+from qfluentwidgets import ComboBox, MenuAnimationType
 from qfluentwidgets.components.widgets.combo_box import ComboBoxMenu
 from qfluentwidgets.components.widgets.menu import MenuAnimationManager
 
@@ -20,6 +17,31 @@ from shared.audio import AUDIO_EXTENSIONS
 
 AUDIO_FILE_FILTER = "Audio (" + " ".join(f"*{suffix}" for suffix in AUDIO_EXTENSIONS) + ")"
 WAV_FILE_FILTER = "WAV (*.wav)"
+
+
+def normalized_wav_path(text: str, source: str, default_suffix: str) -> Path | None:
+    """Resolve what an output field holds into an absolute `.wav` path.
+
+    Both reference pages offer the same field with the same rules — an empty one
+    is named after the input, a bare filename lands beside it, and any other
+    extension becomes `.wav` — so the rules live here rather than once per page.
+    Returns `None` when the field is empty and there is no input to name it
+    after.
+    """
+    text, source = text.strip(), source.strip()
+    if text:
+        path = Path(text).expanduser()
+    elif source:
+        origin = Path(source).expanduser().resolve()
+        path = origin.with_name(origin.stem + default_suffix)
+    else:
+        return None
+    if path.suffix.lower() != ".wav":
+        path = path.with_suffix(".wav")
+    if not path.is_absolute():
+        base = Path(source).expanduser().resolve().parent if source else Path.cwd()
+        path = base / path
+    return path.resolve()
 
 
 class SmoothComboBoxMenu(ComboBoxMenu):
@@ -52,69 +74,3 @@ class SmoothComboBox(ComboBox):
 
     def _createComboMenu(self):
         return SmoothComboBoxMenu(self)
-
-
-def dropped_audio_paths(mime: QMimeData) -> list[Path]:
-    """Local audio files carried by a drag, in the order the drag lists them."""
-    if not mime.hasUrls():
-        return []
-    paths: list[Path] = []
-    for url in mime.urls():
-        if not url.isLocalFile():
-            continue
-        path = Path(url.toLocalFile())
-        if path.suffix.casefold() in AUDIO_EXTENSIONS:
-            paths.append(path)
-    return paths
-
-
-def _offer(event: QDragEnterEvent | QDragMoveEvent | QDropEvent) -> list[Path]:
-    """Accept a drag only while it carries audio this application can open."""
-    paths = dropped_audio_paths(event.mimeData())
-    if paths:
-        event.acceptProposedAction()
-    else:
-        event.ignore()
-    return paths
-
-
-class AudioDropLineEdit(LineEdit):
-    """Read-only path field that also accepts one audio file by drag and drop."""
-
-    file_dropped = Signal(str)
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setAcceptDrops(True)
-
-    def dragEnterEvent(self, event: QDragEnterEvent) -> None:
-        _offer(event)
-
-    def dragMoveEvent(self, event: QDragMoveEvent) -> None:
-        _offer(event)
-
-    def dropEvent(self, event: QDropEvent) -> None:
-        paths = _offer(event)
-        if paths:
-            self.file_dropped.emit(str(paths[0]))
-
-
-class AudioDropListWidget(ListWidget):
-    """Source list that accepts any number of audio files by drag and drop."""
-
-    files_dropped = Signal(list)
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setAcceptDrops(True)
-
-    def dragEnterEvent(self, event: QDragEnterEvent) -> None:
-        _offer(event)
-
-    def dragMoveEvent(self, event: QDragMoveEvent) -> None:
-        _offer(event)
-
-    def dropEvent(self, event: QDropEvent) -> None:
-        paths = _offer(event)
-        if paths:
-            self.files_dropped.emit([str(path) for path in paths])

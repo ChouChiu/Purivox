@@ -73,7 +73,7 @@ jobs synchronously; SIGINT triggers token cancellation.
 | `src/features/home/`, `src/features/settings/` | HomePage (brand + entry cards), SettingsPage (language/theme/log level) |
 | `src/shared/audio/` | `io.py`: mapped audio I/O/resampling/atomic writes, `BLOCK_FRAMES` (262 144) and `AUDIO_EXTENSIONS`, `release_mapped_pages()`; `analysis.py`: shared `AudioStats`, block copy, peak/RMS analysis |
 | `src/shared/dsp/` | `spectral.py`: librosa-compatible `stft`/`istft` (`n_fft=2048`, `hop=512`) and `log_flux_bands()`, the onset feature shared by full-stage matching and coarse alignment |
-| `src/shared/ui/` | `responsive.py` (`LayoutMode`/`LayoutMetrics` breakpoints, `ResponsiveColumns`, `FoldingRow`, `allow_shrinking`, `HeightForWidth`, `ElidedLabel`), `cards.py` (`FormCard` folding rows, `PageScrollArea` breakpoint dispatch), `widgets.py` (`SmoothComboBox` with the qfw slide animation disabled, `AudioDropLineEdit`/`AudioDropListWidget` audio-only drag and drop, file-dialog filters) |
+| `src/shared/ui/` | `responsive.py` (`LayoutMode`/`LayoutMetrics` breakpoints, `ResponsiveColumns`, `FoldingRow`, `allow_shrinking`, `HeightForWidth`, `ElidedLabel`), `cards.py` (`FormCard` folding rows, `PageScrollArea` breakpoint dispatch), `widgets.py` (`SmoothComboBox` with the qfw slide animation disabled, file-dialog filters, `normalized_wav_path` output-field rules) |
 | `src/shared/` | `config.py` (QConfig), `i18n.py` (`tr()`, `install_language()`, `SUPPORTED_LANGUAGES`), `jobs.py` (`SIGMA_CHOICES`/`STRENGTH_RANGE`/`validate_reference_settings`), `logging.py` (single-line formatter, `LOG_LEVELS`), `processing.py` (token/progress types) |
 | `src/resources/` | `i18n/{zh_cn,en_us,ja_jp,ko_kr}.ts` + compiled `.qm` (Qt Linguist, key-indexed, must stay key-identical), `model_data.json` (MDX-Net spec table keyed by MD5), `__init__.py` (`resource_path` via `importlib.resources`) |
 | `tests/` | Mirrors `src/` path-for-path (`tests/shared/` ↔ `src/shared/`, `tests/features/…`); `benchmarks/` for long/`--runslow` gates |
@@ -137,10 +137,8 @@ Language keys: `zh_cn`, `en_us`, `ja_jp`, `ko_kr`.
   `QTranslator.load()` borrows the buffer and silently returns another language's strings once it
   is freed.
 - **PySide ownership**: Qt objects that only *borrow* what they are handed will read freed memory —
-  a `.qm` buffer passed to `QTranslator.load()` returns another language's strings, and a
-  `QMimeData` passed to a `QDragEnterEvent`/`QDropEvent` constructor segfaults the
-  interpreter. Keep such an object in a named local or an attribute for as long as its reader
-  lives.
+  a `.qm` buffer passed to `QTranslator.load()` returns another language's strings once it is
+  freed. Keep such an object in a named local or an attribute for as long as its reader lives.
 - **Config**: qfluentwidgets `QConfig` (`src/shared/config.py`, `cfg` singleton,
   `config.json` in AppConfigLocation).
 - **Qt**: pages declare `Signal()`s and never touch the worker directly; `MainWindow` connects
@@ -173,10 +171,10 @@ Language keys: `zh_cn`, `en_us`, `ja_jp`, `ko_kr`.
   which cuts it to one line and keeps the whole of it in `text()` and its tooltip; text that is
   meant to wrap needs `HeightForWidth` on every container between it and the page, because Qt
   asks a widget, never the layout inside it, whether its height follows from its width.
-- **File input**: every audio entry point accepts drag and drop through `shared/ui/widgets.py`; a
-  dropped path must go through the same method as the file dialog (`set_song`, `set_stage`,
-  `add_source_paths`) so both routes behave identically. The AI page keeps a
-  `QFileSystemWatcher` on the model directories to refresh its ready/needs-download label.
+- **File input**: files arrive through `QFileDialog` only, and each page funnels its result into
+  one method (`set_song`, `set_stage`, `add_source_paths`) that also does the follow-up work — a
+  default output name, an invalidated analysis. The AI page keeps a `QFileSystemWatcher` on the
+  model directories to refresh its ready/needs-download label.
 - **Memory discipline** (long audio): stream in `shared.audio.BLOCK_FRAMES` (262 144) blocks —
   never re-spell the literal — use `create_pcm_audio` memmap + `cleanup()`/`release_pages()`;
   never accumulate whole files in RAM; add a `QTimer` poll for cancellation inside decoder loops.
@@ -184,7 +182,7 @@ Language keys: `zh_cn`, `en_us`, `ja_jp`, `ko_kr`.
   and the CLI — goes down into `shared` (feature packages cannot import each other). Existing
   examples: `shared.audio.BLOCK_FRAMES`, `shared.audio.AUDIO_EXTENSIONS`,
   `shared.jobs.validate_reference_settings`, `shared.dsp.log_flux_bands`,
-  `shared.ui.AUDIO_FILE_FILTER`.
+  `shared.ui.AUDIO_FILE_FILTER`, `shared.ui.normalized_wav_path`.
 - **Adding a source dir**: register in THREE places or it silently ships nowhere:
   `[tool.hatch.build.targets.wheel] packages` + `[tool.pyside6-project] files` (both
   `pyproject.toml`) + `include-package` in `pysidedeploy.spec`.
@@ -208,7 +206,7 @@ Language keys: `zh_cn`, `en_us`, `ja_jp`, `ko_kr`.
 | `src/features/neural_separation/inference.py` / `model_store.py` | MdxNet ONNX wrapper (chunked overlap-add); model search, Qt-network download, incremental SHA-256 verified before `QSaveFile.commit()` |
 | `src/features/full_stage/timeline_model.py` | `TimelineModel`: the analysis as an editable `QAbstractTableModel` (`data`/`flags`/`setData`), with `clip_edited` / `edit_rejected` for page status text |
 | `src/resources/model_data.json` | 65-entry MDX-Net spec table keyed by model-MD5 (`compensate`, `mdx_dim_f_set`, `mdx_dim_t_set`, `mdx_n_fft_scale_set`, `primary_stem`) |
-| `src/resources/i18n/*.ts` / `*.qm` | UI strings: Qt Linguist XML sources keyed by snake_case identifiers in one `Purivox` context, plus the `pyside6-lrelease` output the app loads (149 keys; parity, freshness and literal-key use all tested). Edit the `.ts`, recompile, commit both |
+| `src/resources/i18n/*.ts` / `*.qm` | UI strings: Qt Linguist XML sources keyed by snake_case identifiers in one `Purivox` context, plus the `pyside6-lrelease` output the app loads (144 keys; parity, freshness and literal-key use all tested). Edit the `.ts`, recompile, commit both |
 | `tests/test_architecture.py` | AST import-boundary gate (shared isolation, feature isolation) |
 | `tests/conftest.py` | forces `QT_QPA_PLATFORM=offscreen`, adds `--runslow`, auto-skips `slow` tests |
 

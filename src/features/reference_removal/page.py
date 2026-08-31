@@ -34,13 +34,13 @@ from shared.ui import (
     AUDIO_FILE_FILTER,
     UNBOUNDED_WIDTH,
     WAV_FILE_FILTER,
-    AudioDropLineEdit,
     ElidedLabel,
     FoldingRow,
     FormCard,
     Lane,
     LayoutMetrics,
     PageScrollArea,
+    normalized_wav_path,
 )
 
 logger = logging.getLogger(__name__)
@@ -62,12 +62,12 @@ class MrPage(PageScrollArea):
         self.files = FormCard()
         self.song_label, self.song_edit, self.song_button = (
             BodyLabel(),
-            AudioDropLineEdit(),
+            LineEdit(),
             PushButton(),
         )
         self.acc_label, self.acc_edit, self.acc_button = (
             BodyLabel(),
-            AudioDropLineEdit(),
+            LineEdit(),
             PushButton(),
         )
         self.output_label, self.output_edit, self.output_button = (
@@ -187,8 +187,6 @@ class MrPage(PageScrollArea):
 
         self.song_button.clicked.connect(self._select_song)
         self.acc_button.clicked.connect(self._select_acc)
-        self.song_edit.file_dropped.connect(self.set_song)
-        self.acc_edit.file_dropped.connect(self.set_accompaniment)
         self.output_button.clicked.connect(self._select_output)
         self.output_edit.textEdited.connect(self._output_edited)
         self.output_edit.editingFinished.connect(self.normalized_output_path)
@@ -241,8 +239,6 @@ class MrPage(PageScrollArea):
         self.strength_label.setText(tr("strength"))
         for button in (self.song_button, self.acc_button, self.output_button):
             button.setText(tr("browse"))
-        for edit in (self.song_edit, self.acc_edit):
-            edit.setToolTip(tr("drop_hint"))
         self.auto_find.setOnText(tr("auto_find_on"))
         self.auto_find.setOffText(tr("auto_find_off"))
         self.cancel_button.setText(tr("cancel"))
@@ -285,7 +281,6 @@ class MrPage(PageScrollArea):
             self.set_song(path)
 
     def set_song(self, path: str) -> None:
-        """Take a song from the file dialog or from a drop, identically."""
         self.clear_result()
         self.song_edit.setText(path)
         if not self._output_user_edited or not self.output_edit.text().strip():
@@ -320,23 +315,12 @@ class MrPage(PageScrollArea):
         self.clear_result()
 
     def normalized_output_path(self) -> Path | None:
-        text = self.output_edit.text().strip()
-        if not text:
-            song = self.song_edit.text().strip()
-            if not song:
-                return None
-            source = Path(song).expanduser().resolve()
-            path = source.with_name(source.stem + "_vocals.wav")
+        path = normalized_wav_path(self.output_edit.text(), self.song_edit.text(), "_vocals.wav")
+        if path is None:
+            return None
+        if not self.output_edit.text().strip():
+            # The name came from the song, so it is not the user's own choice.
             self._output_user_edited = False
-        else:
-            path = Path(text).expanduser()
-        if path.suffix.lower() != ".wav":
-            path = path.with_suffix(".wav")
-        if not path.is_absolute():
-            song = self.song_edit.text().strip()
-            base = Path(song).expanduser().resolve().parent if song else Path.cwd()
-            path = base / path
-        path = path.resolve()
         self.output_edit.setText(str(path))
         return path
 

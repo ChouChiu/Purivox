@@ -7,7 +7,7 @@ from qfluentwidgets import Slider
 
 
 class SeekSlider(Slider):
-    """Slider that seeks directly when the user clicks its groove."""
+    """Horizontal slider that seeks directly when the user clicks its groove."""
 
     seek_requested = Signal(int)
 
@@ -26,16 +26,10 @@ class SeekSlider(Slider):
             QStyle.SubControl.SC_SliderHandle,
             self,
         )
-        if self.orientation() == Qt.Orientation.Horizontal:
-            slider_length = handle.width()
-            slider_minimum = groove.left()
-            slider_maximum = groove.right() - slider_length + 1
-            position = point.x() - slider_length // 2
-        else:
-            slider_length = handle.height()
-            slider_minimum = groove.top()
-            slider_maximum = groove.bottom() - slider_length + 1
-            position = point.y() - slider_length // 2
+        slider_length = handle.width()
+        slider_minimum = groove.left()
+        slider_maximum = groove.right() - slider_length + 1
+        position = point.x() - slider_length // 2
         return QStyle.sliderValueFromPosition(
             self.minimum(),
             self.maximum(),

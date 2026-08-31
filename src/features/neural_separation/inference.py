@@ -50,7 +50,7 @@ def spec_for_model(path: Path) -> MdxNetSpec:
     if not entry or "mdx_n_fft_scale_set" not in entry:
         raise ValueError(f"unknown MDX-Net model: {path.name}")
     return MdxNetSpec(
-        n_fft=int(entry.get("mdx_n_fft_scale_set", 7680)),
+        n_fft=int(entry["mdx_n_fft_scale_set"]),
         dim_f=int(entry.get("mdx_dim_f_set", 3072)),
         dim_t=1 << int(entry.get("mdx_dim_t_set", 8)),
         compensate=float(entry.get("compensate", 1.0)),
@@ -70,7 +70,7 @@ def demix_chunks(
     output: np.ndarray | None = None,
 ) -> np.ndarray:
     audio = np.asarray(mix, dtype=np.float32)
-    if audio.shape[0] != 2 or audio.ndim != 2:
+    if audio.ndim != 2 or audio.shape[0] != 2:
         raise ValueError("MDX-Net expects stereo audio")
     chunk_size = spec.hop * (spec.segment_size - 1)
     trim = spec.n_fft // 2
@@ -133,11 +133,11 @@ def demix_chunks(
 
 
 class MdxNet:
-    def __init__(self, model_path: Path, spec: MdxNetSpec | None = None):
+    def __init__(self, model_path: Path):
         import onnxruntime as ort
 
         self.model_path = model_path
-        self.spec = spec or spec_for_model(model_path)
+        self.spec = spec_for_model(model_path)
         self.session = ort.InferenceSession(str(model_path), providers=["CPUExecutionProvider"])
         self.input = self.session.get_inputs()[0]
         self.output = self.session.get_outputs()[0]

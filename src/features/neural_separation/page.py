@@ -6,6 +6,7 @@ from PySide6.QtCore import QFileSystemWatcher, Signal
 from PySide6.QtWidgets import QFileDialog, QHBoxLayout
 from qfluentwidgets import (
     BodyLabel,
+    LineEdit,
     PrimaryPushButton,
     ProgressBar,
     PushButton,
@@ -18,7 +19,6 @@ from shared.config import cfg
 from shared.i18n import tr
 from shared.ui import (
     AUDIO_FILE_FILTER,
-    AudioDropLineEdit,
     ElidedLabel,
     FormCard,
     Lane,
@@ -40,7 +40,7 @@ class AiPage(PageScrollArea):
         self.form = FormCard()
         self.song_label, self.song_edit, self.song_button = (
             BodyLabel(),
-            AudioDropLineEdit(),
+            LineEdit(),
             PushButton(),
         )
         self.song_edit.setReadOnly(True)
@@ -73,7 +73,6 @@ class AiPage(PageScrollArea):
         self.model_watcher.directoryChanged.connect(self._model_directory_changed)
         self._watch_model_dirs()
         self.song_button.clicked.connect(self._select_song)
-        self.song_edit.file_dropped.connect(self.song_edit.setText)
         self.start_button.clicked.connect(self.start_requested)
         self.cancel_button.clicked.connect(self.cancel_requested)
         self.model.currentIndexChanged.connect(lambda _index: self._update_model_status())
@@ -84,7 +83,6 @@ class AiPage(PageScrollArea):
         self.status_card.title_label.setText(tr("status_group"))
         self.song_label.setText(tr("song_label"))
         self.song_button.setText(tr("browse"))
-        self.song_edit.setToolTip(tr("drop_hint"))
         self.model_label.setText(tr("ai_model_label"))
         self.cancel_button.setText(tr("cancel"))
         self.start_button.setText(tr("ai_extract"))

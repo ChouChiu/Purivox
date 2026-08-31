@@ -13,12 +13,6 @@ def _hann_window(size: int, dtype_string: str) -> np.ndarray:
     return get_window("hann", size, fftbins=True).astype(np.dtype(dtype_string))
 
 
-def hann(size: int) -> np.ndarray:
-    if size <= 0:
-        return np.empty(0, dtype=np.float64)
-    return _hann_window(size, np.dtype(np.float64).str).copy()
-
-
 def stft(signal: np.ndarray, n_fft: int = 2048, hop: int = 512) -> np.ndarray:
     """librosa-compatible centered STFT returned as [frames, bins]."""
     source = np.asarray(signal)

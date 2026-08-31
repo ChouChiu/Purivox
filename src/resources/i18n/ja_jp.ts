@@ -581,9 +581,5 @@
         <source>ai_err_infer</source>
         <translation>AI 分離に失敗しました: {msg}</translation>
     </message>
-    <message>
-        <source>drop_hint</source>
-        <translation>音声ファイルをここにドラッグできます</translation>
-    </message>
 </context>
 </TS>

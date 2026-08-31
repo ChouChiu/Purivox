@@ -138,5 +138,4 @@ files = [
   "src/shared/ui/cards.py",
   "src/shared/ui/responsive.py",
   "src/shared/ui/widgets.py",
-  "src/shared/update.py",
 ]

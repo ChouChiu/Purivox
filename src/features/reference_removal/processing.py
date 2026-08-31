@@ -92,11 +92,10 @@ def run_reference_job(
         )
         report_progress(progress, 84, "preparing_hi_res")
         hi_res_audio = prepare_hi_res_output(processed_audio, token)
-        bit_depth = HI_RES_BIT_DEPTH
         report_progress(progress, 86, "analyzing_output")
-        stats = analyze_audio(hi_res_audio, bit_depth, token)
+        stats = analyze_audio(hi_res_audio, HI_RES_BIT_DEPTH, token)
         report_progress(progress, 90, "saving")
-        write_wav_atomic(job.output, hi_res_audio, bit_depth, token)
+        write_wav_atomic(job.output, hi_res_audio, HI_RES_BIT_DEPTH, token)
         stats = replace(stats, file_size=job.output.stat().st_size)
         report_progress(progress, 100, "done_status", path=job.output)
         logger.info("reference job completed: %s", job.output.resolve())

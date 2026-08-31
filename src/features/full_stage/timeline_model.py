@@ -107,7 +107,7 @@ class TimelineModel(QAbstractTableModel):
 
     def data(self, index: QModelIndex, role: int = 0):
         clip = self.clip(index.row())
-        if clip is None or not index.isValid():
+        if clip is None:
             return None
         column = index.column()
         if role == Qt.ItemDataRole.CheckStateRole and column == ENABLED:
@@ -190,7 +190,7 @@ class TimelineModel(QAbstractTableModel):
             return False
         try:
             analysis = add_manual_clip(self._analysis, clip)
-        except (IndexError, ValueError):
+        except ValueError:
             self.edit_rejected.emit()
             return False
         self.set_analysis(analysis)

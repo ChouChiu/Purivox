@@ -581,9 +581,5 @@ Background: {background}</translation>
         <source>ai_err_infer</source>
         <translation>AI separation failed: {msg}</translation>
     </message>
-    <message>
-        <source>drop_hint</source>
-        <translation>Drag audio files here</translation>
-    </message>
 </context>
 </TS>

@@ -28,16 +28,14 @@ class ApplicationLogFormatter(logging.Formatter):
         return f"{timestamp}.{centiseconds:02d} [{record.levelname}] {record.name}: {message}"
 
 
-def normalise_log_level(level: str | int) -> int:
-    if isinstance(level, int):
-        return level
-    name = str(level).upper()
+def normalise_log_level(level: str) -> int:
+    name = level.upper()
     if name not in LOG_LEVELS:
         raise ValueError(f"unsupported log level: {level}")
     return logging.getLevelNamesMapping()[name]
 
 
-def set_log_level(level: str | int) -> None:
+def set_log_level(level: str) -> None:
     numeric_level = normalise_log_level(level)
     logging.getLogger().setLevel(numeric_level)
     if _handler is not None:
@@ -45,7 +43,7 @@ def set_log_level(level: str | int) -> None:
 
 
 def configure_logging(
-    level: str | int = "INFO",
+    level: str = "INFO",
     *,
     stream: TextIO | None = None,
     install_qt_handler: bool = True,

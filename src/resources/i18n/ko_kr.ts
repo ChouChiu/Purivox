@@ -581,9 +581,5 @@
         <source>ai_err_infer</source>
         <translation>AI 분리에 실패했습니다: {msg}</translation>
     </message>
-    <message>
-        <source>drop_hint</source>
-        <translation>오디오 파일을 여기로 끌어다 놓을 수 있습니다</translation>
-    </message>
 </context>
 </TS>

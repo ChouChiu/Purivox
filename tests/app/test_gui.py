@@ -412,22 +412,22 @@ def test_long_output_path_does_not_expand_page_width(qtbot, tmp_path: Path):
     assert page.content.sizeHint().width() <= baseline
 
 
-def test_pages_take_files_by_drag_and_drop(qtbot, tmp_path: Path):
-    """Dropping a file must set up the page exactly as the file dialog does."""
+def test_choosing_files_sets_up_the_page(qtbot, tmp_path: Path):
+    """The file dialog hands its result to these methods and nothing else."""
     window = MainWindow()
     qtbot.addWidget(window)
     song = tmp_path / "live.wav"
 
-    window.mr.song_edit.file_dropped.emit(str(song))
+    window.mr.set_song(str(song))
     assert window.mr.song_edit.text() == str(song)
     assert Path(window.mr.output_edit.text()).name == "live_vocals.wav"
 
-    window.full_stage.stage_edit.file_dropped.emit(str(song))
+    window.full_stage.set_stage(str(song))
     assert Path(window.full_stage.output_edit.text()).name == "live_full_stage_vocals.wav"
 
-    window.full_stage.sources.files_dropped.emit([str(tmp_path / "a.wav"), str(tmp_path / "b.wav")])
+    window.full_stage.add_source_paths([str(tmp_path / "a.wav"), str(tmp_path / "b.wav")])
     assert [path.name for path in window.full_stage.source_paths()] == ["a.wav", "b.wav"]
-    window.full_stage.sources.files_dropped.emit([str(tmp_path / "a.wav")])
+    window.full_stage.add_source_paths([str(tmp_path / "a.wav")])
     assert len(window.full_stage.source_paths()) == 2, "a repeated source must not be added twice"
 
 

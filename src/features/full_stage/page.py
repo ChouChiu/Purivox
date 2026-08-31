@@ -14,6 +14,7 @@ from qfluentwidgets import (
     BodyLabel,
     FluentIcon,
     LineEdit,
+    ListWidget,
     PrimaryPushButton,
     ProgressBar,
     PushButton,
@@ -24,18 +25,17 @@ from qfluentwidgets import (
 )
 
 from features.full_stage.models import ClipKind, FullStageAnalysis, TimelineClip
-from features.full_stage.timeline_model import TimelineModel
+from features.full_stage.timeline_model import SOURCE, TimelineModel
 from shared.i18n import tr
 from shared.ui import (
     AUDIO_FILE_FILTER,
     WAV_FILE_FILTER,
-    AudioDropLineEdit,
-    AudioDropListWidget,
     ElidedLabel,
     FormCard,
     Lane,
     LayoutMetrics,
     PageScrollArea,
+    normalized_wav_path,
 )
 
 SOURCES_HEIGHT, SHORT_SOURCES_HEIGHT = 150, 110
@@ -57,7 +57,7 @@ class FullStagePage(PageScrollArea):
         self.files = FormCard()
         self.stage_label, self.stage_edit, self.stage_button = (
             BodyLabel(),
-            AudioDropLineEdit(),
+            LineEdit(),
             PushButton(),
         )
         self.stage_edit.setReadOnly(True)
@@ -74,9 +74,8 @@ class FullStagePage(PageScrollArea):
         self.sources_hint = BodyLabel()
         self.sources_hint.setWordWrap(True)
         self.sources_card.layout.addWidget(self.sources_hint)
-        self.sources = AudioDropListWidget()
+        self.sources = ListWidget()
         self.sources.setMinimumHeight(SOURCES_HEIGHT)
-        self.sources.setDragDropMode(QAbstractItemView.DragDropMode.NoDragDrop)
         self.sources_card.layout.addWidget(self.sources)
         source_actions = QHBoxLayout()
         self.add_sources = PushButton(FluentIcon.ADD, "")
@@ -113,12 +112,9 @@ class FullStagePage(PageScrollArea):
         self.timeline.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.timeline.verticalHeader().hide()
         header = self.timeline.horizontalHeader()
-        header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(5, QHeaderView.ResizeMode.Stretch)
+        for column in range(self.timeline_model.columnCount() - 1):
+            header.setSectionResizeMode(column, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(SOURCE, QHeaderView.ResizeMode.Stretch)
         self.timeline_card.layout.addWidget(self.timeline)
         clip_actions = QHBoxLayout()
         self.add_clip = PushButton(FluentIcon.ADD, "")
@@ -151,8 +147,6 @@ class FullStagePage(PageScrollArea):
         self.layout.addStretch()
 
         self.stage_button.clicked.connect(self._select_stage)
-        self.stage_edit.file_dropped.connect(self.set_stage)
-        self.sources.files_dropped.connect(self.add_source_paths)
         self.output_button.clicked.connect(self._select_output)
         self.add_sources.clicked.connect(self._add_sources)
         self.remove_source.clicked.connect(self._remove_source)
@@ -184,8 +178,6 @@ class FullStagePage(PageScrollArea):
         self.output_label.setText(tr("output_file"))
         self.output_edit.setPlaceholderText(tr("stage_output_hint"))
         self.stage_button.setText(tr("browse"))
-        self.stage_edit.setToolTip(tr("drop_hint"))
-        self.sources.setToolTip(tr("drop_hint"))
         self.output_button.setText(tr("browse"))
         self.sources_card.title_label.setText(tr("stage_sources"))
         self.sources_hint.setText(tr("stage_sources_hint"))
@@ -215,20 +207,11 @@ class FullStagePage(PageScrollArea):
         )
 
     def normalized_output_path(self) -> Path | None:
-        text = self.output_edit.text().strip()
-        if not text:
-            stage = self.stage_edit.text().strip()
-            if not stage:
-                return None
-            source = Path(stage).expanduser().resolve()
-            path = source.with_name(source.stem + "_full_stage_vocals.wav")
-        else:
-            path = Path(text).expanduser()
-            if not path.is_absolute() and self.stage_edit.text().strip():
-                path = Path(self.stage_edit.text()).expanduser().resolve().parent / path
-        if path.suffix.lower() != ".wav":
-            path = path.with_suffix(".wav")
-        path = path.resolve()
+        path = normalized_wav_path(
+            self.output_edit.text(), self.stage_edit.text(), "_full_stage_vocals.wav"
+        )
+        if path is None:
+            return None
         self.output_edit.setText(str(path))
         return path
 
@@ -282,7 +265,6 @@ class FullStagePage(PageScrollArea):
             self.set_stage(path)
 
     def set_stage(self, path: str) -> None:
-        """Take the stage recording from the file dialog or from a drop."""
         self.stage_edit.setText(path)
         self.output_edit.setText(
             str(Path(path).with_name(Path(path).stem + "_full_stage_vocals.wav"))
@@ -308,7 +290,7 @@ class FullStagePage(PageScrollArea):
         self.add_source_paths(paths)
 
     def add_source_paths(self, paths: list[str]) -> None:
-        """Append sources from the file dialog or from a drop, skipping repeats."""
+        """Append the chosen sources, skipping ones the list already holds."""
         existing = {str(path.resolve()) for path in self.source_paths()}
         added = False
         for path_text in paths:
