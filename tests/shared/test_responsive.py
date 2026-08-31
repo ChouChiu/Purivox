@@ -3,13 +3,16 @@ from __future__ import annotations
 import pytest
 from PySide6.QtCore import QSize
 from PySide6.QtWidgets import QApplication, QWidget
-from qfluentwidgets import BodyLabel, LineEdit, PushButton
+from qfluentwidgets import BodyLabel, LineEdit, ProgressBar, PushButton
 
 from shared.ui import (
+    ElidedLabel,
     FormCard,
     Lane,
     LayoutMode,
+    PageScrollArea,
     ResponsiveColumns,
+    allow_shrinking,
     layout_metrics,
     layout_mode,
 )
@@ -129,3 +132,121 @@ def test_a_card_gives_back_padding_when_the_window_is_narrow(qtbot):
     card.apply_layout(layout_metrics(QSize(420, 900)))
 
     assert card.layout.getContentsMargins() < roomy
+
+
+LONG_STATUS = (
+    "processing finished, saved to /home/singer/Videos/MR/2026 KWDA awards stage backing/"
+    "R14 - Hit 'Em_vocals.wav"
+)
+
+
+def _status_page(
+    qtbot, size: QSize, status: BodyLabel
+) -> tuple[PageScrollArea, FormCard, ProgressBar]:
+    """A page with one status card, the shape a running job leaves behind."""
+    page = PageScrollArea()
+    qtbot.addWidget(page)
+    card = FormCard("状态")
+    progress = ProgressBar()
+    card.layout.addWidget(status)
+    card.layout.addWidget(progress)
+    page.add_card(card, Lane.SECONDARY)
+    page.resize(size)
+    page.show()
+    qtbot.waitExposed(page)
+    return page, card, progress
+
+
+def _flush() -> None:
+    for _ in range(3):
+        QApplication.processEvents()
+
+
+def _wrapping_label() -> BodyLabel:
+    label = BodyLabel()
+    label.setWordWrap(True)
+    allow_shrinking(label)
+    return label
+
+
+def _shown(label: ElidedLabel) -> str:
+    """What the label paints, as opposed to the text it was given."""
+    return BodyLabel.text(label)
+
+
+@pytest.mark.parametrize("size", [QSize(700, 500), QSize(420, 700), QSize(1600, 900)])
+def test_a_card_grows_for_the_wrapped_text_it_is_given(qtbot, size: QSize):
+    """Wrapped prose takes its second line inside the card, not over its edge."""
+    text = _wrapping_label()
+    _, card, progress = _status_page(qtbot, size, text)
+
+    text.setText(LONG_STATUS)
+    _flush()
+
+    wrapped = text.heightForWidth(text.width())
+    assert wrapped > text.fontMetrics().height()  # the text really does take a second line
+    assert text.height() >= wrapped
+    assert progress.y() >= text.y() + wrapped
+    assert card.height() >= progress.y() + progress.height()
+
+
+def test_a_card_without_wrapping_content_keeps_its_own_height(qtbot):
+    """Only a card that can answer for its height claims to depend on width."""
+    page = PageScrollArea()
+    qtbot.addWidget(page)
+    card = FormCard("参数")
+    card.layout.addWidget(ProgressBar())
+    page.add_card(card)
+    page.resize(700, 500)
+    page.show()
+    qtbot.waitExposed(page)
+    _flush()
+
+    assert not card.sizePolicy().hasHeightForWidth()
+    assert card.height() >= card.minimumSizeHint().height()
+
+
+def test_a_shrinking_label_still_asks_for_the_height_its_text_needs(qtbot):
+    label = BodyLabel(LONG_STATUS)
+    qtbot.addWidget(label)
+    label.setWordWrap(True)
+
+    allow_shrinking(label)
+
+    assert label.sizePolicy().hasHeightForWidth()
+
+
+@pytest.mark.parametrize("size", [QSize(700, 500), QSize(420, 700), QSize(1600, 900)])
+def test_a_long_status_is_cut_short_instead_of_taking_a_second_line(qtbot, size: QSize):
+    """A result path is longer than any card is wide, at every window shape."""
+    status = ElidedLabel()
+    page, _, progress = _status_page(qtbot, size, status)
+
+    status.setText(LONG_STATUS)
+    _flush()
+
+    assert _shown(status).endswith("…")
+    assert status.fontMetrics().horizontalAdvance(_shown(status)) <= status.width()
+    assert status.height() <= status.fontMetrics().height() + 4
+    assert progress.y() >= status.y() + status.height()
+    assert page.content.sizeHint().width() <= page.viewport().width()
+    # Cut on the way out only: the path stays readable from code and on hover.
+    assert status.text() == status.toolTip() == LONG_STATUS
+
+
+def test_a_status_line_is_re_cut_for_the_width_it_has(qtbot):
+    status = ElidedLabel()
+    page, _, _ = _status_page(qtbot, QSize(900, 500), status)
+    status.setText(LONG_STATUS)
+    _flush()
+    roomy = _shown(status)
+
+    page.resize(420, 500)
+    _flush()
+    assert len(_shown(status)) < len(roomy)
+
+    status.setText("就绪")
+    _flush()
+
+    assert _shown(status) == "就绪"
+    assert status.toolTip() == ""

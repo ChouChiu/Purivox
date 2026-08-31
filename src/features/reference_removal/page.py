@@ -35,12 +35,12 @@ from shared.ui import (
     UNBOUNDED_WIDTH,
     WAV_FILE_FILTER,
     AudioDropLineEdit,
+    ElidedLabel,
     FoldingRow,
     FormCard,
     Lane,
     LayoutMetrics,
     PageScrollArea,
-    allow_shrinking,
 )
 
 logger = logging.getLogger(__name__)
@@ -95,17 +95,14 @@ class MrPage(PageScrollArea):
         self.add_card(self.parameters)
 
         self.status_card = FormCard()
-        self.status = BodyLabel()
-        self.status.setWordWrap(True)
-        allow_shrinking(self.status)
+        self.status = ElidedLabel()
         self.progress = ProgressBar()
         self.status_card.layout.addWidget(self.status)
         self.status_card.layout.addWidget(self.progress)
         self.add_card(self.status_card, Lane.SECONDARY)
 
         self.preview_card = FormCard()
-        self.preview_status = BodyLabel()
-        allow_shrinking(self.preview_status)
+        self.preview_status = ElidedLabel()
         self.preview_seek = SeekSlider(Qt.Orientation.Horizontal)
         self.preview_seek.setRange(0, 1)
         self.preview_seek.setEnabled(False)

@@ -73,7 +73,7 @@ jobs synchronously; SIGINT triggers token cancellation.
 | `src/features/home/`, `src/features/settings/` | HomePage (brand + entry cards), SettingsPage (language/theme/log level) |
 | `src/shared/audio/` | `io.py`: mapped audio I/O/resampling/atomic writes, `BLOCK_FRAMES` (262 144) and `AUDIO_EXTENSIONS`, `release_mapped_pages()`; `analysis.py`: shared `AudioStats`, block copy, peak/RMS analysis |
 | `src/shared/dsp/` | `spectral.py`: librosa-compatible `stft`/`istft` (`n_fft=2048`, `hop=512`) and `log_flux_bands()`, the onset feature shared by full-stage matching and coarse alignment |
-| `src/shared/ui/` | `responsive.py` (`LayoutMode`/`LayoutMetrics` breakpoints, `ResponsiveColumns`, `FoldingRow`, `allow_shrinking`), `cards.py` (`FormCard` folding rows, `PageScrollArea` breakpoint dispatch), `combo_box.py` (`SmoothComboBox`, qfw slide animation disabled), `dialogs.py` (file-dialog filters), `drop.py` (`AudioDropLineEdit`/`AudioDropListWidget`, audio-only drag and drop) |
+| `src/shared/ui/` | `responsive.py` (`LayoutMode`/`LayoutMetrics` breakpoints, `ResponsiveColumns`, `FoldingRow`, `allow_shrinking`, `HeightForWidth`, `ElidedLabel`), `cards.py` (`FormCard` folding rows, `PageScrollArea` breakpoint dispatch), `combo_box.py` (`SmoothComboBox`, qfw slide animation disabled), `dialogs.py` (file-dialog filters), `drop.py` (`AudioDropLineEdit`/`AudioDropListWidget`, audio-only drag and drop) |
 | `src/shared/` | `config.py` (QConfig), `i18n.py` (`tr()`, `install_language()`, `SUPPORTED_LANGUAGES`), `jobs.py` (`SIGMA_CHOICES`/`STRENGTH_RANGE`/`validate_reference_settings`), `logging.py` (single-line formatter, `LOG_LEVELS`), `processing.py` (token/progress types) |
 | `src/resources/` | `i18n/{zh_cn,en_us,ja_jp,ko_kr}.ts` + compiled `.qm` (Qt Linguist, key-indexed, must stay key-identical), `model_data.json` (MDX-Net spec table keyed by MD5), `__init__.py` (`resource_path` via `importlib.resources`) |
 | `tests/` | Mirrors `src/` path-for-path (`tests/shared/` ↔ `src/shared/`, `tests/features/…`); `benchmarks/` for long/`--runslow` gates |
@@ -169,7 +169,10 @@ Language keys: `zh_cn`, `en_us`, `ja_jp`, `ko_kr`.
   is a page that got cut off (the scroll areas keep `ScrollBarAlwaysOff`). A card joins the page
   through `add_card(card, lane)`, never `self.layout.addWidget`, and one column keeps the order
   the cards were added in. Any label that can hold a path needs `allow_shrinking()`, or its
-  longest unwrappable word becomes the page's minimum width.
+  longest unwrappable word becomes the page's minimum width. A path belongs in an `ElidedLabel`,
+  which cuts it to one line and keeps the whole of it in `text()` and its tooltip; text that is
+  meant to wrap needs `HeightForWidth` on every container between it and the page, because Qt
+  asks a widget, never the layout inside it, whether its height follows from its width.
 - **File input**: every audio entry point accepts drag and drop through `shared/ui/drop.py`; a
   dropped path must go through the same method as the file dialog (`set_song`, `set_stage`,
   `add_source_paths`) so both routes behave identically. The AI page keeps a

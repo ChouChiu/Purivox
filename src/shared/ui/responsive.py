@@ -18,6 +18,11 @@ through `LayoutMetrics.short`.
 Pages never watch their own children: `PageScrollArea` measures its viewport
 and hands the metrics down to every `Responsive` widget below it, so a control
 folds because the *page* is narrow, not because it was already squeezed.
+
+Height is the one thing a width cannot settle on its own: a wrapped status
+line needs two lines here and three a breakpoint down. Qt puts that question
+to a *widget*, never to the layout inside it, so `HeightForWidth` carries the
+answer up from the label to the card and out to the page.
 """
 
 from __future__ import annotations
@@ -25,8 +30,17 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import IntEnum
 
-from PySide6.QtCore import QSize
-from PySide6.QtWidgets import QGridLayout, QHBoxLayout, QSizePolicy, QVBoxLayout, QWidget
+from PySide6.QtCore import QEvent, QSize, Qt
+from PySide6.QtGui import QResizeEvent, QShowEvent
+from PySide6.QtWidgets import (
+    QGridLayout,
+    QHBoxLayout,
+    QLayout,
+    QSizePolicy,
+    QVBoxLayout,
+    QWidget,
+)
+from qfluentwidgets import BodyLabel
 
 PORTRAIT_MAX_WIDTH = 620
 HALF_MAX_WIDTH = 960
@@ -123,9 +137,51 @@ def allow_shrinking(widget: QWidget) -> None:
     a file path has no spaces to wrap at — one result message would then push
     the whole page wider than the window. An `Ignored` policy hands the width
     decision back to the layout, and the widget wraps or elides inside it.
+
+    The rest of the policy is kept as it was found: a wrapped label announces
+    that its height depends on the width it is given, and dropping that would
+    leave it one line tall with the rest painted over the card's edge.
     """
     widget.setMinimumWidth(0)
-    widget.setSizePolicy(QSizePolicy.Policy.Ignored, widget.sizePolicy().verticalPolicy())
+    policy = widget.sizePolicy()
+    policy.setHorizontalPolicy(QSizePolicy.Policy.Ignored)
+    widget.setSizePolicy(policy)
+
+
+class ElidedLabel(BodyLabel):
+    """One line of text that ends in an ellipsis rather than wrapping.
+
+    A result path is longer than any card is wide, and wrapping it turns a
+    one-line status into three that push everything under it down the page.
+    The label keeps the whole text — `text()` still answers with it, and a
+    tooltip offers the part that did not fit — and shows as much of it as the
+    width the layout gave it can hold.
+    """
+
+    def __init__(self, text: str = "", parent: QWidget | None = None):
+        super().__init__(parent)
+        self._full_text = ""
+        self.setWordWrap(False)
+        allow_shrinking(self)
+        self.setText(text)
+
+    def text(self) -> str:
+        return self._full_text
+
+    def setText(self, text: str) -> None:
+        self._full_text = text
+        self._fit_to_width()
+
+    def resizeEvent(self, event: QResizeEvent) -> None:
+        super().resizeEvent(event)
+        self._fit_to_width()
+
+    def _fit_to_width(self) -> None:
+        elided = self.fontMetrics().elidedText(
+            self._full_text, Qt.TextElideMode.ElideRight, self.width()
+        )
+        super().setText(elided)
+        self.setToolTip("" if elided == self._full_text else self._full_text)
 
 
 def layout_metrics(size: QSize) -> LayoutMetrics:
@@ -145,7 +201,67 @@ class Responsive:
         raise NotImplementedError
 
 
-class ResponsiveColumns(QWidget):
+class HeightForWidth:
+    """Mixin carrying a wrapped label's height past the widget that holds it.
+
+    Qt asks a *widget's* size policy whether its height depends on its width,
+    and never the layout inside it, so a card holding a word-wrapped status
+    line is measured at one line and paints the other two over its own edge.
+    The mixin re-reads its layout whenever that layout changes and mirrors the
+    answer onto the widget's own policy, which is all a parent layout needs to
+    start asking for the taller height. A widget with nothing wrapping inside
+    it keeps a plain policy: claiming a height-for-width it cannot compute
+    would collapse it to nothing.
+    """
+
+    def sync_height_for_width(self) -> None:
+        # `QWidget.layout` explicitly: a card keeps its own layout under a
+        # `layout` attribute, which shadows the method on the instance.
+        layout = QWidget.layout(self)
+        wanted = layout is not None and layout.hasHeightForWidth()
+        policy = self.sizePolicy()
+        if policy.hasHeightForWidth() == wanted:
+            return
+        policy.setHeightForWidth(wanted)
+        self.setSizePolicy(policy)
+        _resync_enclosing(self)
+
+    def event(self, event: QEvent) -> bool:
+        handled = super().event(event)
+        if event.type() is QEvent.Type.LayoutRequest:
+            self.sync_height_for_width()
+        return handled
+
+    def showEvent(self, event: QShowEvent) -> None:
+        # A card is filled while it is still hidden, where a layout change
+        # posts no request; catch up before the first paint.
+        self.sync_height_for_width()
+        super().showEvent(event)
+
+
+def _resync_enclosing(widget: QWidget) -> None:
+    """Put the question to the containers above `widget` again.
+
+    A layout is asked once whether anything inside it needs a height for its
+    width and then remembers the answer, and a nested lane is not asked again
+    just because a card it holds has changed its mind. A widget that only
+    learns its own answer when it is filled therefore clears that record and
+    carries the answer up itself, one container at a time.
+    """
+    parent = widget.parentWidget()
+    while parent is not None:
+        layout = QWidget.layout(parent)
+        if layout is not None:
+            for nested in layout.findChildren(QLayout):
+                nested.invalidate()
+            layout.invalidate()
+        if isinstance(parent, HeightForWidth):
+            parent.sync_height_for_width()
+            return
+        parent = parent.parentWidget()
+
+
+class ResponsiveColumns(HeightForWidth, QWidget):
     """Cards stacked in one column, or split across two lanes when asked.
 
     The lane a card declares only matters once there are two of them; in one

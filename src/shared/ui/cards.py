@@ -8,6 +8,7 @@ from qfluentwidgets import CardWidget, ScrollArea, StrongBodyLabel
 from shared.ui.responsive import (
     CONTENT_MAX_WIDTH,
     FoldingRow,
+    HeightForWidth,
     Lane,
     LayoutMetrics,
     Responsive,
@@ -18,7 +19,7 @@ from shared.ui.responsive import (
 LABEL_COLUMN_WIDTH = 110
 
 
-class FormCard(Responsive, CardWidget):
+class FormCard(Responsive, HeightForWidth, CardWidget):
     def __init__(self, title: str = "", parent: QWidget | None = None):
         super().__init__(parent)
         self.layout = QVBoxLayout(self)
@@ -42,6 +43,10 @@ class FormCard(Responsive, CardWidget):
         self.layout.setSpacing(metrics.card_spacing)
 
 
+class PageContent(HeightForWidth, QWidget):
+    """The single widget a `PageScrollArea` scrolls, holding every card."""
+
+
 class PageScrollArea(ScrollArea):
     """A page that lays itself out for the shape of the window it is shown in.
 
@@ -56,7 +61,7 @@ class PageScrollArea(ScrollArea):
         self.setWidgetResizable(True)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.setStyleSheet("QScrollArea{background: transparent; border: none}")
-        self.content = QWidget(self)
+        self.content = PageContent(self)
         self.content.setStyleSheet("QWidget{background: transparent}")
         self.layout = QVBoxLayout(self.content)
         self.layout.setContentsMargins(36, 28, 36, 28)

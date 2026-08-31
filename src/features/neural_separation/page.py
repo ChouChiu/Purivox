@@ -19,6 +19,7 @@ from shared.i18n import tr
 from shared.ui import (
     AUDIO_FILE_FILTER,
     AudioDropLineEdit,
+    ElidedLabel,
     FormCard,
     Lane,
     PageScrollArea,
@@ -55,9 +56,7 @@ class AiPage(PageScrollArea):
         self.form.layout.addWidget(self.model_status)
         self.add_card(self.form)
         self.status_card = FormCard()
-        self.status = BodyLabel()
-        self.status.setWordWrap(True)
-        allow_shrinking(self.status)
+        self.status = ElidedLabel()
         self.progress = ProgressBar()
         self.status_card.layout.addWidget(self.status)
         self.status_card.layout.addWidget(self.progress)

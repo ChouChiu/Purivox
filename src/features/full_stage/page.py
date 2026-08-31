@@ -31,11 +31,11 @@ from shared.ui import (
     WAV_FILE_FILTER,
     AudioDropLineEdit,
     AudioDropListWidget,
+    ElidedLabel,
     FormCard,
     Lane,
     LayoutMetrics,
     PageScrollArea,
-    allow_shrinking,
 )
 
 SOURCES_HEIGHT, SHORT_SOURCES_HEIGHT = 150, 110
@@ -131,9 +131,7 @@ class FullStagePage(PageScrollArea):
         self.add_card(self.timeline_card, Lane.SECONDARY)
 
         self.status_card = FormCard()
-        self.status = BodyLabel()
-        self.status.setWordWrap(True)
-        allow_shrinking(self.status)
+        self.status = ElidedLabel()
         self.progress = ProgressBar()
         self.status_card.layout.addWidget(self.status)
         self.status_card.layout.addWidget(self.progress)

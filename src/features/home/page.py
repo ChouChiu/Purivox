@@ -15,10 +15,17 @@ from qfluentwidgets import (
 )
 
 from shared.i18n import tr
-from shared.ui import Lane, LayoutMetrics, LayoutMode, PageScrollArea, ResponsiveColumns
+from shared.ui import (
+    HeightForWidth,
+    Lane,
+    LayoutMetrics,
+    LayoutMode,
+    PageScrollArea,
+    ResponsiveColumns,
+)
 
 
-class FeatureCard(CardWidget):
+class FeatureCard(HeightForWidth, CardWidget):
     def __init__(self, icon: FluentIcon, parent: QWidget | None = None):
         super().__init__(parent)
         self.setClickEnabled(True)
