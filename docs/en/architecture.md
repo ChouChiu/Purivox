@@ -167,6 +167,45 @@ Here, Hi-Res describes the output file's sample rate and bit depth. It does not 
 low-rate input or 44.1 kHz model inference gains new high-frequency information, and it is not a
 claim of Hi-Res Audio Logo certification.
 
+## Responsive Layout
+
+`src/shared/ui/responsive.py` reduces the window shape to four modes, decided by the width a page
+actually has to spend:
+
+| Mode | Page width | Layout |
+|---|---|---|
+| `PORTRAIT` | < 620 | One column; labels move above their controls, volume takes its own line |
+| `HALF` | < 960 | One column; labels beside their controls, tighter margins |
+| `LANDSCAPE` | < 1440 | One column; full margins |
+| `ULTRAWIDE` | >= 1440 | Two lanes; the content column stops at 1760 px and is centred |
+
+Width alone decides the mode: a 800 px window on a portrait screen is portrait-shaped but still has
+room for a label beside its control, so it lays out like a half screen rather than like a phone.
+Height only affects vertical breathing space and the minimum height of the source list and the
+timeline (`LayoutMetrics.short`).
+
+A page never watches its own children. `PageScrollArea` measures its viewport and hands the metrics
+down:
+
+```mermaid
+flowchart LR
+    viewport["Page viewport size"] --> metrics["LayoutMetrics<br/>mode / short window"]
+    metrics --> page["PageScrollArea<br/>margins, spacing, centring"]
+    metrics --> columns["ResponsiveColumns<br/>one lane or two"]
+    metrics --> responsive["Responsive widgets<br/>FormCard / FoldingRow"]
+```
+
+A control therefore folds because the *page* is narrow, not because it has already been squeezed —
+the latter would simply cut the page off, since the scroll areas keep their horizontal scroll bar
+switched off. For the same reason status labels and the model combo call
+`shared.ui.allow_shrinking()`: a completion message carrying a long path has no space to wrap at and
+would otherwise widen the whole page.
+
+Cards declare their lane through `PageScrollArea.add_card()`. One column keeps the order they were
+added in and only two lanes split them apart, so a narrow window reads top to bottom in the same
+order a wide one reads side by side: the single-song page keeps files and parameters in the primary
+lane, and status, preview and audio data in the secondary one.
+
 ## Configuration, Translation, and Logging
 
 - QFluentWidgets `QConfig` persists application configuration.

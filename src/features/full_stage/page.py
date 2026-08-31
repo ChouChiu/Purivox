@@ -32,8 +32,14 @@ from shared.ui import (
     AudioDropLineEdit,
     AudioDropListWidget,
     FormCard,
+    Lane,
+    LayoutMetrics,
     PageScrollArea,
+    allow_shrinking,
 )
+
+SOURCES_HEIGHT, SHORT_SOURCES_HEIGHT = 150, 110
+TIMELINE_HEIGHT, SHORT_TIMELINE_HEIGHT = 260, 180
 
 
 class FullStagePage(PageScrollArea):
@@ -62,14 +68,14 @@ class FullStagePage(PageScrollArea):
         )
         self.files.add_row(self.stage_label, self.stage_edit, self.stage_button)
         self.files.add_row(self.output_label, self.output_edit, self.output_button)
-        self.layout.addWidget(self.files)
+        self.add_card(self.files)
 
         self.sources_card = FormCard()
         self.sources_hint = BodyLabel()
         self.sources_hint.setWordWrap(True)
         self.sources_card.layout.addWidget(self.sources_hint)
         self.sources = AudioDropListWidget()
-        self.sources.setMinimumHeight(150)
+        self.sources.setMinimumHeight(SOURCES_HEIGHT)
         self.sources.setDragDropMode(QAbstractItemView.DragDropMode.NoDragDrop)
         self.sources_card.layout.addWidget(self.sources)
         source_actions = QHBoxLayout()
@@ -79,7 +85,7 @@ class FullStagePage(PageScrollArea):
             source_actions.addWidget(button)
         source_actions.addStretch()
         self.sources_card.layout.addLayout(source_actions)
-        self.layout.addWidget(self.sources_card)
+        self.add_card(self.sources_card)
 
         self.parameters = FormCard()
         self.strength_label, self.strength_value = BodyLabel(), BodyLabel("75%")
@@ -90,7 +96,7 @@ class FullStagePage(PageScrollArea):
         self.include_fragments.setChecked(True)
         self.parameters.add_row(self.strength_label, self.strength, self.strength_value)
         self.parameters.add_row(self.include_fragments_label, self.include_fragments)
-        self.layout.addWidget(self.parameters)
+        self.add_card(self.parameters)
 
         self.timeline_card = FormCard()
         self.timeline_hint = BodyLabel()
@@ -99,7 +105,7 @@ class FullStagePage(PageScrollArea):
         self.timeline_model = TimelineModel(self)
         self.timeline = TableView()
         self.timeline.setModel(self.timeline_model)
-        self.timeline.setMinimumHeight(260)
+        self.timeline.setMinimumHeight(TIMELINE_HEIGHT)
         self.timeline.setEditTriggers(
             QAbstractItemView.EditTrigger.DoubleClicked
             | QAbstractItemView.EditTrigger.EditKeyPressed
@@ -122,15 +128,16 @@ class FullStagePage(PageScrollArea):
             clip_actions.addWidget(button)
         clip_actions.addStretch()
         self.timeline_card.layout.addLayout(clip_actions)
-        self.layout.addWidget(self.timeline_card)
+        self.add_card(self.timeline_card, Lane.SECONDARY)
 
         self.status_card = FormCard()
         self.status = BodyLabel()
         self.status.setWordWrap(True)
+        allow_shrinking(self.status)
         self.progress = ProgressBar()
         self.status_card.layout.addWidget(self.status)
         self.status_card.layout.addWidget(self.progress)
-        self.layout.addWidget(self.status_card)
+        self.add_card(self.status_card, Lane.SECONDARY)
 
         actions = QHBoxLayout()
         actions.addStretch()
@@ -164,6 +171,13 @@ class FullStagePage(PageScrollArea):
     @property
     def analysis(self) -> FullStageAnalysis | None:
         return self.timeline_model.analysis
+
+    def apply_layout(self, metrics: LayoutMetrics) -> None:
+        super().apply_layout(metrics)
+        # The source list and the timeline are the two panes that would eat a
+        # short window whole, so they give back height before anything else.
+        self.sources.setMinimumHeight(SHORT_SOURCES_HEIGHT if metrics.short else SOURCES_HEIGHT)
+        self.timeline.setMinimumHeight(SHORT_TIMELINE_HEIGHT if metrics.short else TIMELINE_HEIGHT)
 
     def retranslate(self) -> None:
         self.title.setText(tr("nav_full_stage"))

@@ -4,7 +4,7 @@ from qfluentwidgets import FluentIcon, OptionsSettingCard, SwitchSettingCard, Ti
 
 from shared.config import cfg
 from shared.i18n import tr
-from shared.ui import PageScrollArea
+from shared.ui import Lane, PageScrollArea
 
 
 class SettingsPage(PageScrollArea):
@@ -27,10 +27,10 @@ class SettingsPage(PageScrollArea):
         )
         self.update_card = SwitchSettingCard(FluentIcon.UPDATE, "", configItem=cfg.check_updates)
         self.update_card.setEnabled(False)
-        self.layout.addWidget(self.language_card)
-        self.layout.addWidget(self.theme_card)
-        self.layout.addWidget(self.log_level_card)
-        self.layout.addWidget(self.update_card)
+        self.add_card(self.language_card)
+        self.add_card(self.theme_card)
+        self.add_card(self.log_level_card, Lane.SECONDARY)
+        self.add_card(self.update_card, Lane.SECONDARY)
         self.layout.addStretch()
 
     def retranslate(self) -> None:

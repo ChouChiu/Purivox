@@ -4,7 +4,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 import soundfile as sf
-from PySide6.QtCore import QEvent, QItemSelectionModel, QPoint, Qt
+from PySide6.QtCore import QEvent, QItemSelectionModel, QPoint, QSize, Qt
 from PySide6.QtGui import QColor, QPalette
 from PySide6.QtMultimedia import QMediaDevices
 from PySide6.QtWidgets import QApplication, QListWidgetItem
@@ -18,7 +18,14 @@ from features.reference_removal.page import MrPage
 from shared.audio import AudioStats
 from shared.config import cfg, load_config
 from shared.i18n import tr
-from shared.ui import SmoothComboBox, SmoothComboBoxMenu
+from shared.ui import (
+    CONTENT_MAX_WIDTH,
+    Lane,
+    LayoutMode,
+    SmoothComboBox,
+    SmoothComboBoxMenu,
+    layout_metrics,
+)
 
 
 def test_main_window_has_mr_workspace_with_two_subpages(qtbot):
@@ -478,3 +485,105 @@ def test_ai_page_watches_the_model_directories(qtbot, tmp_path: Path, monkeypatc
         (tmp_path / get_model(str(page.model.currentData())).filename).write_bytes(b"weights")
 
     assert page.model_status.text() == tr("ai_model_ready")
+
+
+def _resize_window(window: MainWindow, width: int, height: int) -> None:
+    """Resize and let every visible page act on its new viewport."""
+    window.resize(width, height)
+    QApplication.processEvents()
+    QApplication.processEvents()
+
+
+def test_pages_fold_into_one_column_on_a_portrait_window(qtbot):
+    load_config()
+    window = MainWindow()
+    qtbot.addWidget(window)
+    window.show()
+    qtbot.waitExposed(window)
+    window.switchTo(window.mr_workspace)
+    window.mr_workspace.show_single()
+
+    _resize_window(window, 500, 900)
+
+    assert window.mr.metrics.mode is LayoutMode.PORTRAIT
+    assert window.mr.columns.columns() == 1
+    assert window.mr.columns.lane_widgets(Lane.SECONDARY) == ()
+    assert window.mr.files.layout.itemAt(1).widget().is_folded()
+    assert window.mr.preview_controls.is_folded()
+    # Nothing may demand more width than the page was given, or the pages
+    # would simply be cut off: the horizontal scroll bar is switched off.
+    assert window.mr.content.minimumSizeHint().width() <= window.mr.viewport().width()
+
+
+def test_an_ultrawide_window_splits_the_pages_into_two_lanes(qtbot):
+    load_config()
+    window = MainWindow()
+    qtbot.addWidget(window)
+    window.show()
+    qtbot.waitExposed(window)
+    window.switchTo(window.mr_workspace)
+    window.mr_workspace.show_single()
+
+    _resize_window(window, 2560, 1080)
+
+    assert window.mr.metrics.mode is LayoutMode.ULTRAWIDE
+    assert window.mr.columns.lane_widgets(Lane.PRIMARY) == (window.mr.files, window.mr.parameters)
+    assert window.mr.columns.lane_widgets(Lane.SECONDARY) == (
+        window.mr.status_card,
+        window.mr.preview_card,
+        window.mr.data_card,
+    )
+    assert not window.mr.files.layout.itemAt(1).widget().is_folded()
+    # A form stretched the whole width of an ultrawide screen is unreadable,
+    # so the column stops growing and is centred instead.
+    left, _top, right, _bottom = window.mr.layout.getContentsMargins()
+    assert window.mr.viewport().width() - left - right <= CONTENT_MAX_WIDTH
+    assert left == right
+
+
+def test_the_audio_data_tiles_reflow_with_the_window(qtbot):
+    page = MrPage()
+    qtbot.addWidget(page)
+    page.resize(1200, 800)
+    page.show()
+    qtbot.waitExposed(page)
+
+    def rows() -> int:
+        return len({page.stats_grid.getItemPosition(index)[0] for index in range(7)})
+
+    page.apply_layout(layout_metrics(QSize(1200, 800)))
+    assert rows() == 2
+
+    page.apply_layout(layout_metrics(QSize(500, 900)))
+    assert rows() == 4
+
+
+def test_a_short_window_gives_the_full_stage_panes_less_height(qtbot):
+    page = FullStagePage()
+    qtbot.addWidget(page)
+
+    page.apply_layout(layout_metrics(QSize(1280, 900)))
+    tall = (page.sources.minimumHeight(), page.timeline.minimumHeight())
+    page.apply_layout(layout_metrics(QSize(1280, 500)))
+
+    assert (page.sources.minimumHeight(), page.timeline.minimumHeight()) < tall
+
+
+def test_every_page_stays_inside_a_narrow_window(qtbot):
+    """The minimum window size must not cut a page off horizontally."""
+    load_config()
+    window = MainWindow()
+    qtbot.addWidget(window)
+    window.show()
+    qtbot.waitExposed(window)
+    width, height = window.minimumWidth(), window.minimumHeight()
+
+    for target in (window.home, window.mr_workspace, window.ai, window.settings):
+        window.switchTo(target)
+        _resize_window(window, width, height)
+        for page in (window.home, window.mr, window.full_stage, window.ai, window.settings):
+            if not page.isVisible():
+                continue
+            assert page.content.minimumSizeHint().width() <= page.viewport().width(), (
+                f"{page.objectName()} does not fit a {width}x{height} window"
+            )

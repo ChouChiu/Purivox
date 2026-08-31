@@ -142,6 +142,39 @@ flowchart TB
 Hi-Res 在这里描述导出文件的采样率与位深，不代表低采样率输入或 44.1 kHz 模型推理获得了新的高频信息，
 也不代表项目获得 Hi-Res Audio Logo 认证。
 
+## 响应式布局
+
+窗口形状由 `src/shared/ui/responsive.py` 归纳成四种模式，判定依据只有页面实际可用的宽度：
+
+| 模式 | 页面宽度 | 布局 |
+|---|---|---|
+| `PORTRAIT` 竖屏 | < 620 | 单栏；标签移到控件上方，音量条独占一行 |
+| `HALF` 半屏 | < 960 | 单栏；标签与控件同行，边距收紧 |
+| `LANDSCAPE` 横屏 | < 1440 | 单栏；完整边距 |
+| `ULTRAWIDE` 超宽屏 | >= 1440 | 双栏；内容列最宽 1760 px，超出部分居中留白 |
+
+只按宽度分档：竖屏显示器上一个 800 px 宽的窗口虽然是竖的，却仍放得下标签与控件同行，
+因此按半屏而不是按手机宽度排版。高度只影响纵向留白与列表 / 时间线的最小高度
+（`LayoutMetrics.short`）。
+
+页面不监听自己子控件的尺寸，而是由 `PageScrollArea` 测量视口后自上而下分发：
+
+```mermaid
+flowchart LR
+    viewport["页面视口尺寸"] --> metrics["LayoutMetrics<br/>模式 / 短窗口"]
+    metrics --> page["PageScrollArea<br/>边距、间距、居中"]
+    metrics --> columns["ResponsiveColumns<br/>单栏或双栏"]
+    metrics --> responsive["各 Responsive 控件<br/>FormCard / FoldingRow"]
+```
+
+这样控件是因为“页面窄”才折叠，而不是因为它已经被挤扁——后者会在滚动区域关闭横向滚动条时
+把页面直接切掉。同理，状态标签与模型下拉框调用 `shared.ui.allow_shrinking()`：
+一条包含长路径的完成消息没有可换行的空格，若不放开宽度约束就会把整页撑宽。
+
+卡片通过 `PageScrollArea.add_card()` 声明自己属于主栏还是次栏。单栏时按添加顺序排列，
+双栏时才分开，因此窄窗口自上而下的阅读顺序与宽窗口左右并排的一致：
+单曲页把文件与参数放在主栏，状态、试听与音频信息放在次栏。
+
 ## 配置、翻译与日志
 
 - 配置由 QFluentWidgets 的 `QConfig` 持久化。

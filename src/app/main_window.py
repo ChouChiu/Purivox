@@ -55,7 +55,9 @@ class MainWindow(FluentWindow):
         self.ai = AiPage(self)
         self.settings = SettingsPage(self)
         self.resize(1040, 760)
-        self.setMinimumSize(820, 620)
+        # Small enough to dock the window to a portrait half of a screen; the
+        # pages fold their own layout down from here.
+        self.setMinimumSize(480, 520)
         self._apply_theme(str(cfg.theme.value))
         self._build_navigation()
         self._build_shortcuts()

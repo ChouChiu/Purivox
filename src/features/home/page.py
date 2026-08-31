@@ -15,7 +15,7 @@ from qfluentwidgets import (
 )
 
 from shared.i18n import tr
-from shared.ui import PageScrollArea
+from shared.ui import Lane, LayoutMetrics, LayoutMode, PageScrollArea, ResponsiveColumns
 
 
 class FeatureCard(CardWidget):
@@ -74,19 +74,26 @@ class HomePage(PageScrollArea):
         self.layout.addWidget(self.section_title)
         self.layout.addWidget(self.section_hint)
 
-        cards = QHBoxLayout()
-        cards.setSpacing(16)
-        self.mr_card = FeatureCard(FluentIcon.MUSIC, self.content)
-        self.ai_card = FeatureCard(FluentIcon.MIX_VOLUMES, self.content)
-        cards.addWidget(self.mr_card, 1)
-        cards.addWidget(self.ai_card, 1)
-        self.layout.addLayout(cards)
+        # The two entry cards sit side by side wherever a line of prose fits
+        # beside another, and stack only once the window is phone-narrow.
+        self.cards = ResponsiveColumns(self.content)
+        self.mr_card = FeatureCard(FluentIcon.MUSIC, self.cards)
+        self.ai_card = FeatureCard(FluentIcon.MIX_VOLUMES, self.cards)
+        self.cards.add(self.mr_card, Lane.PRIMARY)
+        self.cards.add(self.ai_card, Lane.SECONDARY)
+        self.cards.set_columns(2)
+        self.layout.addWidget(self.cards)
         self.layout.addStretch()
 
         self.mr_card.clicked.connect(self.mr_requested.emit)
         self.ai_card.clicked.connect(self.ai_requested.emit)
         self.mr_card.open_button.clicked.connect(self.mr_requested.emit)
         self.ai_card.open_button.clicked.connect(self.ai_requested.emit)
+
+    def apply_layout(self, metrics: LayoutMetrics) -> None:
+        super().apply_layout(metrics)
+        self.cards.set_columns(1 if metrics.mode is LayoutMode.PORTRAIT else 2)
+        self.cards.set_spacing(metrics.page_spacing)
 
     def retranslate(self) -> None:
         self.title.setText(tr("home_greeting"))

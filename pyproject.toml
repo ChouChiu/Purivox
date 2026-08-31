@@ -139,5 +139,6 @@ files = [
   "src/shared/ui/combo_box.py",
   "src/shared/ui/dialogs.py",
   "src/shared/ui/drop.py",
+  "src/shared/ui/responsive.py",
   "src/shared/update.py",
 ]

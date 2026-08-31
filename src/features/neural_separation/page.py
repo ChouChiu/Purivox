@@ -20,8 +20,10 @@ from shared.ui import (
     AUDIO_FILE_FILTER,
     AudioDropLineEdit,
     FormCard,
+    Lane,
     PageScrollArea,
     SmoothComboBox,
+    allow_shrinking,
 )
 
 
@@ -42,17 +44,24 @@ class AiPage(PageScrollArea):
         )
         self.song_edit.setReadOnly(True)
         self.model_label, self.model = BodyLabel(), SmoothComboBox()
+        # The catalogue entries read "<name> — <description>"; the button
+        # elides them rather than setting the page's minimum width.
+        allow_shrinking(self.model)
         self.model_status = BodyLabel()
+        self.model_status.setWordWrap(True)
+        allow_shrinking(self.model_status)
         self.form.add_row(self.song_label, self.song_edit, self.song_button)
         self.form.add_row(self.model_label, self.model)
         self.form.layout.addWidget(self.model_status)
-        self.layout.addWidget(self.form)
+        self.add_card(self.form)
         self.status_card = FormCard()
         self.status = BodyLabel()
+        self.status.setWordWrap(True)
+        allow_shrinking(self.status)
         self.progress = ProgressBar()
         self.status_card.layout.addWidget(self.status)
         self.status_card.layout.addWidget(self.progress)
-        self.layout.addWidget(self.status_card)
+        self.add_card(self.status_card, Lane.SECONDARY)
         actions = QHBoxLayout()
         actions.addStretch()
         self.cancel_button, self.start_button = PushButton(), PrimaryPushButton()

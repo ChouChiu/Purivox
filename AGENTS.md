@@ -73,7 +73,7 @@ jobs synchronously; SIGINT triggers token cancellation.
 | `src/features/home/`, `src/features/settings/` | HomePage (brand + entry cards), SettingsPage (language/theme/log level) |
 | `src/shared/audio/` | `io.py`: mapped audio I/O/resampling/atomic writes, `BLOCK_FRAMES` (262 144) and `AUDIO_EXTENSIONS`, `release_mapped_pages()`; `analysis.py`: shared `AudioStats`, block copy, peak/RMS analysis |
 | `src/shared/dsp/` | `spectral.py`: librosa-compatible `stft`/`istft` (`n_fft=2048`, `hop=512`) and `log_flux_bands()`, the onset feature shared by full-stage matching and coarse alignment |
-| `src/shared/ui/` | `combo_box.py` (`SmoothComboBox`, qfw slide animation disabled), `cards.py` (FormCard rows), `dialogs.py` (file-dialog filters, `sync_dependent_switch`), `drop.py` (`AudioDropLineEdit`/`AudioDropListWidget`, audio-only drag and drop) |
+| `src/shared/ui/` | `responsive.py` (`LayoutMode`/`LayoutMetrics` breakpoints, `ResponsiveColumns`, `FoldingRow`, `allow_shrinking`), `cards.py` (`FormCard` folding rows, `PageScrollArea` breakpoint dispatch), `combo_box.py` (`SmoothComboBox`, qfw slide animation disabled), `dialogs.py` (file-dialog filters), `drop.py` (`AudioDropLineEdit`/`AudioDropListWidget`, audio-only drag and drop) |
 | `src/shared/` | `config.py` (QConfig), `i18n.py` (`tr()`, `install_language()`, `SUPPORTED_LANGUAGES`), `jobs.py` (`SIGMA_CHOICES`/`STRENGTH_RANGE`/`validate_reference_settings`), `logging.py` (single-line formatter, `LOG_LEVELS`), `processing.py` (token/progress types) |
 | `src/resources/` | `i18n/{zh_cn,en_us,ja_jp,ko_kr}.ts` + compiled `.qm` (Qt Linguist, key-indexed, must stay key-identical), `model_data.json` (MDX-Net spec table keyed by MD5), `__init__.py` (`resource_path` via `importlib.resources`) |
 | `tests/` | Mirrors `src/` path-for-path (`tests/shared/` ↔ `src/shared/`, `tests/features/…`); `benchmarks/` for long/`--runslow` gates |
@@ -160,6 +160,16 @@ Language keys: `zh_cn`, `en_us`, `ja_jp`, `ko_kr`.
   be an ambiguous overload, and a window shortcut works before a page takes focus.
   `_apply_shortcut_hints()` appends each binding to the tooltip of the button it drives via
   `QKeySequence.toString(NativeText)`, so a shortcut needs no translation key.
+- **Responsive layout**: window shape is one of four `LayoutMode`s decided by page width
+  (`shared/ui/responsive.py`): `PORTRAIT` < 620 stacks a form label above its control, `HALF`
+  < 960 and `LANDSCAPE` < 1440 keep one column, `ULTRAWIDE` >= 1440 splits the cards into two
+  lanes and centres the column at `CONTENT_MAX_WIDTH`. Height only sets `LayoutMetrics.short`.
+  `PageScrollArea` measures its viewport and pushes the metrics down to every `Responsive`
+  child — a widget must never fold on its own width, because a page that has already been squeezed
+  is a page that got cut off (the scroll areas keep `ScrollBarAlwaysOff`). A card joins the page
+  through `add_card(card, lane)`, never `self.layout.addWidget`, and one column keeps the order
+  the cards were added in. Any label that can hold a path needs `allow_shrinking()`, or its
+  longest unwrappable word becomes the page's minimum width.
 - **File input**: every audio entry point accepts drag and drop through `shared/ui/drop.py`; a
   dropped path must go through the same method as the file dialog (`set_song`, `set_stage`,
   `add_source_paths`) so both routes behave identically. The AI page keeps a
@@ -230,7 +240,8 @@ Language keys: `zh_cn`, `en_us`, `ja_jp`, `ko_kr`.
   (`test_dsp_regression.py`), finder similarity (`test_finder.py`), end-to-end reference job +
   AudioStats + same-input rejection (`test_processing.py`), neural chunked overlap-add identity
   (`test_neural.py`), CLI option handling (`tests/entrypoints/test_cli.py`), GUI
-  navigation/theme/combos/stats via pytest-qt (`tests/app/test_gui.py`), timeline model
+  navigation/theme/combos/stats and the portrait/half/landscape/ultrawide layouts via pytest-qt
+  (`tests/app/test_gui.py`), breakpoints and the responsive containers (`tests/shared/test_responsive.py`), timeline model
   data/flags/edit rejection (`tests/features/full_stage/test_timeline_model.py`), and model
   download/verify/cancel against a localhost HTTP server
   (`tests/features/neural_separation/test_model_store.py` — it repoints

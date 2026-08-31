@@ -10,7 +10,6 @@ from PySide6.QtWidgets import (
     QFileDialog,
     QGridLayout,
     QHBoxLayout,
-    QSizePolicy,
     QVBoxLayout,
     QWidget,
 )
@@ -33,13 +32,21 @@ from shared.config import cfg
 from shared.i18n import tr
 from shared.ui import (
     AUDIO_FILE_FILTER,
+    UNBOUNDED_WIDTH,
     WAV_FILE_FILTER,
     AudioDropLineEdit,
+    FoldingRow,
     FormCard,
+    Lane,
+    LayoutMetrics,
     PageScrollArea,
+    allow_shrinking,
 )
 
 logger = logging.getLogger(__name__)
+
+VOLUME_SLIDER_WIDTH = 150
+STAT_COLUMNS = 4
 
 
 class MrPage(PageScrollArea):
@@ -77,7 +84,7 @@ class MrPage(PageScrollArea):
         self.files.add_row(self.song_label, self.song_edit, self.song_button)
         self.files.add_row(self.acc_label, self.acc_edit, self.acc_button, self.auto_find)
         self.files.add_row(self.output_label, self.output_edit, self.output_button)
-        self.layout.addWidget(self.files)
+        self.add_card(self.files)
 
         self.parameters = FormCard()
         self.strength_label, self.strength_value = BodyLabel(), BodyLabel("75%")
@@ -85,22 +92,20 @@ class MrPage(PageScrollArea):
         self.strength.setRange(0, 100)
         self.strength.setValue(75)
         self.parameters.add_row(self.strength_label, self.strength, self.strength_value)
-        self.layout.addWidget(self.parameters)
+        self.add_card(self.parameters)
 
         self.status_card = FormCard()
         self.status = BodyLabel()
         self.status.setWordWrap(True)
-        self.status.setMinimumWidth(0)
-        self.status.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+        allow_shrinking(self.status)
         self.progress = ProgressBar()
         self.status_card.layout.addWidget(self.status)
         self.status_card.layout.addWidget(self.progress)
-        self.layout.addWidget(self.status_card)
+        self.add_card(self.status_card, Lane.SECONDARY)
 
         self.preview_card = FormCard()
         self.preview_status = BodyLabel()
-        self.preview_status.setMinimumWidth(0)
-        self.preview_status.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+        allow_shrinking(self.preview_status)
         self.preview_seek = SeekSlider(Qt.Orientation.Horizontal)
         self.preview_seek.setRange(0, 1)
         self.preview_seek.setEnabled(False)
@@ -114,19 +119,22 @@ class MrPage(PageScrollArea):
         preview_header.addWidget(self.preview_time)
         self.preview_card.layout.addLayout(preview_header)
         self.preview_card.layout.addWidget(self.preview_seek)
-        preview_controls = QHBoxLayout()
-        preview_controls.addWidget(self.preview_play)
-        preview_controls.addWidget(self.preview_stop)
-        preview_controls.addStretch()
         self.preview_volume_label = BodyLabel()
         self.preview_volume = Slider(Qt.Orientation.Horizontal)
         self.preview_volume.setRange(0, 100)
         self.preview_volume.setValue(75)
-        self.preview_volume.setFixedWidth(150)
-        preview_controls.addWidget(self.preview_volume_label)
-        preview_controls.addWidget(self.preview_volume)
-        self.preview_card.layout.addLayout(preview_controls)
-        self.layout.addWidget(self.preview_card)
+        self.preview_volume.setMinimumWidth(VOLUME_SLIDER_WIDTH)
+        self.preview_volume.setMaximumWidth(VOLUME_SLIDER_WIDTH)
+        # Transport buttons hold the line; the volume pair drops below them
+        # rather than squeezing the slider down to a few pixels.
+        self.preview_controls = FoldingRow(self.preview_card, lead_expands=True)
+        self.preview_controls.add_lead(self.preview_play)
+        self.preview_controls.add_lead(self.preview_stop)
+        self.preview_controls.add_lead_stretch()
+        self.preview_controls.add_trail(self.preview_volume_label)
+        self.preview_controls.add_trail(self.preview_volume, folded_stretch=1)
+        self.preview_card.layout.addWidget(self.preview_controls)
+        self.add_card(self.preview_card, Lane.SECONDARY)
 
         self.data_card = FormCard()
         self.stats_grid = QGridLayout()
@@ -134,8 +142,15 @@ class MrPage(PageScrollArea):
         self.stats_grid.setVerticalSpacing(14)
         self.stat_labels: dict[str, CaptionLabel] = {}
         self.stat_values: dict[str, StrongBodyLabel] = {}
-        for index, key in enumerate(
-            ("duration", "sample_rate", "channels", "bit_depth", "peak", "rms", "file_size")
+        self.stat_tiles: list[QWidget] = []
+        for key in (
+            "duration",
+            "sample_rate",
+            "channels",
+            "bit_depth",
+            "peak",
+            "rms",
+            "file_size",
         ):
             tile = QWidget(self.data_card)
             tile_layout = QVBoxLayout(tile)
@@ -147,9 +162,10 @@ class MrPage(PageScrollArea):
             tile_layout.addWidget(value)
             self.stat_labels[key] = label
             self.stat_values[key] = value
-            self.stats_grid.addWidget(tile, index // 4, index % 4)
+            self.stat_tiles.append(tile)
+        self._reflow_stats(STAT_COLUMNS)
         self.data_card.layout.addLayout(self.stats_grid)
-        self.layout.addWidget(self.data_card)
+        self.add_card(self.data_card, Lane.SECONDARY)
 
         self.media_devices = QMediaDevices(self)
         self.audio_output = QAudioOutput(self)
@@ -195,6 +211,24 @@ class MrPage(PageScrollArea):
         self.player.durationChanged.connect(self._preview_duration_changed)
         self.player.playbackStateChanged.connect(lambda _state: self._update_preview_button())
         self.player.errorOccurred.connect(self._preview_error)
+
+    def _reflow_stats(self, columns: int) -> None:
+        """Re-place the audio-data tiles across `columns` of the grid."""
+        for tile in self.stat_tiles:
+            self.stats_grid.removeWidget(tile)
+        for index, tile in enumerate(self.stat_tiles):
+            self.stats_grid.addWidget(tile, index // columns, index % columns)
+
+    def apply_layout(self, metrics: LayoutMetrics) -> None:
+        super().apply_layout(metrics)
+        self._reflow_stats(metrics.tile_columns)
+        self.stats_grid.setHorizontalSpacing(12 if metrics.stacked_rows else 24)
+        # A capped slider reads as a volume control; an uncapped one filling a
+        # folded second line reads as a second seek bar, so it only spans the
+        # row once the transport buttons have a line to themselves.
+        self.preview_volume.setMaximumWidth(
+            UNBOUNDED_WIDTH if metrics.stacked_rows else VOLUME_SLIDER_WIDTH
+        )
 
     def retranslate(self) -> None:
         self.title.setText(tr("mr_single_title"))

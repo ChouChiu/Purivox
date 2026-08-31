@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+from PySide6.QtGui import QResizeEvent
 from PySide6.QtWidgets import QHBoxLayout, QSizePolicy, QStackedWidget, QVBoxLayout, QWidget
 from qfluentwidgets import FluentIcon, SegmentedWidget
 
 from features.full_stage.page import FullStagePage
 from features.reference_removal.page import MrPage
 from shared.i18n import tr
+from shared.ui import LayoutMetrics, layout_metrics
 
 
 class MrWorkspace(QWidget):
@@ -26,9 +28,9 @@ class MrWorkspace(QWidget):
         tab_bar = QWidget(self)
         tab_bar.setObjectName("mrTabBar")
         tab_bar.setStyleSheet("QWidget#mrTabBar { background: transparent; }")
-        tab_layout = QHBoxLayout(tab_bar)
-        tab_layout.setContentsMargins(36, 0, 36, 0)
-        tab_layout.setSpacing(0)
+        self.tab_layout = QHBoxLayout(tab_bar)
+        self.tab_layout.setContentsMargins(36, 0, 36, 0)
+        self.tab_layout.setSpacing(0)
 
         self.tabs = SegmentedWidget(tab_bar)
         self.tabs.setMaximumWidth(320)
@@ -45,9 +47,9 @@ class MrWorkspace(QWidget):
             lambda: self.set_current("full_stage"),
             FluentIcon.ALBUM,
         )
-        tab_layout.addStretch(1)
-        tab_layout.addWidget(self.tabs)
-        tab_layout.addStretch(1)
+        self.tab_layout.addStretch(1)
+        self.tab_layout.addWidget(self.tabs)
+        self.tab_layout.addStretch(1)
         layout.addWidget(tab_bar)
 
         self.stack = QStackedWidget(self)
@@ -55,7 +57,21 @@ class MrWorkspace(QWidget):
         self.stack.addWidget(full_stage_page)
         layout.addWidget(self.stack, 1)
         self.tabs.currentItemChanged.connect(self._tab_changed)
+        self.metrics = layout_metrics(self.size())
         self.set_current("single")
+
+    def resizeEvent(self, event: QResizeEvent) -> None:
+        super().resizeEvent(event)
+        metrics = layout_metrics(self.size())
+        if metrics.key != self.metrics.key:
+            self.metrics = metrics
+            self.apply_layout(metrics)
+
+    def apply_layout(self, metrics: LayoutMetrics) -> None:
+        """Keep the tab strip aligned with the page margins below it."""
+        side = metrics.page_margins[0]
+        self.tab_layout.setContentsMargins(side, 0, side, 0)
+        self.layout().setContentsMargins(0, 8 if metrics.short else 14, 0, 0)
 
     def _tab_changed(self, route: str) -> None:
         page = self.single_page if route == "single" else self.full_stage_page
