@@ -1,7 +1,4 @@
 from .cards import LABEL_COLUMN_WIDTH, FormCard, PageContent, PageScrollArea
-from .combo_box import SmoothComboBox, SmoothComboBoxMenu
-from .dialogs import AUDIO_FILE_FILTER, WAV_FILE_FILTER
-from .drop import AudioDropLineEdit, AudioDropListWidget, dropped_audio_paths
 from .responsive import (
     CONTENT_MAX_WIDTH,
     UNBOUNDED_WIDTH,
@@ -16,6 +13,15 @@ from .responsive import (
     allow_shrinking,
     layout_metrics,
     layout_mode,
+)
+from .widgets import (
+    AUDIO_FILE_FILTER,
+    WAV_FILE_FILTER,
+    AudioDropLineEdit,
+    AudioDropListWidget,
+    SmoothComboBox,
+    SmoothComboBoxMenu,
+    dropped_audio_paths,
 )
 
 __all__ = [

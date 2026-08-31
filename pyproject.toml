@@ -136,9 +136,7 @@ files = [
   "src/shared/progress.py",
   "src/shared/ui/__init__.py",
   "src/shared/ui/cards.py",
-  "src/shared/ui/combo_box.py",
-  "src/shared/ui/dialogs.py",
-  "src/shared/ui/drop.py",
   "src/shared/ui/responsive.py",
+  "src/shared/ui/widgets.py",
   "src/shared/update.py",
 ]
