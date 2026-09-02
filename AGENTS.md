@@ -259,5 +259,5 @@ Language keys: `zh_cn`, `en_us`, `ja_jp`, `ko_kr`.
   real-music quality (stated in README). Run `uv run --locked purivox --selftest` for a quick
   pipeline smoke check before committing DSP changes. DSP changes are accepted or rejected on
   measurement here, so run `tools/eval_cancellation.py` as well to see what a change did to depth
-  and fidelity; `docs/reference-removal.md` records the numbers for the ones that landed and the
-  ones that did not.
+  and fidelity. `docs/reference-removal.md` describes the algorithm as it stands: it documents what
+  the code does, not what was tried and dropped, and carries no before/after or trade-off tables.

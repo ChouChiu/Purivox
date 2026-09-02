@@ -27,11 +27,12 @@ $$
 
 The second expression constrains the linear stage so that it can only remove energy, never add
 any. The residual still carries accompaniment the transfer could not describe — mostly
-reverberation ringing past the window and residual misalignment — whose size is estimated as a
-per-bin leakage ratio $\rho(f)$ and handed to the linked soft mask:
+reverberation ringing past the window and residual misalignment — whose size comes from a
+regression of the residual power on the power that was removed (see "Estimating the Leakage") and
+is handed to the linked soft mask:
 
 $$
-\widehat P_v=\max(P_e-\beta\rho P_d,\,0.05^2P_e),\qquad
+\widehat P_v=\max(P_e-\rho P_d,\,0.05^2P_e),\qquad
 M=\sqrt{\frac{\widehat P_v}{P_e+\varepsilon}}
 $$
 
@@ -50,10 +51,7 @@ $\mathbf{y}$ onto $\mathrm{span}(\mathbf{x})$. Content present in the reference 
 mix, a changed lyric or a harmony only the source has, satisfies
 $\mathbb{E}[y\overline{x_j}]\approx 0$, so both $h$ and $d$ fall to zero and that content is never
 predicted in the first place, let alone injected. $\gamma$ also falls to zero in those places, and
-with the no-amplification bound on top, the three safeguards are independent of one another. An
-earlier direct-residual path, since removed, subtracted a broadband real matrix in the time domain
-with no per-bin projection, no confidence, and no bound on the result — which is why reference-only
-content ended up inverted in its output.
+with the no-amplification bound on top, the three safeguards are independent of one another.
 
 Reference cancellation requires the stage/live recording to contain backing audio corresponding
 to the selected song source. A different arrangement or key, heavy dynamics processing, or
@@ -113,15 +111,10 @@ jumps.
 What limits local delay accuracy is the proxy's *bandwidth*, not its sample grid. Measured end to
 end on a drifting broadband reference, raising the proxy rate from 2 kHz to 16 kHz lifted
 cancellation depth by roughly 10 dB while alignment runtime stayed flat: the tracking loop still
-advances once every 0.1 seconds, only each correlation gets longer. The wider band also admits
-more live-only content (vocals, cymbals) into the correlation, but the same sweep improved
-monotonically even with a loud live source present, so that trade showed no measurable cost.
+advances once every 0.1 seconds, only each correlation gets longer.
 
-The delay curve is **deliberately kept on the proxy sample grid**. Refining the peak to
-sub-sample resolution with parabolic interpolation was measured to *reduce* cancellation depth: a
-constant fractional delay is already absorbed by the per-bin complex transfer as a phase ramp, so
-the refinement only adds per-window noise to the lag curve without removing any error the mask
-cares about.
+The delay curve is kept on the proxy sample grid, with no sub-sample refinement: a constant
+fractional delay is already absorbed by the per-bin complex transfer as a phase ramp.
 
 After obtaining the delay curve $d(t)$, the source is resampled as
 
@@ -163,9 +156,8 @@ $$
 \gamma^2=\frac{\mathrm{Re}\,(h^{H}c)}{P_y+\varepsilon}
 $$
 
-This multiple coherence comes with the solution for free. The earlier implementation computed a
-second cross-spectrum coherence between the mixture and the prediction, which cost three more
-smoothing passes per channel and still carried the bias described below.
+This multiple coherence comes with the solution for free; no second cross-spectrum coherence
+between the mixture and the prediction is needed.
 
 A least-squares fit over a finite window always explains part of the mixture by chance, and the
 expected size of that accident is exactly $p/N_{\text{eff}}$ for order $p$. Removing it gives the
@@ -176,13 +168,14 @@ N_{\text{eff}}=\max\Bigl(W\cdot\tfrac{\text{hop}}{n_{\text{fft}}}\cdot 1.5,\;p+2
 \gamma^2_{\text{adj}}=1-(1-\gamma^2)\frac{N_{\text{eff}}}{N_{\text{eff}}-p}
 $$
 
-$W$ is the smoothing window in frames, $\text{hop}/n_{\text{fft}}=1/4$ is the effective independence
-of adjacent frames at 75% overlap, and 1.5 is the effective number of independent bins under the
-$\sigma=1$ frequency Gaussian. The effect can be measured directly: with a completely
-unrelated reference, the bypass is exact once the bias is removed (correlation 1.000000, RMSE 0),
-and degrades to an RMSE of 0.00236 when it is not — still inside the 0.01 threshold, but an order
-of magnitude worse. This correction is what guarantees that an unrelated source is never
-subtracted.
+$W$ is the smoothing window in frames, 1/8 is the effective independence of adjacent frames, and
+1.5 is the effective number of independent bins under the $\sigma=1$ frequency Gaussian. The frame
+independence was measured rather than derived: reading $\text{hop}/n_{\text{fft}}$ literally at 75%
+overlap gives 1/4, but the Hann window has its own correlation between overlapping frames and the
+frequency Gaussian delivers fewer independent bins than its nominal count under a four-bin main
+lobe, both of which make that reading too optimistic. The property this correction buys can be
+measured directly: with a completely unrelated reference the bypass is exact (correlation 1.000000,
+RMSE 0). That is what guarantees an unrelated source is never subtracted.
 
 $W$ also has to be clamped to the frames the block actually holds before it is used. The box filter
 reflects at the block edge rather than inventing samples, so a context wider than the block is worth
@@ -209,9 +202,25 @@ Nor can the scale used to judge outliers be one the outliers themselves can rais
 arithmetic mean is dragged up by the very live transients it is meant to suppress, whereas a
 geometric mean is not; it is the same O(N) smoother, read in the log domain.
 
+### Estimating the Leakage
+
 What remains correlated after the linear stage is mostly reverberation ringing past the window and
-residual misalignment. Its size is estimated as a per-bin leakage ratio $\rho(f)$ over the frames
-the reference dominates, and a stage recording supplies plenty of those between vocal phrases.
+residual misalignment. The question is how much of the residual is still accompaniment, and it
+cannot be dodged by looking only at reference-dominant frames: when the live source plays
+throughout, there are no frames where the reference sounds alone, so an intercept-free ratio
+$\rho=P_e/P_d$ measures the live source as leakage and the mask then removes it along with the rest.
+
+The leakage is therefore a power regression carrying an intercept, in exactly the form the
+incoherent path below uses:
+
+$$
+P_e \approx \rho(f,n)\,P_d(f,n) + c(f,n)
+$$
+
+$\rho P_d$ rises and falls with the accompaniment that was actually there, so it is leakage; the
+slowly varying $c$ does not, so it is live content, and only the first term may be removed. $\rho$
+is thresholded by a smoothstep on the adjusted correlation the same way, and is bounded by the
+residual it was found in, so one weak-evidence cell cannot drive the mask to the floor.
 
 ### The Incoherent Power Path
 
@@ -238,106 +247,27 @@ smoothstep on the same degrees-of-freedom-adjusted correlation. Unrelated music 
 envelopes to some degree, and that gate is what keeps an unrelated source from being suppressed.
 
 The mask ends up removing whichever of the two paths explains more, less whatever the coherent stage
-already took out. On that stage recording this raised the removed energy from 3.29 dB to 6.85 dB,
-at a cost of roughly 0.3–0.6 dB of depth and 0.03 of fidelity on the synthetic scenes where the
-coherent path already worked well — in effect, spending headroom on clean material to make
-difficult material usable.
+already took out. On that stage recording the removed energy measures 6.85 dB.
 
-The gain has a cost: this path removes content whose power follows the source rather than
-content the waveform shows to come from the source, so it relies on much weaker evidence than the
-coherent path. In its first version the path drove the mask directly, and on badly
-phase-decorrelated material the mask's cell-by-cell opening and closing was audible as musical
-noise even though the accompaniment came out cleanly. Two bounds now keep that noise in check: a
-single cell's incoherent claim is capped at a share of the residual power
-(`_INCOHERENT_MAX_SHARE`), so weak evidence can never push the mask to the floor, and the mask
-ratio is formed from powers smoothed in time (`_MASK_POWER_SMOOTH`) before the existing narrow
-Gaussian pass, which flattens most of the fluctuation before it reaches the mask. On the synthetic
-phase-decorrelated scene the depth gives back about 0.2 dB (1.34 → 1.14 dB) for that. The remaining
-knobs are `_INCOHERENT_OVERSUBTRACTION`, `_MASK_FLOOR` and `_MASK_SMOOTHING`; when
-$gamma^2$ is only 0.02–0.05 above 500 Hz there is simply not enough information to decide whether
+This path removes content whose power follows the source rather than content the waveform shows to
+come from the source, so it relies on much weaker evidence than the coherent path. Driving the mask
+from it directly makes the mask open and close cell by cell, which on badly phase-decorrelated
+material is audible as musical noise, so two bounds keep that in check: a single cell's incoherent
+claim is capped at a share of the residual power (`_INCOHERENT_MAX_SHARE`), so weak evidence can
+never push the mask to the floor, and the mask ratio is formed from powers smoothed in time
+(`_MASK_POWER_SMOOTH`) before the existing narrow Gaussian pass, which flattens most of the
+fluctuation before it reaches the mask. The remaining knobs are `_INCOHERENT_OVERSUBTRACTION`,
+`_MASK_FLOOR` and `_MASK_SMOOTHING`; when $gamma^2$ is only 0.02–0.05 above 500 Hz there is simply not enough information to decide whether
 a given cell is accompaniment, which is why the smoothstep gate still shuts the path off at low
 confidence.
-
 
 ### Research Basis and Boundaries
 
 - Gorlow, Ramona, and Pachet's [live accompaniment-cancellation study](https://arxiv.org/abs/1611.08905) compares adaptive noise cancellation, spectral subtraction, and short-time ERB-band Wiener filtering. This implementation uses a simpler coherence-weighted frequency-domain soft mask rather than time-domain LMS or a separate ERB voting layer.
 - Boll's [classic spectral-subtraction paper](https://doi.org/10.1109/TASSP.1979.1163209) describes magnitude subtraction and residual-noise problems. This implementation retains a subtractive power target while adding reference-conditioned coherence, a mask floor, and narrow time-frequency smoothing instead of directly applying hard spectral subtraction.
-- Avery Lee's [Center Cut](https://www.virtualdub.org/blog2/entry_102.html) and ADRess-style methods depend on center imaging, inter-channel level differences, or phase differences, and are unrelated to this implementation: they read only the spatial relationship between two channels, whereas reference cancellation reads the evidence the song source provides. The project once offered such a center stage behind optional switches; it was measured and removed outright, because on a recording whose phase had been destroyed it suppressed the vocal itself and left the reverberation and the audience behind.
-- The convolutive transfer function (CTF) literature explains why the multiplicative narrowband approximation fails under long reverberation and how a finite set of frame taps replaces it, for example [joint dereverberation and blind source separation with a hybrid CTF model](https://doi.org/10.1016/j.apacoust.2024.110168). That idea was implemented here as frame taps and removed again after measurement; see below. Schröter et al.'s [DeepFilterNet](https://arxiv.org/abs/2110.05588) and Tammen and Doclo's [deep multi-frame MVDR](https://arxiv.org/abs/2011.10345) are the learned form of the same idea: a complex filter across frames per time-frequency bin rather than a point-wise mask.
-- Engineering systems with the same structure are useful references. WebRTC's AEC3 is likewise "known reference plus unknown transfer plus double-talk", and its partitioned-block frequency-domain adaptive filter, delay estimation, and residual echo suppressor map onto the alignment, transfer estimation, and coherence-weighted mask here. Enzner and Vary's [frequency-domain adaptive Kalman filter](https://doi.org/10.1016/j.sigpro.2005.09.005) points to replacing the current two-pass robust fit with a state-space model; it is not implemented.
-
-### Measured Gains from Coherent Cancellation
-
-Once the pure mask path was replaced by complex subtraction plus a residual mask, cancellation
-depth and live-source fidelity improved together, instead of one being traded for the other as in
-every previous attempt. These are the results from `tools/eval_cancellation.py` at strength 1.0 and
-sigma 3:
-
-| Scene | Depth (old → new) | Fidelity (old → new) | Live gain (old → new) |
-|---|---|---|---|
-| Room 25 ms | 7.16 → **10.13** dB | 0.926 → **0.963** | 0.882 → **0.914** |
-| Room 60 ms | 5.73 → **8.28** dB | 0.930 → **0.962** | 0.910 → **0.950** |
-| Room 250 ms | 4.25 → **4.91** dB | 0.883 → **0.899** | 0.942 → **0.957** |
-| Room 1000 ms | 3.81 → **4.08** dB | 0.873 → **0.881** | 0.962 → **0.970** |
-| Room 2000 ms | 3.05 → **3.27** dB | 0.881 → **0.888** | 0.971 → **0.980** |
-| Wide backing + quiet vocal | 19.04 → **24.82** dB | 0.962 → **0.990** | 0.958 → **0.961** |
-| Tempo drift 1% | 6.06 → **6.75** dB | 0.905 → **0.919** | 0.963 → **0.974** |
-| Phase-correlated stereo reference | 12.59 → **17.60** dB | 0.693 → **0.887** | 0.461 → **0.518** |
-| Reference-only changed lyric | 25.38 → **46.13** dB | injection still 0.0001 | — |
-
-All three metrics improve together with nothing regressing — something none of the earlier
-attempts managed. As for runtime, four minutes of material goes from 5.18 s to 4.77 s at 44.1 kHz
-and from 12.95 s to 13.50 s at 96 kHz; the added subtraction stage is more than paid for by the
-post-hoc coherence smoothing it removed.
-
-The two mask-fluctuation bounds described in the previous section were then added on top. On the
-same synthetic suite, compared with the version before them: room 25 ms depth +0.89 dB and fidelity
-+0.009; phase-correlated stereo reference depth +2.14 dB, fidelity +0.083 and live gain +0.129;
-tempo drift 1% depth −0.04 dB, essentially flat; the unrelated-reference bypass stays exact. The
-harness also gained a `phase_decorrelated_stage` scene that guards the incoherent path
-specifically — disabling that path drops its depth toward zero while the other scenes barely move,
-which is the reason the path exists.
-
-The gain shrinks sharply at the long-reverberation end, down to 0.23 dB at 2000 ms. The
-multiplicative narrowband model cannot describe the accompaniment there in the first place, so the
-subtraction has nothing to work with, and the little that remains comes from the residual mask
-acting through the leakage ratio. This matches the failure boundary that frame taps ran into.
-
-The frame-independence factor inside $N_{\text{eff}}$ was measured rather than derived. Reading
-$\text{hop}/n_{\text{fft}}$ literally as $1/4$ leaves the most protected scene, a quiet vocal under
-wide backing, 1.7% below the mask path it replaces; at $1/8$ it comes out 0.3% above instead, at a
-cost of 0.57 dB out of the 3.12 dB depth gain at 60 ms. The Hann window has its own correlation
-between overlapping frames, and the frequency Gaussian delivers fewer independent bins than its
-nominal count under a four-bin main lobe, both of which make the literal reading too optimistic.
-
-### Approaches Rejected After Measurement
-
-Three textbook refinements were measured on the same synthetic scenes. Each traded live-source fidelity for reverberant depth, and frame taps reach the same depth without paying that, so none were adopted:
-
-- **Convolutive transfer function (CTF) frame taps**, shipped briefly as `--taps` and then removed
-  outright. The gain was real on synthetic scenes but confined to short reverberation; retested at
-  the venue RT60 this document itself cites, it vanishes or goes slightly negative:
-
-  | Room response | 1 tap | 2 taps | 3 taps |
-  |---|---:|---:|---:|
-  | 25 ms | 8.70 dB | **11.46** | 9.84 |
-  | 60 ms | 4.36 | **9.51** | 8.31 |
-  | 250 ms | 1.22 | 3.60 | **4.65** |
-  | 500 ms | 1.23 | 1.83 | 2.83 |
-  | 1000 ms | 1.58 | 1.47 | 1.76 |
-  | 2000 ms | 0.88 | 0.85 | 0.84 |
-
-  The cost was not conditional: four minutes of audio went from 4.8 s to 21.6 s at 44.1 kHz and
-  from 14.6 s to 76.2 s at 96 kHz, because the per-block cost multiplied with a reduced parallel
-  worker count. The original “venues are reverberant, so enable it by default” decision
-  generalised from the favourable 60 ms case without testing at the 0.8–2 s a real venue rings.
-  Validate at venue scale before retrying this direction.
-- Berouti, Schwartz, and Makhoul's SNR-adaptive over-subtraction factor: 60 ms reverb 4.36 to 6.15 dB, but broadband fidelity 0.602 to 0.547 and quiet-vocal fidelity 0.202 to 0.117.
-- Ephraim-Malah decision-directed a-priori SNR with a Wiener gain: 60 ms reverb 4.36 to 9.33 dB, but broadband fidelity down to 0.313 and quiet-vocal down to 0.089.
-- Breithaupt, Gerkmann, and Martin's [cepstral gain smoothing](https://doi.org/10.1109/LSP.2007.906208): broadband fidelity 0.602 to 0.482, quiet-vocal 0.202 to 0.124.
-
-Also rejected: sub-sample refinement of the local delay (see Local Drift), and replacing `np.abs(z)**2` with `z.real**2 + z.imag**2` in the hot loops. The latter measured slower, because `abs` on complex input is a fused kernel while the hand-written form builds two temporaries.
+- Avery Lee's [Center Cut](https://www.virtualdub.org/blog2/entry_102.html) and ADRess-style methods depend on center imaging, inter-channel level differences, or phase differences, and are unrelated to this implementation: they read only the spatial relationship between two channels, whereas reference cancellation reads the evidence the song source provides.
+- The convolutive transfer function (CTF) literature explains why the multiplicative narrowband approximation fails under long reverberation and how a finite set of frame taps replaces it, for example [joint dereverberation and blind source separation with a hybrid CTF model](https://doi.org/10.1016/j.apacoust.2024.110168). Schröter et al.'s [DeepFilterNet](https://arxiv.org/abs/2110.05588) and Tammen and Doclo's [deep multi-frame MVDR](https://arxiv.org/abs/2011.10345) are the learned form of the same idea: a complex filter across frames per time-frequency bin rather than a point-wise mask.
+- Engineering systems with the same structure are useful references. WebRTC's AEC3 is likewise "known reference plus unknown transfer plus double-talk", and its partitioned-block frequency-domain adaptive filter, delay estimation, and residual echo suppressor map onto the alignment, transfer estimation, and coherence-weighted mask here.
 
 These papers provide algorithm structure and failure boundaries; they do not guarantee an improvement on every real performance. Matched-segment, loudness-matched A/B listening remains the acceptance criterion.
 
@@ -350,7 +280,8 @@ to a fixed floor would only enlarge the file.
 
 Algorithm tests cover time offsets, local drift, inverted polarity, frequency-dependent room
 transfer, unrelated sources, rejection of source-only replacement lyrics, matrix crosstalk,
-normal-equation orientation on a phase-correlated stereo reference, and block seams. Synthetic
+normal-equation orientation on a phase-correlated stereo reference, a live source that never stops
+(which guards the leakage regression's intercept), and block seams. Synthetic
 metrics only detect implementation regressions. Real material must still be exported with identical input and settings for direct
 comparison, listening closely to vocal level, sibilance, breathing, harmonies, reverb tails, and
 audience sound.
