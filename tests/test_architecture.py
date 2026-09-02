@@ -48,7 +48,9 @@ def test_feature_dependency_boundaries():
                     and name.split(".")[1] != own_feature
                 )
             }
-        elif relative.parts[0] == "app":
+        elif relative.parts[0] in {"app", "web"}:
+            # Both are shells over the pipelines: they orchestrate features and
+            # shared code, and neither may reach back up into startup.
             forbidden = {
                 name for name in imports if name == "entrypoints" or name.startswith("entrypoints.")
             }

@@ -57,6 +57,7 @@ def test_distribution_includes_runtime_packages_and_documentation():
         "src/features",
         "src/resources",
         "src/shared",
+        "src/web",
     }
     sdist_entries = set(config["tool"]["hatch"]["build"]["targets"]["sdist"]["include"])
     assert {"src", "tests", "deployment", "docs", "README.md", "LICENSE"} <= sdist_entries

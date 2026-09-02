@@ -25,7 +25,7 @@ plugins =
 [nuitka]
 macos.permissions = 
 mode = onefile
-extra_args = --quiet --assume-yes-for-downloads --noinclude-qt-translations --include-package=app --include-package=entrypoints --include-package=features --include-package=resources --include-package-data=resources --include-package=shared --include-package=qfluentwidgets --include-package=scipy._external.array_api_compat.numpy --include-module=onnxruntime.capi._pybind_state
+extra_args = --quiet --assume-yes-for-downloads --noinclude-qt-translations --include-package=app --include-package=entrypoints --include-package=features --include-package=resources --include-package-data=resources --include-package=shared --include-package=web --include-package=qfluentwidgets --include-package=scipy._external.array_api_compat.numpy --include-module=onnxruntime.capi._pybind_state
 
 [buildozer]
 mode = debug
