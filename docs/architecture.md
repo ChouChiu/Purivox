@@ -22,6 +22,7 @@ src/features/                    各功能自包含的页面、模型与处理�
 ├── home/                        首页
 └── settings/                    设置页
 src/shared/                      音频、频谱、任务参数校验、配置、日志、任务协议和通用控件
+src/web/                         浏览器外壳，Pyodide 里的作业入口与内存预算
 src/resources/                   翻译和模型规格等只读资源
 ```
 
@@ -30,16 +31,23 @@ src/resources/                   翻译和模型规格等只读资源
 ```mermaid
 flowchart LR
     entry["程序入口<br/>src/entrypoints"] --> app["应用编排<br/>src/app"]
+    browser["浏览器外壳<br/>src/web"] --> app
     app --> feature["功能模块<br/>src/features"]
     app --> shared["公共模块<br/>src/shared"]
+    browser --> feature
+    browser --> shared
     feature --> shared
 ```
+
+`src/app` 和 `src/web` 是同一层的两种外壳：前者编排 GUI，后者编排浏览器里的
+Pyodide 作业，两者都可以自由使用 `features` 和 `shared`，都不得反向导入 `entrypoints`。
+浏览器版的完整说明见[浏览器版（WebAssembly）](web.md)。
 
 `tests/test_architecture.py` 通过抽象语法树检查以下边界：
 
 - `shared` 不得导入 `app`、`entrypoints` 或任何 `features`。
 - 功能包不得导入 `app`、`entrypoints` 或其他功能包。
-- `app` 不得反向导入 `entrypoints`。
+- `app` 和 `web` 都不得反向导入 `entrypoints`。
 - 需要联合多个功能的逻辑放在 `app`。例如完整舞台渲染同时使用时间线分析与参考对消，因此位于
   `src/app/full_stage_processing.py`。
 

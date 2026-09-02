@@ -15,6 +15,9 @@ codebase serves three workflows:
   enabled.
 - **AI vocal extraction** (`purivox ai`): UVR MDX-Net ONNX inference with no reference. Models are
   downloaded on demand and verified by SHA-256.
+- **Browser build** (`web/`): the MR Remove and Full Stage pipelines running under Pyodide as a
+  static GitHub Pages site, with no backend. AI extraction is not part of it: `onnxruntime` has no
+  WebAssembly build. See `docs/web.md`.
 
 The GUI and CLI are thin shells over the same `run_reference_job` / `run_neural_job` pipeline
 functions; full-stage cross-feature rendering is orchestrated in
@@ -29,14 +32,17 @@ parsing the import statements (AST):
 ```text
 src/entrypoints (cli.py, gui.py)          — startup only
    └─> src/app (main_window.py, worker.py) — cross-feature orchestration
-          └─> src/features/<feature>/      — self-contained: page.py, processing.py,
-          │                                  models.py, dsp/, finder.py, catalog.py
-          └─> src/shared/                  — depends on NOTHING (audio/, dsp/, ui/, i18n,
-                                              jobs, config, logging, processing)
+   │      └─> src/features/<feature>/      — self-contained: page.py, processing.py,
+   │      │                                  models.py, dsp/, finder.py, catalog.py
+   │      └─> src/shared/                  — depends on NOTHING (audio/, dsp/, ui/, i18n,
+   │                                          jobs, config, logging, processing)
+   src/web (bridge.py, timeline.py)        — the browser shell, a sibling of app: it may use
+                                             app/features/shared, never entrypoints
 ```
 
 Rules enforced by `tests/test_architecture.py`: `shared` must never import `app` or
-`features.*`, and feature packages must never import one another. Adding a feature means creating
+`features.*`, feature packages must never import one another, and neither `app` nor `web` may
+import `entrypoints`. Adding a feature means creating
 one new `src/features/<feature>/` directory; it may import `shared` freely and must not be
 imported by other features.
 
@@ -78,6 +84,8 @@ jobs synchronously; SIGINT triggers token cancellation.
 | `src/resources/` | `i18n/{zh_cn,en_us,ja_jp,ko_kr}.ts` + compiled `.qm` (Qt Linguist, key-indexed, must stay key-identical), `model_data.json` (MDX-Net spec table keyed by MD5), `__init__.py` (`resource_path` via `importlib.resources`) |
 | `tests/` | Mirrors `src/` path-for-path (`tests/shared/` ↔ `src/shared/`, `tests/features/…`); `benchmarks/` for long/`--runslow` gates |
 | `models/` | 4 prebuilt ONNX weights (gitignored, never committed); not shipped in wheels or standalone builds |
+| `src/web/` | Browser shell (Pyodide): `bridge.py` (JSON-in/JSON-out job entry points), `timeline.py` (analysis serialisation, reusing `add_manual_clip`/`remove_manual_clip`), `limits.py` (the wasm32 memory budget) |
+| `web/` | Vite + React + Fluent UI v9 front end, managed with bun. Organised by feature exactly as `src/` is: `app/` (shell), `features/{reference_removal,full_stage,settings}/`, `shared/{runtime,worker,audio,i18n,ui}/`. `scripts/check-architecture.mjs` enforces those boundaries the way `tests/test_architecture.py` does for Python; `scripts/build-python-archive.mjs` packs `src/` into the archive Pyodide unpacks; `scripts/build-i18n.mjs` turns the `.ts` catalogues into JSON. Never a second implementation of the DSP |
 | `deployment/` | `main.py` — standalone Nuitka entry shim |
 | `tools/` | Developer scripts kept out of the package: `eval_cancellation.py` reports cancellation depth and live-source fidelity per synthetic scene, for A/B comparison across a DSP change |
 
@@ -102,6 +110,14 @@ uv run --locked ruff format --check src tests
 QT_QPA_PLATFORM=offscreen uv run --locked pytest
 QT_QPA_PLATFORM=offscreen uv run --locked pytest tests/benchmarks --runslow   # 15-min memory/quality gate
 uv build                           # sdist+wheel
+
+# browser build (predev/prebuild repack src/ and regenerate the translation JSON)
+cd web && bun install && bun run dev       # http://localhost:5173/
+cd web && bun run lint                     # Biome, recommended rules
+cd web && bun run format                   # biome check --write
+cd web && bun run check                    # lint + tsc + front-end layering
+cd web && bun run build                    # static site in web/dist (runs check first)
+PURIVOX_BASE=/repo/ bun run build          # only for a Pages *project* site subpath
 
 # translations (edit src/resources/i18n/*.ts, then recompile and commit both)
 uv run --locked pyside6-lrelease src/resources/i18n/<locale>.ts -qm src/resources/i18n/<locale>.qm
@@ -189,6 +205,30 @@ Language keys: `zh_cn`, `en_us`, `ja_jp`, `ko_kr`.
   examples: `shared.audio.BLOCK_FRAMES`, `shared.audio.AUDIO_EXTENSIONS`,
   `shared.jobs.validate_reference_settings`, `shared.dsp.log_flux_bands`,
   `shared.ui.AUDIO_FILE_FILTER`, `shared.ui.normalized_wav_path`.
+- **Front-end vocabulary**: before writing a new string, check the `.ts` catalogues — the desktop
+  has already named most states (`warn_no_song`, `stage_need_sources`, `preview_empty`,
+  `stage_analysis_summary`, `switch_on`/`switch_off`, the whole `home_*` set). Reuse beats inventing
+  a second way to say the same thing, and keeps all four locales correct for free. The brand mark
+  comes from `src/resources/purivox.svg` via `scripts/build-assets.mjs`; never redraw it.
+- **Page lifetime**: `MrPage` and `FullStagePage` stay mounted and are hidden with `hidden` when
+  another tab is shown. Unmounting them stops a preview mid-play and discards a finished result or a
+  running job. Because all pages are mounted at once, anything window-scoped (shortcut bindings)
+  must be gated on the `active` prop.
+- **No tooltips on transport controls**: a Fluent `Tooltip` opens on keyboard focus, not just
+  hover, so it pops up every time a play/pause button is tabbed to and covers what is above it. Put
+  the word on the button, as `preview_play.setText(...)` does on the desktop.
+- **Front-end UX**: window shortcuts (`Ctrl+O`/`Ctrl+Enter`/`Esc`/`F5`) live in
+  `shared/runtime/shortcuts.ts` and are bound by `app/App.tsx`, never by a page — the same rule
+  `MainWindow` follows. A page registers its bindings through `onBind`. The boot banner shows the
+  four startup stages and the ~23 MB first-visit cost rather than a percentage: Pyodide's lock file
+  has no sizes, so a byte-level bar would be invented. Uploads chunk at `CHUNK_BYTES` (4 MiB), which
+  is what makes upload progress real. Breakpoints mirror the desktop's (`620px` = `PORTRAIT`).
+- **Front end**: the same feature-driven layering as `src/`, enforced by
+  `web/scripts/check-architecture.mjs` — `shared` imports neither `app` nor `features`, features
+  never import one another, `app` never imports the entry point. A helper two features need goes
+  down into `shared`, exactly as it does in Python. Biome's recommended rules are the linter, with
+  its own defaults (tab indent) and no custom rule set; suppress a rule inline with a reason rather
+  than turning it off globally.
 - **Adding a source dir**: register in THREE places or it silently ships nowhere:
   `[tool.hatch.build.targets.wheel] packages` + `[tool.pyside6-project] files` (both
   `pyproject.toml`) + `include-package` in `pysidedeploy.spec`.

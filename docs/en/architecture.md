@@ -25,6 +25,7 @@ src/features/                    Self-contained pages, models, and processing lo
 └── settings/                    Settings page
 src/shared/                      Audio, spectra, job validation, configuration, logging,
                                  task protocol, and widgets
+src/web/                         Browser shell: the job entry points and memory budget under Pyodide
 src/resources/                   Read-only resources such as translations and model specifications
 ```
 
@@ -33,16 +34,24 @@ Dependencies flow in one direction:
 ```mermaid
 flowchart LR
     entry["Entry points<br/>src/entrypoints"] --> app["Application orchestration<br/>src/app"]
+    browser["Browser shell<br/>src/web"] --> app
     app --> feature["Feature modules<br/>src/features"]
     app --> shared["Shared modules<br/>src/shared"]
+    browser --> feature
+    browser --> shared
     feature --> shared
 ```
+
+`src/app` and `src/web` are two shells at the same level: the first orchestrates the GUI, the
+second the Pyodide jobs that run in a browser. Both may use `features` and `shared` freely, and
+neither may import `entrypoints`. The browser build is described in full in
+[Browser Build (WebAssembly)](web.md).
 
 `tests/test_architecture.py` uses the abstract syntax tree to enforce these boundaries:
 
 - `shared` must not import `app`, `entrypoints`, or any `features` package.
 - Feature packages must not import `app`, `entrypoints`, or another feature package.
-- `app` must not import `entrypoints`.
+- Neither `app` nor `web` may import `entrypoints`.
 - Logic that combines multiple features belongs in `app`. Full Stage rendering, for example, uses
   both timeline analysis and reference cancellation, so it lives in
   `src/app/full_stage_processing.py`.

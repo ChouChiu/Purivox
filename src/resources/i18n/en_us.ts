@@ -577,5 +577,69 @@ Background: {background}</translation>
         <source>ai_err_infer</source>
         <translation>AI separation failed: {msg}</translation>
     </message>
+    <message>
+        <source>web_boot_runtime</source>
+        <translation>Starting the Python runtime...</translation>
+    </message>
+    <message>
+        <source>web_boot_packages</source>
+        <translation>Loading numpy, scipy and the audio codecs...</translation>
+    </message>
+    <message>
+        <source>web_boot_sources</source>
+        <translation>Loading the processing pipelines...</translation>
+    </message>
+    <message>
+        <source>web_boot_hint</source>
+        <translation>Everything runs inside this browser tab. No audio is sent to a server.</translation>
+    </message>
+    <message>
+        <source>web_uploading</source>
+        <translation>Reading {name}...</translation>
+    </message>
+    <message>
+        <source>web_decoding</source>
+        <translation>No built-in decoder for this container; converting {name} with the browser...</translation>
+    </message>
+    <message>
+        <source>web_memory_refuse</source>
+        <translation>This job needs about {peak} of memory, more than the {budget} a browser tab can use. Process it with the desktop app.</translation>
+    </message>
+    <message>
+        <source>web_memory_tight</source>
+        <translation>This job needs about {peak} of the {budget} a browser tab can use; it may run out of memory.</translation>
+    </message>
+    <message>
+        <source>web_download</source>
+        <translation>Download</translation>
+    </message>
+    <message>
+        <source>web_no_ai</source>
+        <translation>AI track separation is desktop only: the ONNX runtime it needs has no browser build.</translation>
+    </message>
+    <message>
+        <source>web_output_hint</source>
+        <translation>The result downloads as WAV; nothing is written outside this tab</translation>
+    </message>
+    <message>
+        <source>web_boot_size</source>
+        <translation>The first visit downloads about {size}; your browser caches it, so later visits start quickly.</translation>
+    </message>
+    <message>
+        <source>web_boot_failed</source>
+        <translation>The runtime could not load: {msg}</translation>
+    </message>
+    <message>
+        <source>web_retry</source>
+        <translation>Retry</translation>
+    </message>
+    <message>
+        <source>web_uploading_percent</source>
+        <translation>Reading {name} ({percent}%)...</translation>
+    </message>
+    <message>
+        <source>shortcut_hint</source>
+        <translation>Shortcuts: Ctrl+O choose files · Ctrl+Enter start · Esc cancel · F5 find songs</translation>
+    </message>
 </context>
 </TS>

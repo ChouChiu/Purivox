@@ -167,6 +167,7 @@ Architecture, algorithms, testing, and release information are available in
 - [Reference-Guided Vocal Isolation](docs/en/reference-removal.md)
 - [Full Stage Processing](docs/en/full-stage.md)
 - [AI Track Separation](docs/en/neural-separation.md)
+- [Browser Build (WebAssembly)](docs/en/web.md)
 - [Development, Testing, and Release](docs/en/development.md)
 
 ## Acknowledgements and License

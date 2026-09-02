@@ -15,6 +15,7 @@
 | [参考引导人声提取](reference-removal.md) | 时间对齐、参考对消和分块拼接 |
 | [完整舞台实现](full-stage.md) | 多音源指纹、候选聚类、时间线生成、分段渲染与边界保护 |
 | [AI 音轨分离实现](neural-separation.md) | 模型目录、校验、MDX-Net 输入输出和重叠相加 |
+| [浏览器版（WebAssembly）](web.md) | Pyodide 运行时、无 Qt 改动、内存上限、取消与部署 |
 | [开发、测试与发布](development.md) | 环境、代码约定、质量检查、打包与独立程序构建 |
 
 ## 阅读建议

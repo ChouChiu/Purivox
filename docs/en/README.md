@@ -17,6 +17,7 @@ mathematical models use LaTeX.
 | [Reference-Guided Vocal Isolation](reference-removal.md) | Time alignment, reference cancellation, and chunk blending |
 | [Full Stage Processing](full-stage.md) | Multi-source fingerprints, candidate clustering, timeline generation, segmented rendering, and boundary protection |
 | [AI Track Separation](neural-separation.md) | Model locations, verification, MDX-Net input/output, and overlap-add inference |
+| [Browser Build (WebAssembly)](web.md) | The Pyodide runtime, the changes for a Qt-free build, the memory ceiling, cancellation, and deployment |
 | [Development, Testing, and Release](development.md) | Environment setup, code conventions, quality gates, packaging, and standalone builds |
 
 ## Suggested Reading

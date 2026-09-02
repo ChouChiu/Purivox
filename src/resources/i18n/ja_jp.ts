@@ -577,5 +577,69 @@
         <source>ai_err_infer</source>
         <translation>AI 分離に失敗しました: {msg}</translation>
     </message>
+    <message>
+        <source>web_boot_runtime</source>
+        <translation>Python ランタイムを起動しています…</translation>
+    </message>
+    <message>
+        <source>web_boot_packages</source>
+        <translation>numpy、scipy と音声デコーダーを読み込んでいます…</translation>
+    </message>
+    <message>
+        <source>web_boot_sources</source>
+        <translation>処理パイプラインを読み込んでいます…</translation>
+    </message>
+    <message>
+        <source>web_boot_hint</source>
+        <translation>すべての処理はこのブラウザータブ内で完結します。音声はサーバーに送信されません。</translation>
+    </message>
+    <message>
+        <source>web_uploading</source>
+        <translation>{name} を読み込んでいます…</translation>
+    </message>
+    <message>
+        <source>web_decoding</source>
+        <translation>このコンテナは内蔵デコーダーで読めないため、ブラウザーで {name} を変換しています…</translation>
+    </message>
+    <message>
+        <source>web_memory_refuse</source>
+        <translation>この処理には約 {peak} のメモリが必要で、ブラウザータブで使える {budget} を超えています。デスクトップ版で処理してください。</translation>
+    </message>
+    <message>
+        <source>web_memory_tight</source>
+        <translation>この処理には約 {peak} のメモリが必要で、ブラウザータブで使える {budget} に近づいています。メモリが不足する可能性があります。</translation>
+    </message>
+    <message>
+        <source>web_download</source>
+        <translation>ダウンロード</translation>
+    </message>
+    <message>
+        <source>web_no_ai</source>
+        <translation>AI 音源分離はデスクトップ版のみです。必要な ONNX ランタイムにブラウザー版がありません。</translation>
+    </message>
+    <message>
+        <source>web_output_hint</source>
+        <translation>結果は WAV としてダウンロードされ、このタブの外には何も書き込まれません</translation>
+    </message>
+    <message>
+        <source>web_boot_size</source>
+        <translation>初回は約 {size} をダウンロードします。ブラウザーがキャッシュするため、次回以降は速く起動します。</translation>
+    </message>
+    <message>
+        <source>web_boot_failed</source>
+        <translation>ランタイムを読み込めませんでした：{msg}</translation>
+    </message>
+    <message>
+        <source>web_retry</source>
+        <translation>再試行</translation>
+    </message>
+    <message>
+        <source>web_uploading_percent</source>
+        <translation>{name} を読み込んでいます（{percent}%）…</translation>
+    </message>
+    <message>
+        <source>shortcut_hint</source>
+        <translation>ショートカット：Ctrl+O ファイル選択 · Ctrl+Enter 開始 · Esc キャンセル · F5 曲を検出</translation>
+    </message>
 </context>
 </TS>

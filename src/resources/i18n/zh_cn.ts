@@ -577,5 +577,69 @@
         <source>ai_err_infer</source>
         <translation>AI 分离失败：{msg}</translation>
     </message>
+    <message>
+        <source>web_boot_runtime</source>
+        <translation>正在启动 Python 运行时…</translation>
+    </message>
+    <message>
+        <source>web_boot_packages</source>
+        <translation>正在加载 numpy、scipy 和音频解码器…</translation>
+    </message>
+    <message>
+        <source>web_boot_sources</source>
+        <translation>正在加载处理管线…</translation>
+    </message>
+    <message>
+        <source>web_boot_hint</source>
+        <translation>全部处理都在本浏览器标签页内完成，音频不会上传到服务器。</translation>
+    </message>
+    <message>
+        <source>web_uploading</source>
+        <translation>正在读取 {name}…</translation>
+    </message>
+    <message>
+        <source>web_decoding</source>
+        <translation>内置解码器不支持该容器，正在用浏览器转换 {name}…</translation>
+    </message>
+    <message>
+        <source>web_memory_refuse</source>
+        <translation>本次处理约需 {peak} 内存，超过浏览器标签页可用的 {budget}。请改用桌面版处理。</translation>
+    </message>
+    <message>
+        <source>web_memory_tight</source>
+        <translation>本次处理约需 {peak} 内存，接近浏览器标签页可用的 {budget}，可能会内存不足。</translation>
+    </message>
+    <message>
+        <source>web_download</source>
+        <translation>下载</translation>
+    </message>
+    <message>
+        <source>web_no_ai</source>
+        <translation>AI 音轨分离仅桌面版提供：它依赖的 ONNX 运行时没有浏览器版本。</translation>
+    </message>
+    <message>
+        <source>web_output_hint</source>
+        <translation>结果以 WAV 下载，不会写入本标签页以外的任何位置</translation>
+    </message>
+    <message>
+        <source>web_boot_size</source>
+        <translation>首次访问约需下载 {size}，之后由浏览器缓存，再打开就快了。</translation>
+    </message>
+    <message>
+        <source>web_boot_failed</source>
+        <translation>运行时加载失败：{msg}</translation>
+    </message>
+    <message>
+        <source>web_retry</source>
+        <translation>重试</translation>
+    </message>
+    <message>
+        <source>web_uploading_percent</source>
+        <translation>正在读取 {name}（{percent}%）…</translation>
+    </message>
+    <message>
+        <source>shortcut_hint</source>
+        <translation>快捷键：Ctrl+O 选择文件 · Ctrl+Enter 开始 · Esc 取消 · F5 识别歌曲</translation>
+    </message>
 </context>
 </TS>

@@ -577,5 +577,69 @@
         <source>ai_err_infer</source>
         <translation>AI 분리에 실패했습니다: {msg}</translation>
     </message>
+    <message>
+        <source>web_boot_runtime</source>
+        <translation>Python 런타임을 시작하는 중…</translation>
+    </message>
+    <message>
+        <source>web_boot_packages</source>
+        <translation>numpy, scipy 및 오디오 디코더를 불러오는 중…</translation>
+    </message>
+    <message>
+        <source>web_boot_sources</source>
+        <translation>처리 파이프라인을 불러오는 중…</translation>
+    </message>
+    <message>
+        <source>web_boot_hint</source>
+        <translation>모든 처리는 이 브라우저 탭 안에서 이루어집니다. 오디오는 서버로 전송되지 않습니다.</translation>
+    </message>
+    <message>
+        <source>web_uploading</source>
+        <translation>{name} 을(를) 읽는 중…</translation>
+    </message>
+    <message>
+        <source>web_decoding</source>
+        <translation>내장 디코더가 지원하지 않는 컨테이너입니다. 브라우저로 {name} 을(를) 변환하는 중…</translation>
+    </message>
+    <message>
+        <source>web_memory_refuse</source>
+        <translation>이 작업에는 약 {peak} 의 메모리가 필요하며, 브라우저 탭에서 사용할 수 있는 {budget} 을(를) 초과합니다. 데스크톱 버전으로 처리하세요.</translation>
+    </message>
+    <message>
+        <source>web_memory_tight</source>
+        <translation>이 작업에는 약 {peak} 의 메모리가 필요하며, 브라우저 탭에서 사용할 수 있는 {budget} 에 근접합니다. 메모리가 부족할 수 있습니다.</translation>
+    </message>
+    <message>
+        <source>web_download</source>
+        <translation>다운로드</translation>
+    </message>
+    <message>
+        <source>web_no_ai</source>
+        <translation>AI 트랙 분리는 데스크톱 전용입니다. 필요한 ONNX 런타임에 브라우저 빌드가 없습니다.</translation>
+    </message>
+    <message>
+        <source>web_output_hint</source>
+        <translation>결과는 WAV로 다운로드되며, 이 탭 밖에는 아무것도 기록되지 않습니다</translation>
+    </message>
+    <message>
+        <source>web_boot_size</source>
+        <translation>첫 방문에는 약 {size} 를 내려받습니다. 브라우저가 캐시하므로 다음부터는 빠르게 시작합니다.</translation>
+    </message>
+    <message>
+        <source>web_boot_failed</source>
+        <translation>런타임을 불러오지 못했습니다: {msg}</translation>
+    </message>
+    <message>
+        <source>web_retry</source>
+        <translation>다시 시도</translation>
+    </message>
+    <message>
+        <source>web_uploading_percent</source>
+        <translation>{name} 을(를) 읽는 중({percent}%)…</translation>
+    </message>
+    <message>
+        <source>shortcut_hint</source>
+        <translation>단축키: Ctrl+O 파일 선택 · Ctrl+Enter 시작 · Esc 취소 · F5 곡 검색</translation>
+    </message>
 </context>
 </TS>

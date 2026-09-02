@@ -16,3 +16,4 @@ pysidedeploy-windows.spec
 models/*.onnx
 *.part
 *.tmp.wav
+web/public/__probe__
