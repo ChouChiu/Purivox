@@ -14,6 +14,10 @@ if TYPE_CHECKING:
 class ProgressEvent:
     value: int
     message: str
+    key: str = ""
+    """The catalogue key `message` was translated from, for shells that translate later."""
+    values: tuple[tuple[str, str], ...] = ()
+    """The placeholder names and values `message` was filled with, in call order."""
 
 
 @dataclass(frozen=True, slots=True)

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 import os
+import sys
 from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
@@ -58,6 +59,10 @@ _MASK_POWER_SMOOTH = 1.5
 _SPECTRAL_CELL_BUDGET = 4_000_000
 _MAX_PROCESSING_BLOCK_SECONDS = 48
 _MAX_PROCESSING_WORKERS = min(5, os.cpu_count() or 1)
+# Pyodide builds CPython without pthreads, so the pool cannot start a worker
+# there.  Only the execution strategy changes: the layout below still decides
+# the block size, so a browser run schedules exactly the same blocks.
+_THREADS_AVAILABLE = sys.platform != "emscripten"
 _MAX_PARALLEL_SPECTRAL_CELLS = 9_000_000
 
 
@@ -350,26 +355,39 @@ def process_audio(
         )
         return index, start, end, processed
 
-    with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="purivox-dsp") as executor:
-        indexed_starts = list(enumerate(starts))
-        for batch_start in range(0, len(indexed_starts), workers):
-            batch = indexed_starts[batch_start : batch_start + workers]
-            futures = [executor.submit(process_block, index, start) for index, start in batch]
-            for future in futures:
-                index, start, end, processed = future.result()
-                fade = min(overlap, end - start) if index > 0 else 0
-                if fade:
-                    phase = np.linspace(0, np.pi / 2, fade, dtype=np.float32)
-                    old_weight = np.cos(phase) ** 2
-                    new_weight = np.sin(phase) ** 2
-                    result[:, start : start + fade] = (
-                        result[:, start : start + fade] * old_weight
-                        + processed[:, :fade] * new_weight
-                    )
-                result[:, start + fade : end] = processed[:, fade : end - start]
-            release_mapped_pages(mix)
-            release_mapped_pages(accompaniment)
-            release_mapped_pages(result)
+    def blend_block(index: int, start: int, end: int, processed: np.ndarray) -> None:
+        fade = min(overlap, end - start) if index > 0 else 0
+        if fade:
+            phase = np.linspace(0, np.pi / 2, fade, dtype=np.float32)
+            old_weight = np.cos(phase) ** 2
+            new_weight = np.sin(phase) ** 2
+            result[:, start : start + fade] = (
+                result[:, start : start + fade] * old_weight + processed[:, :fade] * new_weight
+            )
+        result[:, start + fade : end] = processed[:, fade : end - start]
+
+    def release_batch() -> None:
+        release_mapped_pages(mix)
+        release_mapped_pages(accompaniment)
+        release_mapped_pages(result)
+
+    indexed_starts = list(enumerate(starts))
+    if _THREADS_AVAILABLE:
+        with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="purivox-dsp") as executor:
+            for batch_start in range(0, len(indexed_starts), workers):
+                batch = indexed_starts[batch_start : batch_start + workers]
+                futures = [executor.submit(process_block, index, start) for index, start in batch]
+                for future in futures:
+                    blend_block(*future.result())
+                release_batch()
+    else:
+        # The blocks are independent and blended in the order they were
+        # scheduled, so running them inline gives the same result one core at a
+        # time.  Pages are released per block rather than per batch: the browser
+        # has no disk to page out to and needs the hint sooner.
+        for index, start in indexed_starts:
+            blend_block(*process_block(index, start))
+            release_batch()
     peak = 0.0
     cleanup_block = BLOCK_FRAMES
     for start in range(0, length, cleanup_block):

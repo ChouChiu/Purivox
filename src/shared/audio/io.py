@@ -51,11 +51,21 @@ def _mapping_of(values: np.ndarray) -> mmap.mmap | None:
 
 
 def release_mapped_pages(values: np.ndarray) -> None:
-    """Flush a disk mapping and let the kernel evict its resident pages."""
+    """Flush a disk mapping and let the kernel evict its resident pages.
+
+    This is a hint, so a platform that cannot honour it must not fail the job
+    over it.  Emscripten maps a file that already lives in the same heap as the
+    array, so there is nothing to flush and nothing to evict, and its `msync`
+    reports a bad descriptor instead of succeeding.
+    """
     mapping = _mapping_of(values)
     if mapping is None:
         return
-    mapping.flush()
+    try:
+        mapping.flush()
+    except OSError as error:
+        logger.debug("this platform cannot flush a mapping: %s", error)
+        return
     if hasattr(mapping, "madvise") and hasattr(mmap, "MADV_DONTNEED"):
         mapping.madvise(mmap.MADV_DONTNEED)
 

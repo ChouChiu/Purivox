@@ -28,7 +28,16 @@ def stft(signal: np.ndarray, n_fft: int = 2048, hop: int = 512) -> np.ndarray:
     remainder = (padded.size - n_fft) % hop
     if remainder:
         padded = np.pad(padded, (0, hop - remainder), mode="reflect")
-    frames = np.lib.stride_tricks.sliding_window_view(padded, n_fft)[::hop]
+    # Stride straight to the hop positions.  Framing every offset and keeping
+    # every `hop`-th row afterwards is the same result, but the intermediate is
+    # `hop` times taller, and numpy refuses a view whose nominal size does not
+    # fit a pointer.  Under wasm32 that ceiling is two gigabytes, which a few
+    # seconds of 44.1 kHz audio already describes past.
+    stride = padded.strides[0]
+    count = (padded.size - n_fft) // hop + 1
+    frames = np.lib.stride_tricks.as_strided(
+        padded, shape=(count, n_fft), strides=(hop * stride, stride), writeable=False
+    )
     window = _hann_window(n_fft, real_dtype.str)
     return rfft(frames * window, axis=1)
 
