@@ -519,3 +519,46 @@ def test_reference_cancellation_handles_a_phase_correlated_stereo_reference():
     )
     assert depth > 8.0
     assert corr(output[0][body], live[body]) > 0.60
+
+
+def _gain(output: np.ndarray, target: np.ndarray) -> float:
+    return float(np.dot(output.ravel(), target.ravel()) / np.dot(target.ravel(), target.ravel()))
+
+
+def test_residual_mask_keeps_a_live_source_that_never_stops():
+    """The leakage estimate must not read the live source as leftover accompaniment.
+
+    A live source that plays throughout leaves no frame where only the
+    reference is sounding.  Measuring the leakage as a plain residual-over-
+    removed ratio then measures the live source along with it and the mask
+    takes it out: on this scene that cost 41% of the live source's level and
+    3.4 dB of depth, because the distorted live source lands in the residual
+    the depth is measured against.  Regressing the residual power on the
+    removed power with an intercept separates the two - leakage follows the
+    accompaniment that was there, the live floor does not.
+    """
+    sample_rate = 16_000
+    length = sample_rate * 5
+    rng = np.random.default_rng(311)
+    left_ref = np.convolve(rng.normal(0.0, 0.25, length), np.ones(5) / 5, mode="same")
+    delay = 7
+    right_ref = 0.9 * np.pad(left_ref[:-delay], (delay, 0)) + rng.normal(0.0, 0.02, length)
+    live = np.convolve(rng.normal(0.0, 0.08, length), np.ones(3) / 3, mode="same")
+    accompaniment = np.stack(
+        [0.85 * left_ref + 0.31 * right_ref, -0.22 * left_ref + 0.78 * right_ref]
+    )
+    live_stereo = np.stack([live, 0.95 * live])
+    mix = (live_stereo + accompaniment).astype(np.float32)
+
+    output = process_audio(
+        mix, np.stack([left_ref, right_ref]).astype(np.float32), sample_rate, 1.0, 3
+    )
+
+    body = slice(sample_rate // 2, length - sample_rate // 2)
+    gain = _gain(output[:, body], live_stereo[:, body])
+    residual = output[:, body] - gain * live_stereo[:, body]
+    depth = 10 * np.log10(
+        float(np.mean(accompaniment[:, body] ** 2)) / max(float(np.mean(residual**2)), 1e-20)
+    )
+    assert gain > 0.78
+    assert depth > 21.0

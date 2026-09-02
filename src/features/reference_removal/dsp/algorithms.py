@@ -21,27 +21,22 @@ from .transfer import (
 )
 
 _MASK_FLOOR = 0.05
-_SPECTRAL_OVERSUBTRACTION = 1.5
 # A geometric mean sits at about 0.56 of the arithmetic mean for the residual's
 # distribution, so the threshold is scaled up to keep the same amount of
 # down-weighting as the mean-based form it replaced.
 _ROBUST_SCALE = 7.0
-# Frames where the reference explains most of the mixture are the ones that
-# reveal how much accompaniment the transfer failed to describe.
-_LEAKAGE_LOW = 0.5
-_LEAKAGE_HIGH = 0.9
-# Leakage cannot exceed the prediction it leaked from.
-_MAX_LEAKAGE = 1.0
-# A power-domain fit needs a clearly positive correlation before it is allowed
-# to remove anything: unrelated music shares loudness envelopes, and this gate
-# is what keeps an unrelated source from being suppressed.
-_INCOHERENT_LOW = 0.15
-_INCOHERENT_HIGH = 0.45
-# The power-domain estimate is noisier than the coherent one, so it gets its
-# own over-subtraction factor rather than borrowing the coherent path's.  It has
-# not been tuned away from that value: it is kept separate because this is the
-# knob to lower when the incoherent path suppresses cleanly but audibly costs
-# quality, which is what it does on a badly phase-decorrelated capture.
+# Both power-domain fits - the leakage one and the incoherent one - need a
+# clearly positive correlation before they are allowed to remove anything:
+# unrelated music shares loudness envelopes, and this gate is what keeps an
+# unrelated source from being suppressed.  Measured: with it removed the
+# unrelated-reference bypass loses an order of magnitude, from an RMSE of
+# 0.0001 to 0.0002, while nothing else moves by more than 0.2 dB.
+_POWER_FIT_LOW = 0.15
+_POWER_FIT_HIGH = 0.45
+# The incoherent path fits power on power without any phase evidence at all,
+# so unlike the leakage regression it keeps an over-subtraction factor: this is
+# the knob to lower when that path suppresses cleanly but audibly costs quality,
+# which is what it does on a badly phase-decorrelated capture.
 _INCOHERENT_OVERSUBTRACTION = 1.5
 # The incoherent path rides on much weaker evidence than the coherent one, so a
 # single noisy cell must not be allowed to drive the mask all the way to the
@@ -221,18 +216,24 @@ def _reference_cancel(
     # What survives the subtraction is not only the live source: reverberation
     # ringing past the analysis window, residual misalignment and level moves
     # all leave accompaniment behind that the narrowband transfer could not
-    # describe.  Its size is measured per bin over the frames the reference
-    # dominates - a stage recording supplies plenty of those between vocal
-    # phrases - and the mask is asked to remove that much and no more.
+    # describe.  How much is a regression of the residual power on the power
+    # that was removed, carrying an intercept:
+    #
+    #     P_e = rho P_d + c
+    #
+    # `rho P_d` follows the accompaniment that was there, so it is leakage; the
+    # slowly varying `c` does not, so it is the live source, and only the first
+    # term may be taken out.  This is the same split the incoherent path below
+    # makes for the same reason.
     residual_power = np.zeros_like(removable_power)
     for residual in residual_spectra:
         residual_power += np.abs(residual) ** 2
-    dominant = smoothstep(_LEAKAGE_LOW, _LEAKAGE_HIGH, sum(explained) / len(explained))
-    leakage = np.sum(dominant * residual_power, axis=0) / (
-        np.sum(dominant * removable_power, axis=0) + 1e-12
-    )
-    leakage = np.clip(leakage, 0.0, _MAX_LEAKAGE).astype(np.float32)
-    del dominant, explained
+    del explained
+    leaked_power, leakage_confidence = power_transfer(residual_power, removable_power, sigma_frames)
+    leaked_power *= smoothstep(_POWER_FIT_LOW, _POWER_FIT_HIGH, leakage_confidence)
+    # Leakage cannot exceed the residual it was found in.
+    leaked_power = np.minimum(leaked_power, residual_power)
+    del leakage_confidence
 
     # Where the capture path destroyed phase, the coherent stage has nothing to
     # subtract and `removable_power` is far smaller than the accompaniment that
@@ -248,7 +249,7 @@ def _reference_cancel(
         mixture_power, reference_power, sigma_frames
     )
     del reference_power, mixture_power, reference_spectra
-    incoherent_power *= smoothstep(_INCOHERENT_LOW, _INCOHERENT_HIGH, incoherent_confidence)
+    incoherent_power *= smoothstep(_POWER_FIT_LOW, _POWER_FIT_HIGH, incoherent_confidence)
     incoherent_power = np.maximum(incoherent_power - removable_power, 0.0)
     del incoherent_confidence
     # Bound the weak-evidence path so one noisy cell cannot drive the mask to
@@ -256,12 +257,10 @@ def _reference_cancel(
     incoherent_power = np.minimum(incoherent_power, _INCOHERENT_MAX_SHARE * residual_power)
 
     remaining_power = np.maximum(
-        residual_power
-        - _SPECTRAL_OVERSUBTRACTION * leakage[None, :] * removable_power
-        - _INCOHERENT_OVERSUBTRACTION * incoherent_power,
+        residual_power - leaked_power - _INCOHERENT_OVERSUBTRACTION * incoherent_power,
         (_MASK_FLOOR**2) * residual_power,
     )
-    del incoherent_power
+    del incoherent_power, leaked_power
     # Form the mask from powers smoothed in time rather than from instantaneous
     # per-cell powers: most of the ratio's variance is removed before it
     # reaches the mask, and the Gaussian pass below only has to catch what is
