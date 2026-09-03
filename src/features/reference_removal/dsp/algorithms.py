@@ -156,6 +156,13 @@ def _reference_cancel(
         reference_spectra.append(reference_spectra[0])
     sigma_frames = max(float(sigma) * sample_rate / hop / 6.0, 1.0)
 
+    # Every step below works over a whole [frames, bins] spectrum, so a chain of
+    # operators would put half a dozen of them in the block working set at once.
+    # One real and one complex buffer carry all the intermediates instead; what
+    # a line reads is still exactly the expression it spells out.
+    power = np.empty(song_spectra[0].shape, dtype=song_spectra[0].real.dtype)
+    spectrum = np.empty(song_spectra[0].shape, dtype=song_spectra[0].dtype)
+
     predicted, _explained = predict_reference_spectra(
         song_spectra,
         reference_spectra,
@@ -164,16 +171,24 @@ def _reference_cancel(
     )
     residual_power = np.zeros(song_spectra[0].shape, dtype=np.float32)
     for mixture_channel, predicted_channel in zip(song_spectra, predicted, strict=True):
-        residual_power += np.abs(mixture_channel - predicted_channel) ** 2
+        np.subtract(mixture_channel, predicted_channel, out=spectrum)
+        np.abs(spectrum, out=power)
+        np.square(power, out=power)
+        residual_power += power
     # The scale the outliers are judged against has to be one they cannot lift
     # themselves.  A smoothed arithmetic mean is dragged up by the very live
     # transients it is meant to down-weight, so take the geometric mean: the
     # same O(N) smoother, read in the log domain.
     residual_floor = 1e-10 * float(np.mean(residual_power)) + 1e-30
-    local_residual = np.exp(spectral_smooth(np.log(residual_power + residual_floor), sigma_frames))
-    robust_weights = np.minimum(
-        1.0, _ROBUST_SCALE * local_residual / (residual_power + 1e-12)
-    ).astype(np.float32)
+    np.add(residual_power, residual_floor, out=power)
+    np.log(power, out=power)
+    local_residual = spectral_smooth(power, sigma_frames)
+    np.exp(local_residual, out=local_residual)
+    local_residual *= _ROBUST_SCALE
+    np.add(residual_power, 1e-12, out=power)
+    local_residual /= power
+    np.minimum(local_residual, 1.0, out=local_residual)
+    robust_weights = local_residual.astype(np.float32, copy=False)
     del residual_power, local_residual, predicted
     predicted, explained = predict_reference_spectra(
         song_spectra,
@@ -197,9 +212,19 @@ def _reference_cancel(
     for mixture_channel, predicted_channel, confidence in zip(
         song_spectra, predicted, explained, strict=True
     ):
-        predicted_channel *= confidence / (confidence + variance_ratio * (1.0 - confidence) + 1e-12)
-        alignment += (mixture_channel * np.conj(predicted_channel)).real
-        predicted_power += np.abs(predicted_channel) ** 2
+        # confidence / (confidence + variance_ratio * (1 - confidence) + 1e-12)
+        np.subtract(1.0, confidence, out=power)
+        power *= variance_ratio
+        power += confidence
+        power += 1e-12
+        np.divide(confidence, power, out=power)
+        predicted_channel *= power
+        np.conj(predicted_channel, out=spectrum)
+        np.multiply(mixture_channel, spectrum, out=spectrum)
+        alignment += spectrum.real
+        np.abs(predicted_channel, out=power)
+        np.square(power, out=power)
+        predicted_power += power
     # The linear stage may only take energy out.  Solving |y - t*d| <= |y| for t
     # gives 2*Re(y conj(d))/|d|^2 exactly, so this is the largest step that
     # cannot amplify - and because it reads the phase, it also falls to zero
@@ -207,15 +232,20 @@ def _reference_cancel(
     # |e| by |y| instead leaves the residual pointing wherever the bad
     # prediction put it, merely rescaled.  The step is linked across channels
     # like the mask that follows it.
-    step = np.clip(2.0 * alignment / (predicted_power + 1e-20), 0.0, 1.0).astype(np.float32)
-    del alignment, predicted_power
+    alignment *= 2.0
+    predicted_power += 1e-20
+    alignment /= predicted_power
+    step = np.clip(alignment, 0.0, 1.0, out=alignment)
+    del predicted_power
     removable_power = np.zeros(song_spectra[0].shape, dtype=np.float32)
     residual_spectra: list[np.ndarray] = []
     for mixture_channel, predicted_channel in zip(song_spectra, predicted, strict=True):
-        removed = step * predicted_channel
+        removed = np.multiply(step, predicted_channel, out=spectrum)
         residual_spectra.append(mixture_channel - removed)
-        removable_power += np.abs(removed) ** 2
-    del predicted, step
+        np.abs(removed, out=power)
+        np.square(power, out=power)
+        removable_power += power
+    del predicted, step, alignment
     token.raise_if_cancelled()
 
     # What survives the subtraction is not only the live source: reverberation
@@ -232,12 +262,14 @@ def _reference_cancel(
     # makes for the same reason.
     residual_power = np.zeros_like(removable_power)
     for residual in residual_spectra:
-        residual_power += np.abs(residual) ** 2
+        np.abs(residual, out=power)
+        np.square(power, out=power)
+        residual_power += power
     del explained
     leaked_power, leakage_confidence = power_transfer(residual_power, removable_power, sigma_frames)
     leaked_power *= smoothstep(_POWER_FIT_LOW, _POWER_FIT_HIGH, leakage_confidence)
     # Leakage cannot exceed the residual it was found in.
-    leaked_power = np.minimum(leaked_power, residual_power)
+    np.minimum(leaked_power, residual_power, out=leaked_power)
     del leakage_confidence
 
     # Where the capture path destroyed phase, the coherent stage has nothing to
@@ -246,35 +278,47 @@ def _reference_cancel(
     # removes whichever of the two explains more, minus what has already gone.
     reference_power = np.zeros_like(residual_power)
     for reference_channel in reference_spectra:
-        reference_power += np.abs(reference_channel) ** 2
+        np.abs(reference_channel, out=power)
+        np.square(power, out=power)
+        reference_power += power
     mixture_power = np.zeros_like(residual_power)
     for mixture_channel in song_spectra:
-        mixture_power += np.abs(mixture_channel) ** 2
+        np.abs(mixture_channel, out=power)
+        np.square(power, out=power)
+        mixture_power += power
     incoherent_power, incoherent_confidence = power_transfer(
         mixture_power, reference_power, sigma_frames
     )
     del reference_power, mixture_power, reference_spectra
     incoherent_power *= smoothstep(_POWER_FIT_LOW, _POWER_FIT_HIGH, incoherent_confidence)
-    incoherent_power = np.maximum(incoherent_power - removable_power, 0.0)
+    incoherent_power -= removable_power
+    np.maximum(incoherent_power, 0.0, out=incoherent_power)
     del incoherent_confidence
     # Bound the weak-evidence path so one noisy cell cannot drive the mask to
     # the floor: deep, isolated mask dips are what musical noise sounds like.
-    incoherent_power = np.minimum(incoherent_power, _INCOHERENT_MAX_SHARE * residual_power)
+    np.multiply(residual_power, _INCOHERENT_MAX_SHARE, out=power)
+    np.minimum(incoherent_power, power, out=incoherent_power)
 
-    remaining_power = np.maximum(
-        residual_power - leaked_power - _INCOHERENT_OVERSUBTRACTION * incoherent_power,
-        (_MASK_FLOOR**2) * residual_power,
-    )
+    # residual - leakage - oversubtraction * incoherent, floored at the mask
+    # floor's share of the residual; formed in the buffers those terms are in.
+    np.multiply(residual_power, _MASK_FLOOR**2, out=power)
+    incoherent_power *= _INCOHERENT_OVERSUBTRACTION
+    remaining_power = np.subtract(residual_power, leaked_power, out=leaked_power)
+    remaining_power -= incoherent_power
+    np.maximum(remaining_power, power, out=remaining_power)
     del incoherent_power, leaked_power
     # Form the mask from powers smoothed in time rather than from instantaneous
     # per-cell powers: most of the ratio's variance is removed before it
     # reaches the mask, and the Gaussian pass below only has to catch what is
     # left.  This is what tamed the musical noise on phase-decorrelated
     # captures; the floor still bounds the ratio from below.
-    mask_remaining = spectral_smooth(remaining_power, _MASK_POWER_SMOOTH, 0.0)
+    mask = spectral_smooth(remaining_power, _MASK_POWER_SMOOTH, 0.0)
     mask_residual = spectral_smooth(residual_power, _MASK_POWER_SMOOTH, 0.0)
-    mask = np.sqrt(np.clip(mask_remaining / (mask_residual + 1e-12), _MASK_FLOOR**2, 1.0))
-    del mask_remaining, mask_residual, remaining_power, removable_power, residual_power
+    mask_residual += 1e-12
+    mask /= mask_residual
+    np.clip(mask, _MASK_FLOOR**2, 1.0, out=mask)
+    np.sqrt(mask, out=mask)
+    del mask_residual, remaining_power, removable_power, residual_power, power
     # The narrow Gaussian pass catches what the power-domain smoothing left:
     # isolated-bin musical noise, without refilling tonal notches from
     # untouched neighbours.  Berouti-style signal-dependent over-subtraction, an
@@ -282,17 +326,18 @@ def _reference_cancel(
     # smoothing were all measured here against this line: each bought a few dB
     # on short reverberation but roughly halved fidelity on a quiet live vocal,
     # so none of them replaced it.
-    mask = gaussian_filter(mask, sigma=_MASK_SMOOTHING, mode="reflect")
+    gaussian_filter(mask, sigma=_MASK_SMOOTHING, mode="reflect", output=mask)
     np.clip(mask, _MASK_FLOOR, 1.0, out=mask)
     token.raise_if_cancelled()
     # Strength interpolates towards the fully processed spectrum.  With nothing
     # subtracted this is exactly the mask blend it replaces, 1 - a(1 - M), so
     # bypass at zero and monotonicity are unchanged.
-    for index, (mixture_channel, residual) in enumerate(
-        zip(song_spectra, residual_spectra, strict=True)
-    ):
-        residual_spectra[index] = mixture_channel + strength * (mask * residual - mixture_channel)
-    del song_spectra, mask
+    for mixture_channel, residual in zip(song_spectra, residual_spectra, strict=True):
+        np.multiply(mask, residual, out=residual)
+        residual -= mixture_channel
+        residual *= strength
+        residual += mixture_channel
+    del song_spectra, mask, spectrum
     return np.asarray(
         [istft(channel, hop=hop, length=length) for channel in residual_spectra],
         dtype=np.float32,

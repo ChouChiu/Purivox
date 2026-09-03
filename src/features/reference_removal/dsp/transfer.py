@@ -34,22 +34,32 @@ def spectral_smooth(
     values: np.ndarray,
     sigma_time: float,
     sigma_frequency: float = 1.0,
+    out: np.ndarray | None = None,
 ) -> np.ndarray:
-    """Smooth long spectral contexts in O(N) time along the frame axis."""
+    """Smooth long spectral contexts in O(N) time along the frame axis.
+
+    The two passes run through one array rather than through a fresh output per
+    filter, the way scipy's own `uniform_filter` chains its axes: the line
+    buffer inside each filter makes writing back into the input safe, and a
+    smoothing pass over a whole spectrum is large enough that the allocation it
+    saves is worth naming.  `out` lets a caller reuse a buffer across calls.
+    """
     if np.iscomplexobj(values):
-        return spectral_smooth(values.real, sigma_time, sigma_frequency) + 1j * spectral_smooth(
-            values.imag,
-            sigma_time,
-            sigma_frequency,
-        )
+        # Assembling the halves as `a + 1j * b` would cost two more full complex
+        # arrays; filling one result's real and imaginary views costs none.
+        result = np.empty(values.shape, dtype=values.dtype) if out is None else out
+        spectral_smooth(values.real, sigma_time, sigma_frequency, result.real)
+        spectral_smooth(values.imag, sigma_time, sigma_frequency, result.imag)
+        return result
     window = max(round(6.0 * sigma_time), 1)
-    smoothed = uniform_filter1d(values, size=window, axis=0, mode="reflect")
+    smoothed = uniform_filter1d(values, size=window, axis=0, mode="reflect", output=out)
     if sigma_frequency > 0.0:
-        smoothed = gaussian_filter1d(
+        gaussian_filter1d(
             smoothed,
             sigma=sigma_frequency,
             axis=1,
             mode="reflect",
+            output=smoothed,
         )
     return smoothed
 
@@ -59,18 +69,29 @@ def weighted_smooth(
     weights: np.ndarray | None,
     sigma_time: float,
     denominator: np.ndarray | None = None,
+    out: np.ndarray | None = None,
 ) -> np.ndarray:
     if weights is None:
-        return spectral_smooth(values, sigma_time)
+        return spectral_smooth(values, sigma_time, out=out)
     if denominator is None:
         denominator = spectral_smooth(weights, sigma_time) + 1e-12
-    numerator = spectral_smooth(values * weights, sigma_time)
-    return numerator / denominator
+    numerator = spectral_smooth(values * weights, sigma_time, out=out)
+    numerator /= denominator
+    return numerator
 
 
 def smoothstep(low: float, high: float, values: np.ndarray) -> np.ndarray:
-    scaled = np.clip((values - low) / (high - low), 0.0, 1.0)
-    return scaled * scaled * (3.0 - 2.0 * scaled)
+    scaled = np.subtract(values, low)
+    scaled /= high - low
+    np.clip(scaled, 0.0, 1.0, out=scaled)
+    ramp = np.multiply(scaled, -2.0)
+    ramp += 3.0
+    # Grouped as (s * s) * ramp, which is what the arithmetic below reads as and
+    # what the expression this replaces evaluated: float multiplication does not
+    # associate, so the order is part of the result.
+    square = np.square(scaled, out=scaled)
+    square *= ramp
+    return square
 
 
 def _solve_hermitian(
@@ -156,10 +177,20 @@ def predict_reference_spectra(
     # for a different transfer, so only the lower triangle is built here and
     # the upper one is never needed.
     covariance: list[list[np.ndarray | None]] = [[None] * order for _ in range(order)]
+    # Every product below is consumed by the smoothing pass it is handed to, so
+    # they share one buffer rather than allocating a spectrum apiece.  Its dtype
+    # is the one the products would have promoted to on their own.
+    spectrum_dtype = np.result_type(song_spectra[0], reference_spectra[0])
+    product = np.empty(reference_spectra[0].shape, dtype=spectrum_dtype)
     for row in range(order):
         for column in range(row + 1):
+            # The operands keep the order the expression this replaces used:
+            # numpy's complex multiply is not bit-symmetric in its arguments, so
+            # swapping them would move the last digit of every covariance cell.
+            np.conj(reference_spectra[row], out=product)
+            np.multiply(reference_spectra[column], product, out=product)
             covariance[row][column] = weighted_smooth(
-                reference_spectra[column] * np.conj(reference_spectra[row]),
+                product,
                 weights,
                 sigma_frames,
                 denominator,
@@ -175,7 +206,9 @@ def predict_reference_spectra(
     loading *= _RELATIVE_LOADING / order
     loading += epsilon
     for index in range(order):
-        covariance[index][index] = covariance[index][index] + loading
+        # The loading is real, so it only ever lands on the diagonal's real part;
+        # writing it there keeps the whole covariance in the arrays it is in.
+        covariance[index][index].real += loading
     # A least-squares fit over a finite window always explains part of the
     # mixture by chance, and the expected size of that accident is exactly
     # order/observations.  Subtracting it turns the raw coherence into the
@@ -185,35 +218,53 @@ def predict_reference_spectra(
     overfit_scale = observations / (observations - TRANSFER_ORDER)
     predicted: list[np.ndarray] = []
     explained: list[np.ndarray] = []
+    magnitude = np.empty(song_spectra[0].shape, dtype=np.empty(0, spectrum_dtype).real.dtype)
     for channel in song_spectra:
         token.raise_if_cancelled()
-        cross = [
-            weighted_smooth(channel * np.conj(reference), weights, sigma_frames, denominator)
-            for reference in reference_spectra
-        ]
+        cross = []
+        for reference in reference_spectra:
+            np.conj(reference, out=product)
+            np.multiply(channel, product, out=product)
+            cross.append(weighted_smooth(product, weights, sigma_frames, denominator))
         transfer = _solve_hermitian(covariance, cross)
         # At the least-squares optimum E[|Hx|^2] equals h^H c, so the explained
         # power ratio costs one more product instead of a second smoothing pass
         # over the mixture and the prediction.
-        coherence = np.conj(transfer[0]) * cross[0]
+        # The buffer the cross terms were built in is free again here, and the
+        # cross terms themselves are dead once the coherence has been read out
+        # of them: neither needs to stay resident while the prediction is formed.
+        coherence = np.conj(transfer[0], out=product)
+        np.multiply(coherence, cross[0], out=coherence)
         for index in range(1, order):
-            coherence = coherence + np.conj(transfer[index]) * cross[index]
+            coherence += np.conj(transfer[index]) * cross[index]
+        del cross
         mixture_power = weighted_smooth(
-            np.abs(channel) ** 2,
+            np.square(np.abs(channel, out=magnitude), out=magnitude),
             weights,
             sigma_frames,
             denominator,
         )
-        ratio = np.clip(coherence.real / (mixture_power + epsilon), 0.0, 1.0)
-        explained.append(np.clip(1.0 - (1.0 - ratio) * overfit_scale, 0.0, 1.0).astype(np.float32))
+        # 1 - (1 - clip(ratio)) * overfit_scale, formed in place: the adjustment
+        # is a handful of scalar steps over a spectrum that is already there.
+        mixture_power += epsilon
+        ratio = np.divide(coherence.real, mixture_power)
+        np.clip(ratio, 0.0, 1.0, out=ratio)
+        ratio -= 1.0
+        ratio *= overfit_scale
+        ratio += 1.0
+        np.clip(ratio, 0.0, 1.0, out=ratio)
+        explained.append(ratio.astype(np.float32, copy=False))
         row_gain = np.abs(transfer[0])
         for index in range(1, order):
-            row_gain = row_gain + np.abs(transfer[index])
-        gain_scale = np.minimum(1.0, _MAX_TRANSFER_GAIN / (row_gain + epsilon))
+            row_gain += np.abs(transfer[index])
+        row_gain += epsilon
+        gain_scale = np.divide(_MAX_TRANSFER_GAIN, row_gain, out=row_gain)
+        np.minimum(gain_scale, 1.0, out=gain_scale)
         combined = transfer[0] * reference_spectra[0]
         for index in range(1, order):
-            combined = combined + transfer[index] * reference_spectra[index]
-        predicted.append((gain_scale * combined).astype(np.complex64))
+            combined += transfer[index] * reference_spectra[index]
+        combined *= gain_scale
+        predicted.append(combined.astype(np.complex64, copy=False))
     return predicted, explained
 
 
@@ -239,19 +290,40 @@ def power_transfer(
     epsilon = 1e-20
     mean_x = spectral_smooth(reference_power, sigma_frames)
     mean_y = spectral_smooth(mixture_power, sigma_frames)
-    variance_x = spectral_smooth(reference_power**2, sigma_frames) - mean_x**2
-    variance_y = spectral_smooth(mixture_power**2, sigma_frames) - mean_y**2
-    covariance = spectral_smooth(reference_power * mixture_power, sigma_frames) - mean_x * mean_y
+    # Each product below feeds a smoothing pass and is never read again, so they
+    # all pass through one buffer: five separate full spectra of intermediates
+    # would otherwise sit in the block working set for the length of this call.
+    scratch = np.empty_like(reference_power)
+    variance_x = spectral_smooth(np.square(reference_power, out=scratch), sigma_frames)
+    variance_x -= np.square(mean_x, out=scratch)
+    variance_y = spectral_smooth(np.square(mixture_power, out=scratch), sigma_frames)
+    variance_y -= np.square(mean_y, out=scratch)
+    covariance = spectral_smooth(
+        np.multiply(reference_power, mixture_power, out=scratch), sigma_frames
+    )
+    covariance -= np.multiply(mean_x, mean_y, out=scratch)
+    del mean_x, mean_y, scratch
+    np.maximum(variance_x, 0.0, out=variance_x)
+    np.maximum(variance_y, 0.0, out=variance_y)
     # Only a positive slope is physical: more accompaniment in the source cannot
     # mean less of it on stage.
-    slope = np.maximum(covariance, 0.0) / (np.maximum(variance_x, 0.0) + epsilon)
-    correlation = covariance**2 / (
-        np.maximum(variance_x, 0.0) * np.maximum(variance_y, 0.0) + epsilon
-    )
+    slope = np.maximum(covariance, 0.0)
+    slope /= variance_x + epsilon
+    correlation = np.square(covariance, out=covariance)
+    np.multiply(variance_x, variance_y, out=variance_x)
+    variance_x += epsilon
+    correlation /= variance_x
+    del variance_x, variance_y
     observations = effective_observations(sigma_frames, mixture_power.shape[0])
-    adjusted = np.clip(
-        1.0 - (1.0 - np.clip(correlation, 0.0, 1.0)) * observations / (observations - 1.0),
-        0.0,
-        1.0,
-    )
-    return (slope * reference_power).astype(np.float32), adjusted.astype(np.float32)
+    # 1 - (1 - clip(r)) * observations / (observations - 1), read from the inside
+    # out so that no step needs a spectrum of its own.  The multiply and the
+    # divide stay separate steps because folding them into one scalar would
+    # round differently from the expression this replaces.
+    adjusted = np.clip(correlation, 0.0, 1.0, out=correlation)
+    adjusted -= 1.0
+    adjusted *= observations
+    adjusted /= observations - 1.0
+    adjusted += 1.0
+    np.clip(adjusted, 0.0, 1.0, out=adjusted)
+    slope *= reference_power
+    return slope.astype(np.float32, copy=False), adjusted.astype(np.float32, copy=False)
