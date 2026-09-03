@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "purivox-web",
+      "runtimeExecutable": "bun",
+      "runtimeArgs": ["run", "dev", "--", "--port", "5173", "--strictPort"],
+      "cwd": "web",
+      "port": 5173
+    }
+  ]
+}
