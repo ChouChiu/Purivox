@@ -32,7 +32,9 @@ _MINIMUM_FLUX_SCALE = 1e-4
 
 
 def _mono(channels: np.ndarray) -> np.ndarray:
-    return np.asarray(channels, dtype=np.float64).mean(axis=0)
+    # `mean` accumulates in float64 without first materialising a float64 copy
+    # of the input, which for a long take is the same size as the take.
+    return np.asarray(channels).mean(axis=0, dtype=np.float64)
 
 
 def _proxy(channels: np.ndarray, length: int, source_rate: int, target_rate: int) -> np.ndarray:
@@ -52,7 +54,7 @@ def _proxy(channels: np.ndarray, length: int, source_rate: int, target_rate: int
         down,
         axis=1,
     )
-    return np.asarray(resampled, dtype=np.float64).mean(axis=0)
+    return resampled.mean(axis=0, dtype=np.float64)
 
 
 def _normalize(values: np.ndarray) -> np.ndarray | None:

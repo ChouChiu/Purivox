@@ -6,6 +6,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 
 import numpy as np
+from scipy.fft import irfft, next_fast_len, rfft
 from scipy.signal import correlate, find_peaks, resample_poly
 
 from features.full_stage.models import (
@@ -65,7 +66,9 @@ def _proxy(audio: AudioData, token: CancellationToken) -> np.ndarray:
         axis=1,
     )
     token.raise_if_cancelled()
-    return np.asarray(values, dtype=np.float64).mean(axis=0)
+    # Averaging straight into float64 rather than converting first: the copy
+    # that would make is a whole second proxy of a recording that can run hours.
+    return values.mean(axis=0, dtype=np.float64)
 
 
 def _features(proxy: np.ndarray) -> np.ndarray:
@@ -79,16 +82,54 @@ def _features(proxy: np.ndarray) -> np.ndarray:
     return bands
 
 
-def _normalized_correlation(stage: np.ndarray, query: np.ndarray) -> np.ndarray:
-    if query.shape[1] > stage.shape[1]:
+@dataclass(frozen=True, slots=True)
+class _StageSpectra:
+    """The stage side of an anchor search, computed once instead of per anchor.
+
+    Every anchor of one search slides a query of the same width over the whole
+    stage track, so the stage's transform and its running energy do not change
+    between them.  Recomputing both per anchor was the bulk of an analysis: a
+    four-minute source asks for seven of them looking for the whole song and
+    another forty-six looking for short reuses.
+    """
+
+    length: int
+    size: int
+    spectra: np.ndarray
+    cumulative: np.ndarray
+
+
+def _stage_spectra(stage: np.ndarray, width: int) -> _StageSpectra:
+    """Prepare `stage` for correlating against any query of `width` frames.
+
+    The transform length is the one `scipy.signal.correlate` would have chosen
+    for this pair, so the scores below are the ones it would have returned.
+    """
+    length = stage.shape[1]
+    size = next_fast_len(length + width - 1, True)
+    cumulative = np.concatenate(
+        (np.zeros((stage.shape[0], 1)), np.cumsum(stage * stage, axis=1)),
+        axis=1,
+    )
+    # One band at a time, not one batched transform: pocketfft chooses a
+    # different vectorisation for a stack than for a single row, and the last
+    # digit of a score would then depend on how the bands were handed to it.
+    spectra = np.stack([rfft(band, size) for band in stage])
+    return _StageSpectra(length, size, spectra, cumulative)
+
+
+def _normalized_correlation(stage: _StageSpectra, query: np.ndarray) -> np.ndarray:
+    width = query.shape[1]
+    if width > stage.length:
         return np.empty(0, dtype=np.float64)
-    score = np.zeros(stage.shape[1] - query.shape[1] + 1, dtype=np.float64)
+    score = np.zeros(stage.length - width + 1, dtype=np.float64)
     stage_energy = np.zeros_like(score)
     query_energy = float(np.sum(query * query))
-    width = query.shape[1]
-    for stage_band, query_band in zip(stage, query, strict=True):
-        score += correlate(stage_band, query_band, mode="valid", method="fft")
-        cumulative = np.concatenate(([0.0], np.cumsum(stage_band * stage_band)))
+    for band, cumulative, query_band in zip(stage.spectra, stage.cumulative, query, strict=True):
+        # `correlate(a, b, "valid", "fft")` is this transform of `a` times the
+        # transform of the reversed `b`, sliced to the fully overlapping part.
+        full = irfft(band * rfft(query_band[::-1], stage.size), stage.size)
+        score += full[width - 1 : stage.length]
         stage_energy += cumulative[width:] - cumulative[:-width]
     return np.divide(
         score,
@@ -143,10 +184,11 @@ def _source_candidates(
     anchor_starts = np.unique(np.linspace(0, maximum_start, _ANCHORS).astype(int))
     hits: list[_Hit] = []
     peak_distance = max(round(4.0 * feature_rate), 1)
+    stage = _stage_spectra(stage_features, anchor_width)
     for anchor_index, source_start in enumerate(anchor_starts):
         token.raise_if_cancelled()
         scores = _normalized_correlation(
-            stage_features,
+            stage,
             source_features[:, source_start : source_start + anchor_width],
         )
         if scores.size == 0:
@@ -184,12 +226,13 @@ def _boundary_fragment_candidates(
     step = max(round(5.0 * feature_rate), 1)
     boundary = round(75.0 * feature_rate)
     hits: list[_Hit] = []
+    stage = _stage_spectra(stage_features, width)
     for anchor_index, source_start in enumerate(
         range(0, max(source_features.shape[1] - width + 1, 1), step)
     ):
         token.raise_if_cancelled()
         scores = _normalized_correlation(
-            stage_features,
+            stage,
             source_features[:, source_start : source_start + width],
         )
         if scores.size == 0:
