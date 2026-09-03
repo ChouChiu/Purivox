@@ -88,9 +88,14 @@ scope by `shared/progress.py`, which every pipeline uses through `report_progres
   the pool cannot start a worker. The block layout is unchanged and only the execution differs, so
   both paths produce bit-identical output
   (`tests/features/reference_removal/test_dsp_execution.py`).
-- `release_mapped_pages` became best-effort. Emscripten maps a file into the same heap the array
-  already occupies, so there is nothing to flush and nothing to evict, and its `msync` reports a
-  bad descriptor rather than succeeding.
+- `create_pcm_audio` and `resample_audio` allocate on the heap here rather than through a temporary
+  file and `np.memmap`. Emscripten's filesystem keeps a file's contents in a JavaScript-side array
+  that `mmap` cannot alias into the wasm heap, so it allocates a second region and copies - which
+  makes a mapped buffer cost two of everything it holds. Measured over one three-minute single-song
+  job: the mapped build held 190,512,000 bytes under `/tmp`, exactly its three full-length buffers,
+  while both builds used the same wasm heap. Allocating on the heap simply removes that copy.
+- `release_mapped_pages` became best-effort. There is no mapping left to release on the browser
+  path, and Emscripten's `msync` reports a bad descriptor rather than succeeding anyway.
 - `stft` in `shared/dsp/spectral.py` strides straight to the hop positions. Framing every offset
   first and keeping every `hop`-th row made an intermediate view `hop` times taller, and numpy
   refuses a view whose nominal size does not fit a pointer - which under wasm32 is 32 bits, a
@@ -109,7 +114,10 @@ visitor waits for. A failed boot offers a retry rather than requiring a reload.
 
 **Uploads are chunked, so they do have progress.** Files are written into Pyodide's filesystem in
 4 MiB slices, which keeps the whole file from ever being resident and gives a song of ordinary
-length half a dozen progress steps rather than one.
+length half a dozen progress steps rather than one. The first slice carries the file's final size
+so the runtime allocates it once: appending to an Emscripten file reallocates the whole array and
+copies back everything written so far, growing by an eighth at a time, so a long recording is moved
+through memory over and over. Measured on a 151 MB file, 1.5 seconds became 0.5.
 
 **Shortcuts live in the app layer, not on a page.** `Ctrl+O` chooses files, `Ctrl+Enter` starts,
 `Esc` cancels `F5` finds songs and `Ctrl+P` toggles the preview, matching the desktop - and for the desktop's reason: three
@@ -155,9 +163,10 @@ saving the visitor cannot perceive, at the cost of another loading state.
 
 ## The memory ceiling
 
-wasm32 caps the heap at 4 GB, and Emscripten's temporary filesystem lives inside that same heap.
-The `np.memmap` discipline the desktop relies on therefore saves nothing here: every
-`create_pcm_audio` allocation is resident, and so is every uploaded file.
+wasm32 caps the heap at 4 GB, and Emscripten's filesystem lives in the same tab's memory. The
+`np.memmap` discipline the desktop relies on has nothing to stand on here, so this build does not
+map at all (see above): every `create_pcm_audio` allocation is resident, and so is every uploaded
+file.
 
 `src/web/limits.py` estimates the peak with the formulas below, against a `WASM_BUDGET_BYTES` of
 2.6 GB - 4 GB less room for the interpreter, numpy/scipy and allocator fragmentation:

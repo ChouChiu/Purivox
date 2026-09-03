@@ -28,7 +28,9 @@ export type WorkerRequest =
 			id: number;
 			path: string;
 			bytes: ArrayBuffer;
-			append: boolean;
+			offset: number;
+			/** The finished file's size, so the runtime allocates it once. */
+			total: number;
 	  }
 	| { type: "read"; id: number; path: string; offset: number; length: number }
 	| { type: "size"; id: number; path: string }

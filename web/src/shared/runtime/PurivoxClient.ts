@@ -79,8 +79,10 @@ export class PurivoxClient {
 		);
 		worker.onmessage = (event: MessageEvent<WorkerResponse>) =>
 			this.receive(event.data);
+		// A worker that has died must not leave `ready()` resolving against it:
+		// the next request would then wait on a promise nothing can settle.
 		worker.onerror = (event) =>
-			this.failAll(new PurivoxError(event.message, "internal"));
+			this.reset(new PurivoxError(event.message, "internal"));
 		this.worker = worker;
 		await this.send({
 			type: "boot",
@@ -134,11 +136,11 @@ export class PurivoxClient {
 	}
 
 	/** Throw the runtime away without booting another; `ready()` starts a new one. */
-	reset(): void {
+	reset(failure = new PurivoxError("cancelled", "cancelled")): void {
 		this.worker?.terminate();
 		this.worker = null;
 		this.booted = null;
-		this.failAll(new PurivoxError("cancelled", "cancelled"));
+		this.failAll(failure);
 	}
 
 	/** Stop whatever is running, bring a fresh runtime up and refill it. */
@@ -156,7 +158,14 @@ export class PurivoxClient {
 		onProgress?: (fraction: number) => void,
 	): Promise<void> {
 		await this.send({ type: "remove", id: this.nextId++, path });
-		for (let offset = 0; offset < file.size; offset += CHUNK_BYTES) {
+		// The size travels with the first slice so the runtime can allocate the
+		// file once instead of growing it under every append. An empty file
+		// still sends one request, so the path exists either way.
+		for (
+			let offset = 0;
+			offset === 0 || offset < file.size;
+			offset += CHUNK_BYTES
+		) {
 			const slice = await file
 				.slice(offset, offset + CHUNK_BYTES)
 				.arrayBuffer();
@@ -166,7 +175,8 @@ export class PurivoxClient {
 					id: this.nextId++,
 					path,
 					bytes: slice,
-					append: offset > 0,
+					offset,
+					total: file.size,
 				},
 				undefined,
 				[slice],
@@ -193,7 +203,10 @@ export class PurivoxClient {
 		await this.ready();
 		const sized = await this.send({ type: "size", id: this.nextId++, path });
 		const size = sized.type === "number" ? sized.value : 0;
-		const parts: ArrayBuffer[] = [];
+		// Each slice becomes a Blob as it arrives. The browser owns those and may
+		// put them on disk, so the page holds one slice at a time rather than a
+		// second copy of a render that can be larger than the recording.
+		const parts: Blob[] = [];
 		for (let offset = 0; offset < size; offset += CHUNK_BYTES) {
 			const length = Math.min(CHUNK_BYTES, size - offset);
 			const chunk = await this.send({
@@ -203,7 +216,7 @@ export class PurivoxClient {
 				offset,
 				length,
 			});
-			if (chunk.type === "bytes") parts.push(chunk.bytes);
+			if (chunk.type === "bytes") parts.push(new Blob([chunk.bytes]));
 		}
 		return new Blob(parts, { type });
 	}

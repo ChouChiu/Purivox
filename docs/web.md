@@ -81,8 +81,13 @@ web/src/
 - `process_audio` 增加了串行分支。Pyodide 编译的 CPython 没有 pthread，线程池起不来；
   分块的划分不变，只是逐块执行，结果与线程池路径逐位一致
   （`tests/features/reference_removal/test_dsp_execution.py`）。
-- `release_mapped_pages` 改为「尽力而为」。Emscripten 把文件映射到数组本来就在的那块堆上，
-  没有东西可刷、可回收，它的 `msync` 会报坏描述符而不是成功。
+- `create_pcm_audio` 与 `resample_audio` 在这里直接在堆上分配，不再经过临时文件和 `np.memmap`。
+  Emscripten 的文件系统把内容存在 JavaScript 侧的数组里，`mmap` 没法把它别名到 wasm 堆上，
+  只能另外分配一块再复制进去 —— 一个映射缓冲区因此要占两份。实测一次三分钟的单曲任务：
+  映射版本在 `/tmp` 里同时压着 190,512,000 字节，正好是三个全长缓冲，而两个版本的 wasm
+  堆占用一模一样；改成堆上分配之后，那一份直接不存在了。
+- `release_mapped_pages` 改为「尽力而为」。浏览器路径上已经没有映射可放；就算有，
+  Emscripten 的 `msync` 也会报坏描述符而不是成功。
 - `shared/dsp/spectral.py` 的 `stft` 直接按 hop 跨步取帧。原来先铺开每个偏移再隔 `hop` 取一行，
   中间视图高 `hop` 倍；numpy 会拒绝标称大小放不进一个指针的视图，而 wasm32 的指针是 32 位，
   44.1 kHz 下几秒音频就超了。两种写法结果完全相同。
@@ -98,6 +103,9 @@ soundfile 0.7 + soxr 0.1，实测压缩后体积）。Pyodide 的 lock 文件里
 
 **上传是分块的，所以有进度。** 文件按 4 MiB 切片写进 Pyodide 的文件系统，
 既保证任何时刻都不持有整个文件，也让一首普通长度的歌有六七格进度而不是一格。
+第一片带上文件的最终大小，让运行时一次把空间开够：Emscripten 的追加写每次都要重新分配整块数组
+并把已经写进去的内容复制过来，而且只按 1.125 倍增长，一个长录音会被反复搬运。实测 151 MB
+的文件从 1.5 秒降到 0.5 秒。
 
 **快捷键在 app 层，不在页面上。** `Ctrl+O` 选择文件、`Ctrl+Enter` 开始、`Esc` 取消、
 `F5` 识别歌曲、`Ctrl+P` 试听播放 / 暂停，和桌面版一致。理由也和桌面版相同：三个页面各自绑 `Ctrl+O` 会互相打架，
@@ -136,8 +144,8 @@ soundfile 0.7 + soxr 0.1，实测压缩后体积）。Pyodide 的 lock 文件里
 
 ## 内存上限
 
-wasm32 的堆上限是 4 GB，而 Emscripten 的临时文件系统就在这块堆里 ——
-桌面版靠 `np.memmap` 落盘省内存的策略在浏览器里完全失效，
+wasm32 的堆上限是 4 GB，而 Emscripten 的文件系统住在同一个标签页的内存里 ——
+桌面版靠 `np.memmap` 落盘省内存的策略在浏览器里没有落脚点，所以这里索性不映射（见上一节）。
 `create_pcm_audio` 的每一次分配都是常驻内存，上传的文件也是。
 
 `src/web/limits.py` 用下面的式子估算峰值，`WASM_BUDGET_BYTES` 取 2.6 GB

@@ -18,14 +18,16 @@ export interface EmscriptenFS {
 		buffer: Uint8Array,
 		offset: number,
 		length: number,
+		position?: number,
 	): number;
 	write(
 		stream: EmscriptenStream,
 		buffer: Uint8Array,
 		offset: number,
 		length: number,
+		position?: number,
 	): number;
-	llseek(stream: EmscriptenStream, offset: number, whence: number): void;
+	truncate(path: string, length: number): void;
 	stat(path: string): { size: number };
 	unlink(path: string): void;
 	analyzePath(path: string): { exists: boolean };

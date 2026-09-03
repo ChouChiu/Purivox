@@ -198,8 +198,13 @@ Language keys: `zh_cn`, `en_us`, `ja_jp`, `ko_kr`.
   everything wider — 24-/32-bit PCM, float, and every lossy format — is written at 24. There is no
   export floor; never resample a result upwards just to reach a nicer-looking number.
 - **Memory discipline** (long audio): stream in `shared.audio.BLOCK_FRAMES` (262 144) blocks —
-  never re-spell the literal — use `create_pcm_audio` memmap + `cleanup()`/`release_pages()`;
+  never re-spell the literal — use `create_pcm_audio` + `cleanup()`/`release_pages()`;
   never accumulate whole files in RAM; add a `QTimer` poll for cancellation inside decoder loops.
+  `create_pcm_audio` maps a temporary file where there is a disk under it and allocates on the heap
+  under Emscripten (`_MAPPED_BUFFERS` in `shared/audio/io.py`), because Emscripten's filesystem is
+  heap too and its `mmap` copies rather than aliases — a mapped buffer costs two of everything
+  there. Whole-array work that a blocked loop then repeats is the same mistake in miniature: scrub
+  or convert inside the loop, never in one pass over the mapping first.
 - **De-duplication**: a constant, range or algorithm needed by two features — or by both the GUI
   and the CLI — goes down into `shared` (feature packages cannot import each other). Existing
   examples: `shared.audio.BLOCK_FRAMES`, `shared.audio.AUDIO_EXTENSIONS`,
@@ -222,7 +227,9 @@ Language keys: `zh_cn`, `en_us`, `ja_jp`, `ko_kr`.
   `MainWindow` follows. A page registers its bindings through `onBind`. The boot banner shows the
   four startup stages and the ~23 MB first-visit cost rather than a percentage: Pyodide's lock file
   has no sizes, so a byte-level bar would be invented. Uploads chunk at `CHUNK_BYTES` (4 MiB), which
-  is what makes upload progress real. Breakpoints mirror the desktop's (`620px` = `PORTRAIT`).
+  is what makes upload progress real; each chunk carries its offset and the file's final size, so
+  the worker sizes the file once instead of letting Emscripten reallocate and copy it on every
+  append. Breakpoints mirror the desktop's (`620px` = `PORTRAIT`).
 - **Front end**: the same feature-driven layering as `src/`, enforced by
   `web/scripts/check-architecture.mjs` — `shared` imports neither `app` nor `features`, features
   never import one another, `app` never imports the entry point. A helper two features need goes
@@ -244,7 +251,7 @@ Language keys: `zh_cn`, `en_us`, `ja_jp`, `ko_kr`.
 | `src/app/job_runner.py` / `worker.py` | Single-job QThread lifecycle and QObject operation adapter |
 | `src/shared/processing.py` | `CancellationToken`, `ProcessingCancelled`, `ProgressEvent`, `ProcessingResult`, `ProgressCallback` |
 | `src/shared/jobs.py` | Reference-job settings contract shared by `ReferenceJob`, `FullStageJob` and the CLI parser |
-| `src/shared/audio/io.py` | memmap audio loading, soxr resample, source sample rate and bit depth carried on `AudioData`, atomic WAV write |
+| `src/shared/audio/io.py` | memmap audio loading (heap allocation under Emscripten), soxr resample, source sample rate and bit depth carried on `AudioData`, atomic WAV write |
 | `src/shared/config.py` / `i18n.py` / `logging.py` | settings persistence, `QTranslator` install + `tr()`, single-line log format |
 | `src/features/reference_removal/dsp/algorithms.py` | Coherent cancellation (complex subtraction + residual mask) and linked peak protection |
 | `src/features/reference_removal/dsp/transfer.py` | Smoothed spectral statistics, the vectorised LDL^{H} solve, and the complex transfer with its adjusted multiple coherence |

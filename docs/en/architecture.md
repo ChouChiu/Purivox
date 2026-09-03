@@ -114,6 +114,9 @@ written to temporary `np.memmap` storage instead of remaining in ordinary NumPy 
   before processing.
 - Temporary audio is closed and deleted through `cleanup()`; long loops can call
   `release_pages()` to release processed mapped pages.
+- Only platforms with a real disk under them map at all. The browser build runs on Emscripten,
+  whose filesystem is itself in memory, so mapping there would cost a second copy and
+  `create_pcm_audio` allocates on the heap instead; see [the browser build](web.md).
 
 `shared.audio.analysis` provides chunked copying, peak/RMS analysis, and the `AudioStats` model
 shared across workflows. The block size is defined once as `shared.audio.BLOCK_FRAMES` and reused by

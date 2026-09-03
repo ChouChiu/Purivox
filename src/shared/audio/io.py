@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import logging
+import math
 import mmap
 import os
+import sys
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -26,6 +28,16 @@ BLOCK_FRAMES = 262_144
 # Container suffixes offered by the file dialogs and accepted by the automatic
 # accompaniment finder.
 AUDIO_EXTENSIONS = (".wav", ".flac", ".mp3", ".m4a", ".ogg", ".opus")
+# A temporary mapping is how a long recording stays off the heap - where there
+# is a disk under it.  Emscripten's filesystem holds a file's bytes in the same
+# tab's memory, in an array its `mmap` cannot alias into the wasm heap, so a
+# mapping there allocates a second region and copies: a mapped buffer costs two
+# of everything it holds.  Only the allocation differs; every loop around it,
+# and the block sizes those loops use, stay the same on both platforms.
+_MAPPED_BUFFERS = sys.platform != "emscripten"
+# The resampler reports its output length only as it produces it, so the buffer
+# it is written into is sized from the rate ratio with a few frames to spare.
+_RESAMPLE_MARGIN = 64
 
 
 def _subtype_bit_depth(subtype: str) -> int:
@@ -130,9 +142,13 @@ def create_pcm_audio(
     sample_rate: int,
     bit_depth: int = DEFAULT_BIT_DEPTH,
 ) -> AudioData:
-    """Allocate a planar float32 audio buffer in a temporary disk mapping."""
+    """Allocate a planar float32 audio buffer, mapped from disk where there is one."""
     if channels <= 0 or frames <= 0 or sample_rate <= 0:
         raise ValueError("channels, frames and sample rate must be positive")
+    if not _MAPPED_BUFFERS:
+        return AudioData(
+            np.zeros((channels, frames), dtype=np.float32), sample_rate, None, bit_depth
+        )
     fd, name = tempfile.mkstemp(prefix="purivox-", suffix=".float32.pcm")
     os.close(fd)
     path = Path(name)
@@ -290,6 +306,40 @@ def read_audio(path: str | Path, token: CancellationToken | None = None) -> Audi
         return _read_with_qt(source, cancel)
 
 
+def _resample_in_memory(audio: AudioData, target_rate: int, cancel: CancellationToken) -> AudioData:
+    """Resample into one buffer, for the platform where a temporary file is heap too.
+
+    Writing the stream out and mapping it back is what keeps a resample off the
+    heap on a real filesystem.  Under Emscripten it would hold the audio twice,
+    so the same blocks are written straight into the destination instead.
+    """
+    stream = soxr.ResampleStream(
+        audio.sample_rate, target_rate, audio.channels, dtype="float32", quality="HQ"
+    )
+    estimated = math.ceil(audio.frames * target_rate / audio.sample_rate) + _RESAMPLE_MARGIN
+    samples = np.zeros((audio.channels, estimated), dtype=np.float32)
+    frames = 0
+    for start in range(0, audio.frames, BLOCK_FRAMES):
+        cancel.raise_if_cancelled()
+        end = min(start + BLOCK_FRAMES, audio.frames)
+        block = np.asarray(audio.samples[:, start:end].T, dtype=np.float32)
+        converted = stream.resample_chunk(block, last=end == audio.frames)
+        produced = converted.shape[0]
+        if frames + produced > samples.shape[1]:
+            # The estimate is an upper bound in every case measured, so this is
+            # a guard rather than a growth strategy: extend by exactly what is
+            # missing rather than let the write run off the end.
+            missing = frames + produced - samples.shape[1]
+            samples = np.concatenate(
+                (samples, np.zeros((audio.channels, missing), dtype=np.float32)), axis=1
+            )
+        samples[:, frames : frames + produced] = converted.T
+        frames += produced
+    if frames <= 0:
+        raise ValueError("resampler produced no samples")
+    return AudioData(samples[:, :frames], target_rate, None, audio.bit_depth)
+
+
 def resample_audio(
     audio: AudioData, target_rate: int, token: CancellationToken | None = None
 ) -> AudioData:
@@ -300,6 +350,8 @@ def resample_audio(
     if audio.sample_rate == target_rate:
         return audio
     logger.info("resampling audio from %d Hz to %d Hz", audio.sample_rate, target_rate)
+    if not _MAPPED_BUFFERS:
+        return _resample_in_memory(audio, target_rate, cancel)
     fd, temporary_name = tempfile.mkstemp(prefix="purivox-resample-", suffix=".pcm")
     temporary = Path(temporary_name)
     output = os.fdopen(fd, "wb")
@@ -354,10 +406,14 @@ def write_wav_atomic(
             format="WAV",
             subtype=subtype,
         ) as output:
-            interleaved = np.nan_to_num(audio.samples.T, copy=False)
+            interleaved = audio.samples.T
             for start in range(0, audio.frames, BLOCK_FRAMES):
                 cancel.raise_if_cancelled()
-                output.write(interleaved[start : start + BLOCK_FRAMES])
+                block = interleaved[start : start + BLOCK_FRAMES]
+                # Per block, not over the whole mapping: scrubbing the array in
+                # one pass first would make every page of a long recording
+                # resident before the loop below writes a single one of them.
+                output.write(np.nan_to_num(block, copy=False))
         cancel.raise_if_cancelled()
         os.replace(temporary, destination)
         logger.info("wrote WAV atomically: %s", destination)
