@@ -4,7 +4,9 @@
   <strong>简体中文</strong> · <a href="README_EN.md">English</a>
 </p>
 
-Purivox 是一款面向舞台和现场录音的桌面垫音消除工具，
+**[▶ 在浏览器中直接使用](https://purivox.wwchun.top/)** —— 无需安装，音频全程留在你自己的标签页里，不会上传到服务器。
+
+Purivox 是一款面向舞台和现场录音的垫音消除工具，有桌面版和浏览器版两种形态，
 基于 Python、PySide6 和 PySide6-Fluent-Widgets 开发。核心的 MR Remove 功能支持两种处理方式：
 
 - **单曲垫音消除**：提供舞台 / 现场音频和对应的歌曲音源，程序自动完成同步并去除垫音。
@@ -33,7 +35,11 @@ Purivox 是一款面向舞台和现场录音的桌面垫音消除工具，
 
 ## 安装
 
-需要先安装 [uv](https://docs.astral.sh/uv/)。项目会根据 `.python-version` 自动选择 Python 版本，
+不想安装可以直接用[浏览器版](https://purivox.wwchun.top/)：它跑的是同一套处理管线，只是不含 AI 音轨分离
+（其依赖的 ONNX 运行时没有浏览器版本），且受浏览器内存上限约束，整场录音过长时会被拒绝。
+详见[浏览器版（WebAssembly）](docs/web.md)。
+
+桌面版需要先安装 [uv](https://docs.astral.sh/uv/)。项目会根据 `.python-version` 自动选择 Python 版本，
 并在仓库内维护隔离环境。请不要在该环境中安装其他会导出 `qfluentwidgets` 的 Qt Fluent 组件。
 
 ```bash

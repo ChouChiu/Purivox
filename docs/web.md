@@ -4,6 +4,8 @@
   <strong>简体中文</strong> · <a href="en/web.md">English</a>
 </p>
 
+**线上地址：<https://purivox.wwchun.top/>**
+
 浏览器版是 Purivox 的第三种外壳，和 GUI、CLI 并列。它把 `src/` 里同一份 Python 管线放进
 [Pyodide](https://pyodide.org/) 运行，整站是纯静态资源，部署在 GitHub Pages 上，**没有后端**：
 音频从头到尾留在用户自己的标签页里，不会上传到任何服务器。
@@ -194,7 +196,8 @@ cd web && bun run check     # lint + tsc + 分层检查，build 会先跑它
 cd web && bun run build
 ```
 
-产物在 `web/dist/`。Vite 的 `base` 默认是 `/`，因为站点部署在自定义域名的根路径上。
+产物在 `web/dist/`。Vite 的 `base` 默认是 `/`，因为站点部署在自定义域名
+（<https://purivox.wwchun.top/>）的根路径上。
 若要发布成 GitHub Pages 的项目站点（`用户名.github.io/仓库名/`），
 用 `PURIVOX_BASE=/仓库名/ bun run build` 覆盖，否则子路径下的资源会 404。
 CI 在 `.github/workflows/build.yml` 的 `web` 作业里构建，并在 `main` 上发布到 Pages。

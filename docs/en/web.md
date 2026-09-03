@@ -4,6 +4,8 @@
   <a href="../web.md">简体中文</a> · <strong>English</strong>
 </p>
 
+**Live at <https://purivox.wwchun.top/>**
+
 The browser build is Purivox's third shell, alongside the GUI and the CLI. It runs the very same
 Python pipelines from `src/` under [Pyodide](https://pyodide.org/). The site is entirely static and
 deployed to GitHub Pages, with **no backend**: audio stays in the visitor's own tab from beginning
@@ -218,7 +220,7 @@ cd web && bun run build
 ```
 
 The output lands in `web/dist/`. Vite's `base` defaults to `/`, since the site is served from the
-root of its own domain. To publish it as a GitHub Pages *project* site instead
+root of its own domain (<https://purivox.wwchun.top/>). To publish it as a GitHub Pages *project* site instead
 (`username.github.io/repository/`), override it with `PURIVOX_BASE=/repository/ bun run build`, or
 every asset under that subpath will 404. CI builds this in the `web` job of
 `.github/workflows/build.yml` and publishes to Pages from `main`.

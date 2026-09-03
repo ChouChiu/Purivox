@@ -4,8 +4,12 @@
   <a href="README.md">简体中文</a> · <strong>English</strong>
 </p>
 
-Purivox is a desktop vocal isolation tool for stage and live recordings, built with
-Python, PySide6, and PySide6-Fluent-Widgets. Its core MR Remove feature provides two workflows:
+**[▶ Use it in your browser](https://purivox.wwchun.top/)** - nothing to install, and the audio never leaves your own
+tab.
+
+Purivox is a vocal isolation tool for stage and live recordings, available as a desktop
+application and in the browser, built with Python, PySide6, and PySide6-Fluent-Widgets. Its core
+MR Remove feature provides two workflows:
 
 - **Single**: provide a stage/live recording and the corresponding song source. Purivox
   automatically synchronizes them and isolates the live vocals.
@@ -39,7 +43,12 @@ Vocal Isolation, and their results should not be compared directly.
 
 ## Installation
 
-[uv](https://docs.astral.sh/uv/) is required. The project uses `.python-version` to select Python
+If you would rather not install anything, the [browser build](https://purivox.wwchun.top/) runs the same pipelines. It
+leaves out AI track separation, whose ONNX runtime has no WebAssembly build, and a long enough
+stage recording is refused because a browser tab has a memory ceiling. See
+[Browser Build (WebAssembly)](docs/en/web.md) for the details.
+
+For the desktop application, [uv](https://docs.astral.sh/uv/) is required. The project uses `.python-version` to select Python
 automatically and manages an isolated environment inside the repository. Do not install another
 Qt Fluent component that also exports `qfluentwidgets` into this environment.
 

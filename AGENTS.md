@@ -16,7 +16,7 @@ codebase serves three workflows:
 - **AI vocal extraction** (`purivox ai`): UVR MDX-Net ONNX inference with no reference. Models are
   downloaded on demand and verified by SHA-256.
 - **Browser build** (`web/`): the MR Remove and Full Stage pipelines running under Pyodide as a
-  static GitHub Pages site, with no backend. AI extraction is not part of it: `onnxruntime` has no
+  static site with no backend, live at <https://purivox.wwchun.top/>. AI extraction is not part of it: `onnxruntime` has no
   WebAssembly build. See `docs/web.md`.
 
 The GUI and CLI are thin shells over the same `run_reference_job` / `run_neural_job` pipeline
