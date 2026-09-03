@@ -5,6 +5,7 @@ import {
 	Card,
 	CardHeader,
 	makeStyles,
+	mergeClasses,
 	Subtitle1,
 	Text,
 	Title2,
@@ -93,7 +94,7 @@ export function HomePage({ onOpenMr }: Props) {
 
 				{/* The AI workflow is listed so its absence is explained rather than
 				    silently missing; onnxruntime has no WebAssembly build. */}
-				<Card className={`${styles.choice} ${styles.unavailable}`}>
+				<Card className={mergeClasses(styles.choice, styles.unavailable)}>
 					<CardHeader
 						header={<Subtitle1>{t("nav_ai")}</Subtitle1>}
 						description={

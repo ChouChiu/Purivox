@@ -3,6 +3,7 @@ import {
 	Checkbox,
 	Input,
 	makeStyles,
+	mergeClasses,
 	Table,
 	TableBody,
 	TableCell,
@@ -73,7 +74,7 @@ function RangeCell({
 
 	return (
 		<Input
-			className={`${styles.range} ${invalid ? styles.invalid : ""}`}
+			className={mergeClasses(styles.range, invalid && styles.invalid)}
 			value={draft ?? formatRange(start, end)}
 			onChange={(_event, data) => setDraft(data.value)}
 			onBlur={commit}
