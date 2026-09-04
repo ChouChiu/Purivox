@@ -147,6 +147,9 @@ Rule 15 first: none of this happens until you are asked. When you are:
   section whose heading matches the tag, and the in-app update dialog shows that same text.
 - A release tag is `v<version>` and must match `src/app/version.py`; CI checks that first and fails
   the build in its opening minutes rather than after an hour of compiling.
+- The AUR package (`deployment/aur/`) is published after a release by running
+  `deployment/aur/publish.sh`, never by CI — it re-points `purivox-bin` at the release `.deb`,
+  builds it once as a check, and pushes `PKGBUILD` and `.SRCINFO`.
 
 ## Conventions & Invariants
 
