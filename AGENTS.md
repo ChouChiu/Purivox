@@ -136,6 +136,9 @@ Language keys: `zh_cn`, `en_us`, `ja_jp`, `ko_kr`.
 
 Rule 15 first: none of this happens until you are asked. When you are:
 
+- Commits land on `main`. The history is linear and single-author, so do not open a branch first —
+  not for a cleanup, not for a refactor, not for anything you were told to commit. A branch is for
+  work that was asked for as a branch or a pull request.
 - Subject: `type(scope): what changed`, imperative and lower case, no trailing period. Types in use
   are `feat`, `fix`, `perf`, `refactor`, `docs`, `ci`, `build`, `chore`; the scope is the area
   (`dsp`, `ui`, `web`, `audio`, `i18n`, `full-stage`, `settings`, `shared`, `release`) and may be
