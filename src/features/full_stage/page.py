@@ -16,7 +16,6 @@ from qfluentwidgets import (
     LineEdit,
     ListWidget,
     PrimaryPushButton,
-    ProgressBar,
     PushButton,
     Slider,
     SwitchButton,
@@ -30,7 +29,6 @@ from shared.i18n import tr
 from shared.ui import (
     AUDIO_FILE_FILTER,
     WAV_FILE_FILTER,
-    ElidedLabel,
     FormCard,
     Lane,
     LayoutMetrics,
@@ -126,12 +124,7 @@ class FullStagePage(PageScrollArea):
         self.timeline_card.layout.addLayout(clip_actions)
         self.add_card(self.timeline_card, Lane.SECONDARY)
 
-        self.status_card = FormCard()
-        self.status = ElidedLabel()
-        self.progress = ProgressBar()
-        self.status_card.layout.addWidget(self.status)
-        self.status_card.layout.addWidget(self.progress)
-        self.add_card(self.status_card, Lane.SECONDARY)
+        self.add_status_card()
 
         actions = QHBoxLayout()
         actions.addStretch()
@@ -193,7 +186,7 @@ class FullStagePage(PageScrollArea):
         self.timeline_card.title_label.setText(tr("stage_timeline"))
         self.timeline_hint.setText(tr("stage_timeline_hint"))
         self.timeline_model.retranslate()
-        self.status_card.title_label.setText(tr("status_group"))
+        self.retranslate_status_card()
         self.cancel_button.setText(tr("cancel"))
         self.analyze_button.setText(tr("stage_analyze"))
         self.start_button.setText(tr("stage_start"))

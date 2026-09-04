@@ -8,7 +8,6 @@ from qfluentwidgets import (
     BodyLabel,
     LineEdit,
     PrimaryPushButton,
-    ProgressBar,
     PushButton,
     TitleLabel,
 )
@@ -19,9 +18,7 @@ from shared.config import cfg
 from shared.i18n import tr
 from shared.ui import (
     AUDIO_FILE_FILTER,
-    ElidedLabel,
     FormCard,
-    Lane,
     PageScrollArea,
     SmoothComboBox,
     allow_shrinking,
@@ -55,12 +52,7 @@ class AiPage(PageScrollArea):
         self.form.add_row(self.model_label, self.model)
         self.form.layout.addWidget(self.model_status)
         self.add_card(self.form)
-        self.status_card = FormCard()
-        self.status = ElidedLabel()
-        self.progress = ProgressBar()
-        self.status_card.layout.addWidget(self.status)
-        self.status_card.layout.addWidget(self.progress)
-        self.add_card(self.status_card, Lane.SECONDARY)
+        self.add_status_card()
         actions = QHBoxLayout()
         actions.addStretch()
         self.cancel_button, self.start_button = PushButton(), PrimaryPushButton()
@@ -80,7 +72,7 @@ class AiPage(PageScrollArea):
     def retranslate(self) -> None:
         self.title.setText(tr("ai_title"))
         self.form.title_label.setText(tr("file_select"))
-        self.status_card.title_label.setText(tr("status_group"))
+        self.retranslate_status_card()
         self.song_label.setText(tr("song_label"))
         self.song_button.setText(tr("browse"))
         self.model_label.setText(tr("ai_model_label"))

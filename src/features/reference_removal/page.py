@@ -18,7 +18,6 @@ from qfluentwidgets import (
     CaptionLabel,
     LineEdit,
     PrimaryPushButton,
-    ProgressBar,
     PushButton,
     Slider,
     StrongBodyLabel,
@@ -94,12 +93,7 @@ class MrPage(PageScrollArea):
         self.parameters.add_row(self.strength_label, self.strength, self.strength_value)
         self.add_card(self.parameters)
 
-        self.status_card = FormCard()
-        self.status = ElidedLabel()
-        self.progress = ProgressBar()
-        self.status_card.layout.addWidget(self.status)
-        self.status_card.layout.addWidget(self.progress)
-        self.add_card(self.status_card, Lane.SECONDARY)
+        self.add_status_card()
 
         self.preview_card = FormCard()
         self.preview_status = ElidedLabel()
@@ -229,7 +223,7 @@ class MrPage(PageScrollArea):
         self.title.setText(tr("mr_single_title"))
         self.files.title_label.setText(tr("file_select"))
         self.parameters.title_label.setText(tr("params"))
-        self.status_card.title_label.setText(tr("status_group"))
+        self.retranslate_status_card()
         self.preview_card.title_label.setText(tr("preview_title"))
         self.data_card.title_label.setText(tr("audio_data_title"))
         self.song_label.setText(tr("mr_audio_label"))

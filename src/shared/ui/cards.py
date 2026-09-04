@@ -3,10 +3,12 @@ from __future__ import annotations
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QResizeEvent
 from PySide6.QtWidgets import QVBoxLayout, QWidget
-from qfluentwidgets import CardWidget, ScrollArea, StrongBodyLabel
+from qfluentwidgets import CardWidget, ProgressBar, ScrollArea, StrongBodyLabel
 
+from shared.i18n import tr
 from shared.ui.responsive import (
     CONTENT_MAX_WIDTH,
+    ElidedLabel,
     FoldingRow,
     HeightForWidth,
     Lane,
@@ -69,6 +71,23 @@ class PageScrollArea(ScrollArea):
         self.setWidget(self.content)
         self.columns = ResponsiveColumns(self.content)
         self.metrics = layout_metrics(self.viewport().size())
+
+    def add_status_card(self) -> None:
+        """Add the status line and progress bar every processing page ends with.
+
+        All three pages report the same way — one elided line of text over one
+        bar, in the secondary lane — and they read the widgets back by name, so
+        the card is built here rather than three times over.
+        """
+        self.status_card = FormCard()
+        self.status = ElidedLabel()
+        self.progress = ProgressBar()
+        self.status_card.layout.addWidget(self.status)
+        self.status_card.layout.addWidget(self.progress)
+        self.add_card(self.status_card, Lane.SECONDARY)
+
+    def retranslate_status_card(self) -> None:
+        self.status_card.title_label.setText(tr("status_group"))
 
     def add_card(self, card: QWidget, lane: Lane = Lane.PRIMARY) -> None:
         """Place a card in the page's lane container, creating it on first use.
