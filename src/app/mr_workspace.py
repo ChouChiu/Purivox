@@ -78,8 +78,6 @@ class MrWorkspace(QWidget):
         self.stack.setCurrentWidget(page)
 
     def set_current(self, route: str) -> None:
-        if route not in {"single", "full_stage"}:
-            raise ValueError(f"unknown MR page: {route}")
         self.tabs.setCurrentItem(route)
         self._tab_changed(route)
 

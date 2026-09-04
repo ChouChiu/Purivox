@@ -15,7 +15,7 @@ from features.full_stage import FullStageJob
 from features.reference_removal import ReferenceJob, run_reference_job
 from shared.audio import AudioStats
 from shared.processing import CancellationToken, ProgressEvent
-from web.limits import full_stage_peak_bytes, reference_peak_bytes
+from web.limits import MemoryEstimate, full_stage_peak_bytes, reference_peak_bytes
 from web.timeline import add_clip, analysis_from_dict, analysis_to_dict, edit_clip, remove_clip
 
 logger = logging.getLogger(__name__)
@@ -92,43 +92,42 @@ def probe_audio(request: str) -> str:
         return _dump({"supported": False, "reason": str(error)})
 
 
+def _estimate_to_dict(estimate: MemoryEstimate) -> dict[str, Any]:
+    return {
+        "peak_bytes": estimate.peak_bytes,
+        "budget_bytes": estimate.budget_bytes,
+        "fits": estimate.fits,
+        "tight": estimate.tight,
+    }
+
+
 def estimate_reference(request: str) -> str:
     """Report whether one single-song job fits in the browser's memory budget."""
     data = json.loads(request)
-    estimate = reference_peak_bytes(
-        int(data["sample_rate"]),
-        float(data["song_seconds"]),
-        float(data["accompaniment_seconds"]),
-        int(data.get("file_bytes", 0)),
-    )
     return _dump(
-        {
-            "peak_bytes": estimate.peak_bytes,
-            "budget_bytes": estimate.budget_bytes,
-            "fits": estimate.fits,
-            "tight": estimate.tight,
-            "fraction": estimate.fraction,
-        }
+        _estimate_to_dict(
+            reference_peak_bytes(
+                int(data["sample_rate"]),
+                float(data["song_seconds"]),
+                float(data["accompaniment_seconds"]),
+                int(data.get("file_bytes", 0)),
+            )
+        )
     )
 
 
 def estimate_full_stage(request: str) -> str:
     """Report whether one full-stage render fits in the browser's memory budget."""
     data = json.loads(request)
-    estimate = full_stage_peak_bytes(
-        int(data["sample_rate"]),
-        float(data["stage_seconds"]),
-        float(data["longest_source_seconds"]),
-        int(data.get("file_bytes", 0)),
-    )
     return _dump(
-        {
-            "peak_bytes": estimate.peak_bytes,
-            "budget_bytes": estimate.budget_bytes,
-            "fits": estimate.fits,
-            "tight": estimate.tight,
-            "fraction": estimate.fraction,
-        }
+        _estimate_to_dict(
+            full_stage_peak_bytes(
+                int(data["sample_rate"]),
+                float(data["stage_seconds"]),
+                float(data["longest_source_seconds"]),
+                int(data.get("file_bytes", 0)),
+            )
+        )
     )
 
 

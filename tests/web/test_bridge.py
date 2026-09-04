@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import math
 from pathlib import Path
 
 import numpy as np
@@ -186,7 +185,6 @@ def test_full_stage_estimate_refuses_what_wasm_cannot_hold(seconds, fits):
     )
     assert payload["fits"] is fits
     assert payload["budget_bytes"] == limits.WASM_BUDGET_BYTES
-    assert math.isclose(payload["fraction"], payload["peak_bytes"] / payload["budget_bytes"])
 
 
 def test_a_single_song_of_ordinary_length_fits_comfortably():

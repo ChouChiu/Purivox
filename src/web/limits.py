@@ -36,10 +36,6 @@ class MemoryEstimate:
     def tight(self) -> bool:
         return self.peak_bytes > self.budget_bytes * WARN_FRACTION
 
-    @property
-    def fraction(self) -> float:
-        return self.peak_bytes / self.budget_bytes
-
 
 def buffer_bytes(sample_rate: int, seconds: float, channels: int = 2) -> int:
     """What one full-length decoded buffer of this audio costs.

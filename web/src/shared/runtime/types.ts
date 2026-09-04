@@ -16,7 +16,6 @@ export interface Estimate {
 	budget_bytes: number;
 	fits: boolean;
 	tight: boolean;
-	fraction: number;
 }
 
 export interface AudioStats {
