@@ -17,6 +17,23 @@ def _write(path: Path, samples: np.ndarray, sample_rate: int) -> Path:
     return path
 
 
+def _clip(**overrides) -> dict:
+    """One timeline clip as the bridge speaks it, with only the differences named."""
+    clip = {
+        "kind": "unmatched",
+        "stage_start": 0.0,
+        "stage_end": 10.0,
+        "source": None,
+        "source_index": None,
+        "source_start": 0.0,
+        "source_end": 0.0,
+        "confidence": 0.0,
+        "enabled": False,
+        "manual": False,
+    }
+    return clip | overrides
+
+
 @pytest.fixture
 def reference_scene(tmp_path: Path):
     sample_rate = 8_000
@@ -92,34 +109,19 @@ def test_silent_audio_reports_null_rather_than_negative_infinity(tmp_path: Path)
 def test_timeline_edits_round_trip_through_json():
     analysis = {
         "duration_seconds": 10.0,
-        "clips": [
-            {
-                "kind": "unmatched",
-                "stage_start": 0.0,
-                "stage_end": 10.0,
-                "source": None,
-                "source_index": None,
-                "source_start": 0.0,
-                "source_end": 0.0,
-                "confidence": 0.0,
-                "enabled": False,
-                "manual": False,
-            }
-        ],
+        "clips": [_clip()],
         "missing_sources": [],
     }
-    clip = {
-        "kind": "song",
-        "stage_start": 2.0,
-        "stage_end": 6.0,
-        "source": "/work/song.wav",
-        "source_index": 0,
-        "source_start": 0.0,
-        "source_end": 4.0,
-        "confidence": 0.0,
-        "enabled": True,
-        "manual": True,
-    }
+    clip = _clip(
+        kind="song",
+        stage_start=2.0,
+        stage_end=6.0,
+        source="/work/song.wav",
+        source_index=0,
+        source_end=4.0,
+        enabled=True,
+        manual=True,
+    )
 
     added = json.loads(bridge.add_timeline_clip(json.dumps({"analysis": analysis, "clip": clip})))
     kinds = [entry["kind"] for entry in added["analysis"]["clips"]]
@@ -144,20 +146,7 @@ def test_timeline_edits_round_trip_through_json():
 def test_editing_a_stage_range_past_the_recording_is_rejected():
     analysis = {
         "duration_seconds": 10.0,
-        "clips": [
-            {
-                "kind": "unmatched",
-                "stage_start": 0.0,
-                "stage_end": 10.0,
-                "source": None,
-                "source_index": None,
-                "source_start": 0.0,
-                "source_end": 0.0,
-                "confidence": 0.0,
-                "enabled": False,
-                "manual": False,
-            }
-        ],
+        "clips": [_clip()],
         "missing_sources": [],
     }
     with pytest.raises(ValueError):
@@ -218,30 +207,17 @@ def test_render_stage_accepts_an_edited_timeline(tmp_path: Path):
     analysis = {
         "duration_seconds": 8.0,
         "clips": [
-            {
-                "kind": "unmatched",
-                "stage_start": 0.0,
-                "stage_end": 2.0,
-                "source": None,
-                "source_index": None,
-                "source_start": 0.0,
-                "source_end": 0.0,
-                "confidence": 0.0,
-                "enabled": False,
-                "manual": False,
-            },
-            {
-                "kind": "song",
-                "stage_start": 2.0,
-                "stage_end": 6.0,
-                "source": str(source_path.resolve()),
-                "source_index": 0,
-                "source_start": 0.0,
-                "source_end": 4.0,
-                "confidence": 0.9,
-                "enabled": True,
-                "manual": False,
-            },
+            _clip(stage_end=2.0),
+            _clip(
+                kind="song",
+                stage_start=2.0,
+                stage_end=6.0,
+                source=str(source_path.resolve()),
+                source_index=0,
+                source_end=4.0,
+                confidence=0.9,
+                enabled=True,
+            ),
         ],
         "missing_sources": [],
     }

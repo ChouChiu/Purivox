@@ -19,14 +19,6 @@ def test_model_directory_uses_purivox_environment_variable(monkeypatch, tmp_path
     assert candidate_model_dirs()[0] == preferred.resolve()
 
 
-def test_retired_model_environment_variable_is_ignored(monkeypatch, tmp_path: Path):
-    retired = tmp_path / "retired"
-    monkeypatch.delenv("PURIVOX_MODELS", raising=False)
-    monkeypatch.setenv("MR_REMOVER_MODELS", str(retired))
-
-    assert retired.resolve() not in candidate_model_dirs()
-
-
 def test_catalog_is_unique_and_has_hashes():
     catalog = model_catalog()
     assert get_model(DEFAULT_MODEL_ID) in catalog

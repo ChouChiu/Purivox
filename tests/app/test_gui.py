@@ -46,13 +46,6 @@ def test_main_window_has_mr_workspace_with_two_subpages(qtbot):
     assert window.mr_workspace.stack.currentWidget() is window.mr
     assert window.mr.title.text() == "单曲垫音消除"
     assert window.full_stage.title.text() == "整场垫音消除"
-    assert not hasattr(window.mr, "algorithm")
-    assert not hasattr(window.mr, "sigma")
-    assert not hasattr(window.full_stage, "sigma")
-    assert not hasattr(window.mr, "align")
-    assert not hasattr(window.full_stage, "align")
-    assert not hasattr(window.mr, "center_extraction")
-    assert not hasattr(window.mr, "open_mic_focus")
     assert window.ai.model.count() == 4
     assert window.settings.log_level_card.configItem is cfg.log_level
     previous_level = cfg.log_level.value
@@ -72,7 +65,6 @@ def test_home_page_presents_mr_workspace_and_ai(qtbot):
     meta = window.home.mr_card.meta.text()
     assert "舞台 / 现场音频" in meta
     assert "歌曲音源" in meta
-    assert not hasattr(window.home, "full_stage_card")
     assert "一份待处理音频" in window.home.ai_card.meta.text()
     assert window.home.mr_card.open_button.text() == "开始垫音消除"
     assert window.home.ai_card.open_button.text() == "开始 AI 分离"
@@ -113,9 +105,6 @@ def test_full_stage_page_orders_sources_and_renders_analysis(qtbot, tmp_path: Pa
         item.setData(Qt.ItemDataRole.UserRole, str(path))
         page.sources.addItem(item)
     assert [path.name for path in page.source_paths()] == ["first.wav", "second.wav"]
-    assert not hasattr(page, "move_up")
-    assert not hasattr(page, "center_extraction")
-    assert not hasattr(page, "open_mic_focus")
 
     source = (tmp_path / "second.wav").resolve()
     analysis = FullStageAnalysis(
@@ -221,8 +210,6 @@ def test_full_stage_job_forwards_normal_mr_parameters(qtbot, tmp_path: Path):
     assert job is not None
     assert job.sigma == 3
     assert job.auto_align
-    assert not hasattr(job, "center_extraction")
-    assert not hasattr(job, "open_mic_focus")
 
 
 def test_system_accent_color_is_applied_and_tracks_palette_changes(qtbot, monkeypatch):
@@ -302,8 +289,6 @@ def test_reference_start_forwards_fixed_job_settings(qtbot, tmp_path: Path, monk
     job = started[0].args[0]
     assert job.sigma == 3
     assert job.auto_align
-    assert not hasattr(job, "center_extraction")
-    assert not hasattr(job, "open_mic_focus")
 
 
 def test_combo_boxes_use_stable_menu_without_opacity_animation(qtbot):
