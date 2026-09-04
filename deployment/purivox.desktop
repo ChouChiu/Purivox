@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Name=Purivox
+GenericName=Vocal Isolation
+GenericName[zh_CN]=垫音消除
+Comment=Remove backing tracks from stage and live recordings
+Comment[zh_CN]=从舞台 / 现场录音中消除垫音
+Exec=purivox
+Icon=purivox
+Terminal=false
+Categories=AudioVideo;Audio;AudioVideoEditing;
+Keywords=audio;vocal;karaoke;separation;
+StartupWMClass=Purivox

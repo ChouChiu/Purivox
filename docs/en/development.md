@@ -237,9 +237,17 @@ parallel, then uploads:
 - Pytest JUnit XML;
 - Separate logs for quality-gate and build commands;
 - The wheel, source distribution, and their SHA-256 checksum files;
-- A tarball of the Linux executable, which preserves its executable bit, plus its SHA-256
-  checksum;
+- A tarball of the Linux executable, which preserves its executable bit, a `.deb`, an `.rpm`, and
+  one SHA-256 checksum file covering them;
 - The Windows executable plus its SHA-256 checksum.
+
+`deployment/package-linux.sh` builds the `.deb` and the `.rpm` with fpm from one staged tree: the
+executable lands at `/usr/bin/purivox` next to `deployment/purivox.desktop`, the icon, and the
+licence. The onefile carries its own Python and Qt, so the packages declare only the two libraries
+Qt still loads from the distribution (`libegl1` and `libpulse0` on deb, `mesa-libEGL` and
+`pulseaudio-libs` on rpm). A onefile's payload is appended to the executable, so any strip pass
+destroys it — which is why the packages are built this way rather than through a distribution's
+own tooling.
 
 The quality gates run on Ubuntu only: the Windows job produces the distributable binary and does
 not repeat the test suite.
@@ -258,3 +266,31 @@ new commit on the same branch cancels an older run, while tag builds are never c
 The Ubuntu runner explicitly installs `libegl1`, which Qt requires for loading. Every command step
 uses Bash with `pipefail`, so piping output through `tee` does not hide the command's failure
 status. JUnit XML is uploaded only when it was actually generated.
+
+## Releasing
+
+A release is driven by its tag; tagging is the only manual step:
+
+1. Update `__version__` in `src/app/version.py`;
+2. Add a section at the top of `CHANGELOG.md`, headed `## v<version> — <date>`;
+3. Commit, then tag and push:
+
+```bash
+git tag -a v1.0.0 -m "Purivox v1.0.0"
+git push origin main --follow-tags
+```
+
+Pushing the tag runs the whole pipeline, and the `release` job publishes what that run built: the
+Windows executable, the Linux tarball, `.deb` and `.rpm`, the wheel and source distribution, and
+one flat `SHA256SUMS` regenerated over them (the three per-job checksum files name `dist/` paths
+that do not resolve on a release page, so they are not uploaded).
+
+The first quality-gate step checks the tag against `src/app/version.py` on a tag build, so a
+mismatch fails within minutes instead of after an hour of compiling. Release notes come from the
+`CHANGELOG.md` section matching the tag — the same text the in-app update dialog shows — falling
+back to GitHub's generated notes when no such section exists. A tag carrying a suffix
+(`v1.1.0-rc1`) is published as a pre-release, which `releases/latest` does not answer with, so it
+is never offered to users.
+
+Re-running a tag build does not fail: an existing release has its assets replaced rather than a
+second release created.

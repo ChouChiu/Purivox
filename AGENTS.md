@@ -86,7 +86,7 @@ jobs synchronously; SIGINT triggers token cancellation.
 | `models/` | 4 prebuilt ONNX weights (gitignored, never committed); not shipped in wheels or standalone builds |
 | `src/web/` | Browser shell (Pyodide): `bridge.py` (JSON-in/JSON-out job entry points), `timeline.py` (analysis serialisation, reusing `add_manual_clip`/`remove_manual_clip`), `limits.py` (the wasm32 memory budget) |
 | `web/` | Vite + React + Fluent UI v9 front end, managed with bun. Organised by feature exactly as `src/` is: `app/` (shell), `features/{reference_removal,full_stage,settings}/`, `shared/{runtime,worker,audio,i18n,ui}/`. `scripts/check-architecture.mjs` enforces those boundaries the way `tests/test_architecture.py` does for Python; `scripts/build-python-archive.mjs` packs `src/` into the archive Pyodide unpacks; `scripts/build-i18n.mjs` turns the `.ts` catalogues into JSON. Never a second implementation of the DSP |
-| `deployment/` | `main.py` — standalone Nuitka entry shim |
+| `deployment/` | `main.py` — standalone Nuitka entry shim; `package-linux.sh` + `purivox.desktop` — the `.deb`/`.rpm` built around the onefile by CI |
 | `tools/` | Developer scripts kept out of the package: `eval_cancellation.py` reports cancellation depth and live-source fidelity per synthetic scene, for A/B comparison across a DSP change |
 
 ## Development Commands

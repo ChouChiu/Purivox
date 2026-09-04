@@ -200,8 +200,14 @@ Windows 上它会尝试安装一个只有 Linux wheel 的包并失败。
 - pytest JUnit XML；
 - 质量检查与构建命令的独立日志；
 - wheel、sdist 及 SHA-256 校验文件；
-- Linux 可执行文件的 tar.gz（用于保留可执行权限）及 SHA-256 校验文件；
+- Linux 可执行文件的 tar.gz（用于保留可执行权限）、`.deb`、`.rpm` 及一份 SHA-256 校验文件；
 - Windows 可执行文件及 SHA-256 校验文件。
+
+`.deb` 和 `.rpm` 由 `deployment/package-linux.sh` 用 fpm 从同一份暂存目录打出：可执行文件装到
+`/usr/bin/purivox`，另附 `deployment/purivox.desktop`、图标和许可证。onefile 自带 Python 与 Qt，
+因此只声明 Qt 仍要从系统加载的两个库（deb 为 `libegl1`、`libpulse0`，rpm 为 `mesa-libEGL`、
+`pulseaudio-libs`）。onefile 的载荷附在可执行文件末尾，任何 strip 都会毁掉它，这也是不用发行版
+默认打包流程而交给 fpm 的原因。
 
 质量检查只在 Ubuntu 上运行：Windows 任务只产出可分发的二进制，不重复跑测试。
 
@@ -215,3 +221,28 @@ Python 源码失效，上限为 2 GiB；Windows 任务按同一套键缓存 Nuit
 
 Ubuntu Runner 会显式安装 Qt 加载所需的 `libegl1`。所有命令步骤都使用开启 `pipefail` 的 Bash，
 因此通过 `tee` 保存日志时不会掩盖原命令的失败状态。JUnit XML 仅在实际生成后上传。
+
+## 发布
+
+发布由标签驱动，除打标签外没有手动步骤：
+
+1. 更新 `src/app/version.py` 里的 `__version__`；
+2. 在 `CHANGELOG.md` 顶部新增一节，标题写成 `## v<版本> — <日期>`；
+3. 提交后打上同名标签并推送：
+
+```bash
+git tag -a v1.0.0 -m "Purivox v1.0.0"
+git push origin main --follow-tags
+```
+
+标签推送后 `build.yml` 会跑完整条流水线，`release` 任务再把这一次构建出来的产物发布出去：
+Windows 可执行文件，Linux 的 tar.gz、`.deb` 和 `.rpm`，wheel 与 sdist，以及重新生成的一份扁平
+`SHA256SUMS`（三个构建任务各自的校验文件里写的是 `dist/` 路径，在 Release 页面上无法对应，
+故不上传）。
+
+质量检查的第一步会在标签构建里核对标签与 `src/app/version.py` 是否一致，不一致就在几分钟内失败，
+不会等编译跑完一个小时。Release 说明取自 `CHANGELOG.md` 中与标签同名的小节——应用内「检查更新」
+弹窗显示的正是这段内容；找不到对应小节时退回 GitHub 自动生成的说明。带后缀的标签
+（如 `v1.1.0-rc1`）发布为 pre-release，`releases/latest` 不会返回它，因此不会推送给用户。
+
+重新运行同一个标签的构建不会失败：已存在的 Release 会被覆盖上传资产，而不是新建一个。

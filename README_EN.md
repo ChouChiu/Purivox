@@ -49,7 +49,12 @@ leaves out AI track separation, whose ONNX runtime has no WebAssembly build, and
 stage recording is refused because a browser tab has a memory ceiling. See
 [Browser Build (WebAssembly)](docs/en/web.md) for the details.
 
-For the desktop application, [uv](https://docs.astral.sh/uv/) is required. The project uses `.python-version` to select Python
+The desktop application can be downloaded from the
+[latest release](https://github.com/ChouChiu/Purivox/releases/latest): `Purivox.exe` on Windows,
+and a `.deb`, an `.rpm` or the self-contained `purivox-linux-x86_64.tar.gz` on Linux. Every
+release ships a `SHA256SUMS` alongside them.
+
+To run from source, [uv](https://docs.astral.sh/uv/) is required. The project uses `.python-version` to select Python
 automatically and manages an isolated environment inside the repository. Do not install another
 Qt Fluent component that also exports `qfluentwidgets` into this environment.
 

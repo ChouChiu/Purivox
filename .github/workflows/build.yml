@@ -38,6 +38,20 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Check the tag matches the packaged version
+        # A release build fails here, in the first minutes, rather than after an
+        # hour of compiling: the tag is what the update check compares against,
+        # so a tag that does not name the version it ships must never publish.
+        if: ${{ github.ref_type == 'tag' }}
+        run: |
+          version="$(sed -n 's/^__version__ = "\(.*\)"$/\1/p' src/app/version.py)"
+          tag="${GITHUB_REF_NAME#v}"
+          if [[ "${tag%%-*}" != "$version" ]]; then
+            echo "::error::${GITHUB_REF_NAME} does not name the packaged version ${version}"
+            exit 1
+          fi
+          echo "releasing ${GITHUB_REF_NAME} from version ${version}"
+
       - name: Setup uv
         id: setup-uv
         uses: astral-sh/setup-uv@v10.0.1
@@ -259,7 +273,7 @@ jobs:
         with:
           path: ${{ runner.temp }}/apt-archives
           key: >-
-            apt-${{ runner.os }}-${{ runner.arch }}-ubuntu-24.04-libegl1-libpulse0-ccache-v1
+            apt-${{ runner.os }}-${{ runner.arch }}-ubuntu-24.04-libegl1-libpulse0-ccache-rpm-v1
           restore-keys: |
             apt-${{ runner.os }}-${{ runner.arch }}-ubuntu-24.04-libegl1-libpulse0-
 
@@ -272,7 +286,7 @@ jobs:
             sudo apt-get update
             sudo apt-get install --yes --no-install-recommends \
               -o Dir::Cache::archives="$apt_cache_dir" \
-              libegl1 libpulse0 ccache
+              libegl1 libpulse0 ccache rpm
             sudo chown -R "$(id -u):$(id -g)" "$apt_cache_dir"
           } 2>&1 | tee logs/system-deps.log
 
@@ -317,13 +331,25 @@ jobs:
           tar -C dist -czf dist/purivox-linux-x86_64.tar.gz "Purivox.bin" \
             2>&1 | tee logs/onefile.log
 
+      - name: Install packaging tools
+        run: |
+          # fpm builds both Linux packages from one staged tree; it shells out
+          # to rpmbuild, which the system deps step installed.
+          sudo gem install --no-document fpm 2>&1 | tee logs/packaging-tools.log
+
+      - name: Build deb and rpm
+        id: linux-packages
+        run: >-
+          deployment/package-linux.sh dist/Purivox.bin dist
+          2>&1 | tee logs/linux-packages.log
+
       - name: Generate checksums
         run: |
           # The version-prefixed glob keeps purivox-linux-x86_64.tar.gz out of
           # the Python distribution list, which a bare purivox-*.tar.gz matched.
           sha256sum dist/purivox-*.whl dist/purivox-[0-9]*.tar.gz \
             | tee dist/SHA256SUMS-python logs/checksums.log
-          sha256sum dist/purivox-linux-x86_64.tar.gz \
+          sha256sum dist/purivox-linux-x86_64.tar.gz dist/purivox_*.deb dist/purivox-*.rpm \
             | tee dist/SHA256SUMS-linux | tee -a logs/checksums.log
 
       - name: Upload distributions
@@ -339,13 +365,15 @@ jobs:
           retention-days: 14
           compression-level: 0
 
-      - name: Upload onefile
-        id: onefile-artifact
+      - name: Upload Linux packages
+        id: linux-artifact
         uses: actions/upload-artifact@v7
         with:
-          name: linux-onefile-${{ github.run_id }}
+          name: linux-packages-${{ github.run_id }}
           path: |
             dist/purivox-linux-x86_64.tar.gz
+            dist/purivox_*.deb
+            dist/purivox-*.rpm
             dist/SHA256SUMS-linux
           if-no-files-found: error
           retention-days: 14
@@ -372,6 +400,7 @@ jobs:
           | Job | `${{ job.status }}` |
           | Distributions | `${{ steps.distributions.outcome }}` |
           | onefile build | `${{ steps.onefile-build.outcome }}` |
+          | deb + rpm | `${{ steps.linux-packages.outcome }}` |
           | uv cache | `${{ steps.setup-uv.outputs.cache-hit }}` |
           | System cache | `${{ steps.system-cache.outputs.cache-hit }}` |
           | Compiler cache | `${{ steps.compiler-cache.outputs.cache-hit }}` |
@@ -379,7 +408,7 @@ jobs:
           ### Artifacts
 
           - Python distributions: ${{ steps.distributions-artifact.outputs.artifact-url || 'Not uploaded' }}
-          - Linux onefile: ${{ steps.onefile-artifact.outputs.artifact-url || 'Not uploaded' }}
+          - Linux packages: ${{ steps.linux-artifact.outputs.artifact-url || 'Not uploaded' }}
           - Build logs: ${{ steps.logs-artifact.outputs.artifact-url || 'Not uploaded' }}
           MARKDOWN
 
@@ -490,4 +519,112 @@ jobs:
 
           - Windows onefile: ${{ steps.onefile-artifact.outputs.artifact-url || 'Not uploaded' }}
           - Build logs: ${{ steps.logs-artifact.outputs.artifact-url || 'Not uploaded' }}
+          MARKDOWN
+
+  release:
+    name: Publish release
+    # Only a tag publishes, and it publishes what this very run built: the
+    # onefiles and the distributions are already artifacts here, so the release
+    # is assembled from them rather than from a second, differently-built copy.
+    if: ${{ github.ref_type == 'tag' }}
+    needs: [build, build-windows]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Download Python distributions
+        uses: actions/download-artifact@v7
+        with:
+          name: python-distributions-${{ github.run_id }}
+          path: release
+
+      - name: Download Linux packages
+        uses: actions/download-artifact@v7
+        with:
+          name: linux-packages-${{ github.run_id }}
+          path: release
+
+      - name: Download Windows onefile
+        uses: actions/download-artifact@v7
+        with:
+          name: windows-onefile-${{ github.run_id }}
+          path: release
+
+      - name: Collect checksums
+        id: checksums
+        run: |
+          # Each build job checksummed its own output under dist/. The release
+          # page holds one flat list of assets, so one flat SHA256SUMS replaces
+          # the three per-job files rather than shipping paths that no longer
+          # resolve.
+          cd release
+          rm -f SHA256SUMS-python SHA256SUMS-linux SHA256SUMS-windows
+          sha256sum -- * > ../SHA256SUMS
+          mv ../SHA256SUMS .
+          cat SHA256SUMS
+
+      - name: Assemble release notes
+        id: notes
+        run: |
+          # CHANGELOG.md keeps one section per tag, and that section is what the
+          # in-app update dialog shows. A tag without one falls back to the
+          # generated notes rather than publishing an empty release.
+          awk -v tag="${GITHUB_REF_NAME}" '
+            /^## / { if (found) exit; found = ($2 == tag); next }
+            found { print }
+          ' CHANGELOG.md > notes.md
+          if [[ -s notes.md ]]; then
+            echo "source=CHANGELOG.md" >> "$GITHUB_OUTPUT"
+          else
+            echo "source=generated" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Publish release
+        id: publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          notes=(--generate-notes)
+          if [[ -s notes.md ]]; then
+            notes=(--notes-file notes.md)
+          fi
+          # A tag carrying a suffix is a pre-release, and the update check asks
+          # for the latest release, which GitHub answers without those.
+          prerelease=()
+          if [[ "${GITHUB_REF_NAME}" == *-* ]]; then
+            prerelease=(--prerelease)
+          fi
+          if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
+            # A re-run of a tag build replaces the assets it already uploaded
+            # instead of failing on the release that is standing there.
+            gh release upload "${GITHUB_REF_NAME}" release/* --clobber
+          else
+            gh release create "${GITHUB_REF_NAME}" release/* \
+              --title "Purivox ${GITHUB_REF_NAME}" \
+              --verify-tag \
+              "${notes[@]}" \
+              "${prerelease[@]}"
+          fi
+          url="$(gh release view "${GITHUB_REF_NAME}" --json url --jq .url)"
+          echo "url=${url}" >> "$GITHUB_OUTPUT"
+
+      - name: Write summary
+        if: ${{ always() }}
+        run: |
+          cat >> "$GITHUB_STEP_SUMMARY" <<'MARKDOWN'
+          ## Release summary
+
+          | Item | Result |
+          |---|---|
+          | Job | `${{ job.status }}` |
+          | Tag | `${{ github.ref_name }}` |
+          | Notes | `${{ steps.notes.outputs.source }}` |
+          | Release | ${{ steps.publish.outputs.url || 'Not published' }} |
           MARKDOWN
