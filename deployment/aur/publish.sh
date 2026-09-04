@@ -83,11 +83,14 @@ clone="$(mktemp -d)"
 trap 'rm -rf "${work:-}" "$clone"' EXIT
 git clone --quiet "$aur_remote" "$clone"
 cp "$here/PKGBUILD" "$here/.SRCINFO" "$clone/"
-if git -C "$clone" diff --quiet; then
+# The first push to a name the AUR does not know yet clones an empty repository,
+# where the two files are untracked rather than modified: staging first is what
+# makes "nothing changed" mean the same thing in both cases.
+git -C "$clone" add PKGBUILD .SRCINFO
+if [[ -z "$(git -C "$clone" status --porcelain)" ]]; then
   echo "==> AUR already has ${version}-1"
   exit 0
 fi
-git -C "$clone" add PKGBUILD .SRCINFO
 git -C "$clone" commit --quiet -m "purivox-bin ${version}-1"
 git -C "$clone" push --quiet
 echo "==> pushed purivox-bin ${version}-1"
