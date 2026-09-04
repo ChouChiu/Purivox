@@ -1,4 +1,4 @@
-# Reference-Guided Vocal Isolation
+# Reference Cancellation
 
 <p align="left">
   <a href="../reference-removal.md">简体中文</a> · <strong>English</strong>
@@ -257,19 +257,41 @@ claim is capped at a share of the residual power (`_INCOHERENT_MAX_SHARE`), so w
 never push the mask to the floor, and the mask ratio is formed from powers smoothed in time
 (`_MASK_POWER_SMOOTH`) before the existing narrow Gaussian pass, which flattens most of the
 fluctuation before it reaches the mask. The remaining knobs are `_INCOHERENT_OVERSUBTRACTION`,
-`_MASK_FLOOR` and `_MASK_SMOOTHING`; when $gamma^2$ is only 0.02–0.05 above 500 Hz there is simply not enough information to decide whether
+`_MASK_FLOOR` and `_MASK_SMOOTHING`; when $\gamma^2$ is only 0.02–0.05
+above 500 Hz there is simply not enough information to decide whether
 a given cell is accompaniment, which is why the smoothstep gate still shuts the path off at low
 confidence.
 
 ### Research Basis and Boundaries
 
-- Gorlow, Ramona, and Pachet's [live accompaniment-cancellation study](https://arxiv.org/abs/1611.08905) compares adaptive noise cancellation, spectral subtraction, and short-time ERB-band Wiener filtering. This implementation uses a simpler coherence-weighted frequency-domain soft mask rather than time-domain LMS or a separate ERB voting layer.
-- Boll's [classic spectral-subtraction paper](https://doi.org/10.1109/TASSP.1979.1163209) describes magnitude subtraction and residual-noise problems. This implementation retains a subtractive power target while adding reference-conditioned coherence, a mask floor, and narrow time-frequency smoothing instead of directly applying hard spectral subtraction.
-- Avery Lee's [Center Cut](https://www.virtualdub.org/blog2/entry_102.html) and ADRess-style methods depend on center imaging, inter-channel level differences, or phase differences, and are unrelated to this implementation: they read only the spatial relationship between two channels, whereas reference cancellation reads the evidence the song source provides.
-- The convolutive transfer function (CTF) literature explains why the multiplicative narrowband approximation fails under long reverberation and how a finite set of frame taps replaces it, for example [joint dereverberation and blind source separation with a hybrid CTF model](https://doi.org/10.1016/j.apacoust.2024.110168). Schröter et al.'s [DeepFilterNet](https://arxiv.org/abs/2110.05588) and Tammen and Doclo's [deep multi-frame MVDR](https://arxiv.org/abs/2011.10345) are the learned form of the same idea: a complex filter across frames per time-frequency bin rather than a point-wise mask.
-- Engineering systems with the same structure are useful references. WebRTC's AEC3 is likewise "known reference plus unknown transfer plus double-talk", and its partitioned-block frequency-domain adaptive filter, delay estimation, and residual echo suppressor map onto the alignment, transfer estimation, and coherence-weighted mask here.
+- Gorlow, Ramona, and Pachet's
+  [live accompaniment-cancellation study](https://arxiv.org/abs/1611.08905) compares
+  adaptive noise cancellation, spectral subtraction, and short-time ERB-band Wiener
+  filtering. This implementation uses a simpler coherence-weighted frequency-domain soft
+  mask rather than time-domain LMS or a separate ERB voting layer.
+- Boll's [classic spectral-subtraction paper](https://doi.org/10.1109/TASSP.1979.1163209)
+  describes magnitude subtraction and residual-noise problems. This implementation retains
+  a subtractive power target while adding reference-conditioned coherence, a mask floor,
+  and narrow time-frequency smoothing instead of directly applying hard spectral subtraction.
+- Avery Lee's [Center Cut](https://www.virtualdub.org/blog2/entry_102.html) and ADRess-style
+  methods depend on center imaging, inter-channel level differences, or phase differences,
+  and are unrelated to this implementation: they read only the spatial relationship between
+  two channels, whereas reference cancellation reads the evidence the song source provides.
+- The convolutive transfer function (CTF) literature explains why the multiplicative narrowband
+  approximation fails under long reverberation and how a finite set of frame taps replaces it, for
+  example [joint dereverberation and blind source separation with a hybrid CTF
+  model](https://doi.org/10.1016/j.apacoust.2024.110168). Schröter et al.'s
+  [DeepFilterNet](https://arxiv.org/abs/2110.05588) and Tammen and Doclo's
+  [deep multi-frame MVDR](https://arxiv.org/abs/2011.10345) are the learned form of the same idea:
+  a complex filter across frames per time-frequency bin rather than a point-wise mask.
+- Engineering systems with the same structure are useful references. WebRTC's AEC3 is
+  likewise "known reference plus unknown transfer plus double-talk", and its
+  partitioned-block frequency-domain adaptive filter, delay estimation, and residual
+  echo suppressor map onto the alignment, transfer estimation, and coherence-weighted mask here.
 
-These papers provide algorithm structure and failure boundaries; they do not guarantee an improvement on every real performance. Matched-segment, loudness-matched A/B listening remains the acceptance criterion.
+These papers provide algorithm structure and failure boundaries; they
+do not guarantee an improvement on every real performance. Matched-segment,
+loudness-matched A/B listening remains the acceptance criterion.
 
 ## Output Protection and Validation
 
@@ -282,6 +304,7 @@ Algorithm tests cover time offsets, local drift, inverted polarity, frequency-de
 transfer, unrelated sources, rejection of source-only replacement lyrics, matrix crosstalk,
 normal-equation orientation on a phase-correlated stereo reference, a live source that never stops
 (which guards the leakage regression's intercept), and block seams. Synthetic
-metrics only detect implementation regressions. Real material must still be exported with identical input and settings for direct
+metrics only detect implementation regressions. Real material must
+still be exported with identical input and settings for direct
 comparison, listening closely to vocal level, sibilance, breathing, harmonies, reverb tails, and
 audience sound.

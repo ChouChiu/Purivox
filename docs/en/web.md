@@ -71,7 +71,7 @@ runs alongside `tsc` and Biome under `bun run check`.
 
 The split is visible in the code: the full-stage timeline's `clock.ts` carries milliseconds because
 its ranges are editable, while the result card's duration label does not and lives in
-`shared/ui/duration.ts`. The desktop divides them the same way - the first is `clock()` in
+`shared/ui/duration.ts`. The desktop divides them the same way — the first is `clock()` in
 `full_stage/timeline_model.py`, the second the private `_clock()` in `reference_removal/page.py`.
 
 ## Changes made for a build with no Qt and no threads
@@ -90,7 +90,7 @@ scope by `shared/progress.py`, which every pipeline uses through `report_progres
   (`tests/features/reference_removal/test_dsp_execution.py`).
 - `create_pcm_audio` and `resample_audio` allocate on the heap here rather than through a temporary
   file and `np.memmap`. Emscripten's filesystem keeps a file's contents in a JavaScript-side array
-  that `mmap` cannot alias into the wasm heap, so it allocates a second region and copies - which
+  that `mmap` cannot alias into the wasm heap, so it allocates a second region and copies — which
   makes a mapped buffer cost two of everything it holds. Measured over one three-minute single-song
   job: the mapped build held 190,512,000 bytes under `/tmp`, exactly its three full-length buffers,
   while both builds used the same wasm heap. Allocating on the heap simply removes that copy.
@@ -98,12 +98,14 @@ scope by `shared/progress.py`, which every pipeline uses through `report_progres
   path, and Emscripten's `msync` reports a bad descriptor rather than succeeding anyway.
 - `stft` in `shared/dsp/spectral.py` strides straight to the hop positions. Framing every offset
   first and keeping every `hop`-th row made an intermediate view `hop` times taller, and numpy
-  refuses a view whose nominal size does not fit a pointer - which under wasm32 is 32 bits, a
+  refuses a view whose nominal size does not fit a pointer — which under wasm32 is 32 bits, a
   ceiling that a few seconds of 44.1 kHz audio passes. Both formulations give identical results.
 
 ## Choices the page makes
 
-**The loading state does not fake a progress bar.** A first visit downloads about 23 MB - the
+### The loading state does not fake a progress bar
+
+A first visit downloads about 23 MB — the
 runtime at 5.7 MB plus numpy 2.8, scipy 13.2, soundfile 0.7 and soxr 0.1, measured compressed
 against the pinned build. Pyodide's lock file carries no sizes, so a real byte-level bar is not
 available; the page shows coarse progress through the four startup stages and says plainly that the
@@ -112,52 +114,71 @@ waiting beats inventing a percentage. The packages download in one parallel `loa
 loading them one at a time would give finer progress but a slower start, and the total is what the
 visitor waits for. A failed boot offers a retry rather than requiring a reload.
 
-**Uploads are chunked, so they do have progress.** Files are written into Pyodide's filesystem in
+### Uploads are chunked, so they do have progress
+
+Files are written into Pyodide's filesystem in
 4 MiB slices, which keeps the whole file from ever being resident and gives a song of ordinary
 length half a dozen progress steps rather than one. The first slice carries the file's final size
 so the runtime allocates it once: appending to an Emscripten file reallocates the whole array and
 copies back everything written so far, growing by an eighth at a time, so a long recording is moved
 through memory over and over. Measured on a 151 MB file, 1.5 seconds became 0.5.
 
-**Shortcuts live in the app layer, not on a page.** `Ctrl+O` chooses files, `Ctrl+Enter` starts,
-`Esc` cancels `F5` finds songs and `Ctrl+P` toggles the preview, matching the desktop - and for the desktop's reason: three
-page-local `Ctrl+O` bindings would be an ambiguous overload, and a window shortcut works before a
-page has taken focus. While a time range is being edited, `Esc` and `Enter` belong to the input.
+### Shortcuts live in the app layer, not on a page
 
-**The interface reuses the vocabulary the desktop already settled on.** The home page, the
-specific message when an input is missing ("Choose the stage / live audio first." rather than only
-greying out Start), the match summary, the empty preview state and the switch's on/off words all
-come from keys that have been in the `.ts` catalogues all along and that the browser build simply
-was not using. The brand mark is not a redrawing either: `scripts/build-assets.mjs` copies the
-desktop's `src/resources/purivox.svg` into the site's favicon and header mark, so there is one
-source for it.
+`Ctrl+O` chooses files, `Ctrl+Enter` starts,
+`Esc` cancels, `F5` finds songs and `Ctrl+P` toggles the preview, matching the desktop — and for
+the desktop's reason: three page-local `Ctrl+O` bindings would be an ambiguous overload, and a
+window shortcut works before a page has taken focus. While a time
+range is being edited, `Esc` and `Enter` belong to the input.
 
-**Choosing a file shows what the decoder read** - `02:30 · 48.0 kHz · Stereo · 27 MB`.
-`probe_audio` has always returned this and the page never showed it; a wrong sample rate or a
+### The interface reuses the vocabulary the desktop already settled on
+
+The home page, the specific message when an input is missing ("Choose the stage / live audio
+first." rather than only greying out Start), the match summary, the empty preview state and the
+switch's on/off words all come from keys that have been in the `.ts` catalogues all along and that
+the browser build simply was not using. The brand mark is not a redrawing either:
+`scripts/build-assets.mjs` copies the desktop's `src/resources/purivox.svg` into the site's favicon
+and header mark, so there is one source for it.
+
+### Choosing a file shows what the decoder read
+
+`02:30 · 48.0 kHz · Stereo · 27 MB`. `probe_audio` has always
+returned this and the page never showed it; a wrong sample rate or a
 truncated file is now visible before a job runs rather than after, and those are the same numbers
 the memory estimate is computed from.
 
-**The preview is a built player, not `<audio controls>`.** The native control looks foreign in a
+### The preview is a built player, not `<audio controls>`
+
+The native control looks foreign in a
 Fluent interface and different in every browser. It is now play/pause, stop, a draggable seek bar, a
 `00:15 / 00:20` label and volume, worded with the desktop's own `preview_play`, `preview_pause`,
 `preview_stop`, `preview_volume` and `preview_error`. The behaviour matches too: pressing play at
 the end restarts, and `Ctrl+P` toggles playback. The buttons carry their words ("Play", "Stop")
 rather than a tooltip: the desktop does the same with `preview_play.setText(...)`, and a Fluent
 tooltip pops open on every keyboard focus and covers the card title, which is the last thing a
-control meant to be clicked repeatedly should do. The seek bar sets **no step** - Fluent draws a tick
+control meant to be clicked repeatedly should do.
+The seek bar sets **no step** - Fluent draws a tick
 per step, and a step fine enough for audio would bury the rail under thousands of them, while
 seeking is continuous anyway. Only one preview plays at a time; starting one pauses the other.
 
-**The working pages are hidden on a tab change, not unmounted.** This fixes a real bug: unmounting
+### The working pages are hidden on a tab change, not unmounted
+
+This fixes a real bug: unmounting
 stopped a preview mid-play and threw away both a finished result and a running job, none of which
 the visitor asked for by changing tab. The cost is that all pages are mounted at once, so the
-shortcut bindings are gated on `active` - otherwise the last page mounted would claim them.
+shortcut bindings are gated on `active` — otherwise the last page mounted would claim them.
 
-**Responsive behaviour follows the desktop's breakpoints.** Below 620px the file picker stacks its
+### Responsive behaviour follows the desktop's breakpoints
+
+Below 620px the file picker stacks its
 button above the path, matching the desktop's `PORTRAIT` rule; the tab strip and the timeline table
-each scroll sideways on their own, and the page itself never overflows horizontally at 375px. The keyboard hint appears only on a wide screen with a fine pointer - a touch screen has no Ctrl to press.
+each scroll sideways on their own, and the page itself never overflows horizontally at 375px.
+The keyboard hint appears only on a wide screen with a fine pointer — a touch screen has no Ctrl
+to press.
 
-**There is no code splitting.** The bundle is 560 KB of JavaScript, 160 KB gzipped, which is not
+### There is no code splitting
+
+The bundle is 560 KB of JavaScript, 160 KB gzipped, which is not
 the bottleneck next to 23 MB of Pyodide. Splitting the three pages into async chunks would buy a
 saving the visitor cannot perceive, at the cost of another loading state.
 
@@ -201,7 +222,7 @@ picking the same audio again after every cancellation.
 
 The libsndfile that ships inside `soundfile` is compiled with FLAC, Ogg/Vorbis, Opus and MP3, so
 the browser reads much the same containers the desktop does. For what libsndfile turns down -
-chiefly AAC in an MP4 container - `probe_audio` reports the fact instead of raising, and the page
+chiefly AAC in an MP4 container — `probe_audio` reports the fact instead of raising, and the page
 decodes with the browser's own `decodeAudioData` and hands the pipeline a WAV. This is the same
 two-decoder arrangement the desktop makes with libsndfile and Qt Multimedia.
 
@@ -229,7 +250,8 @@ cd web && bun run build
 ```
 
 The output lands in `web/dist/`. Vite's `base` defaults to `/`, since the site is served from the
-root of its own domain (<https://purivox.wwchun.top/>). To publish it as a GitHub Pages *project* site instead
+root of its own domain (<https://purivox.wwchun.top/>).
+To publish it as a GitHub Pages *project* site instead
 (`username.github.io/repository/`), override it with `PURIVOX_BASE=/repository/ bun run build`, or
 every asset under that subpath will 404. CI builds this in the `web` job of
 `.github/workflows/common.yml` and publishes to Pages from `main`.

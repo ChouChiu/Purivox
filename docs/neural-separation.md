@@ -18,7 +18,8 @@ $$
 \widehat{\mathbf b}=\mathbf y-\widehat{\mathbf v}
 $$
 
-模型计算仍保持 44.1 kHz。完成后，人声与背景分别使用 soxr 高质量重采样回歌曲原采样率，按歌曲原位深写出
+模型计算仍保持 44.1 kHz。完成后，人声与背景分别使用
+soxr 高质量重采样回歌曲原采样率，按歌曲原位深写出
 `<歌曲名>_vocal.wav` 与 `<歌曲名>_background.wav` 两个双声道 WAV。
 
 ```mermaid

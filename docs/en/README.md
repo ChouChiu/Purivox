@@ -14,7 +14,7 @@ mathematical models use LaTeX.
 | Document | Contents |
 |---|---|
 | [Architecture and Data Flow](architecture.md) | Layer boundaries, task orchestration, audio storage, cancellation, and error handling |
-| [Reference-Guided Vocal Isolation](reference-removal.md) | Time alignment, reference cancellation, and chunk blending |
+| [Reference Cancellation](reference-removal.md) | Time alignment, complex transfer estimation, residual masking, and chunk blending |
 | [Full Stage Processing](full-stage.md) | Multi-source fingerprints, candidate clustering, timeline generation, segmented rendering, and boundary protection |
 | [AI Track Separation](neural-separation.md) | Model locations, verification, MDX-Net input/output, and overlap-add inference |
 | [Browser Build (WebAssembly)](web.md) | The Pyodide runtime, the changes for a Qt-free build, the memory ceiling, cancellation, and deployment |
@@ -24,8 +24,8 @@ mathematical models use LaTeX.
 
 - To understand how a task moves through the GUI, background thread, and processing pipeline,
   start with **Architecture and Data Flow**.
-- To adjust reference-guided isolation, read **Reference-Guided Vocal Isolation** and verify
-  alignment before increasing the strength.
+- To adjust the removal quality, read **Reference Cancellation** and check the alignment before
+  raising the strength.
 - To change Full Stage automatic placement, read both **Full Stage Processing** and the
   cross-feature orchestration boundaries in the architecture document.
 - To add a model or modify inference, read **AI Track Separation**.

@@ -4,8 +4,8 @@
   <a href="README.md">简体中文</a> · <strong>English</strong>
 </p>
 
-**[▶ Use it in your browser](https://purivox.wwchun.top/)** - nothing to install, and the audio never leaves your own
-tab.
+**[▶ Use it in your browser](https://purivox.wwchun.top/)** — nothing to install, and the audio
+never leaves your own tab.
 
 Purivox is a vocal isolation tool for stage and live recordings, available as a desktop
 application and in the browser, built with Python, PySide6, and PySide6-Fluent-Widgets. Its core
@@ -38,13 +38,16 @@ Vocal Isolation, and their results should not be compared directly.
 - Chunked long-audio processing, task cancellation, and atomic output writes
 - Exports keep the input file's sample rate and bit depth, never upsampled to hit a format
 - In-app result preview and audio statistics
-- The settings page checks for new releases: an update opens one dialog with its changelog and a link to the release page — nothing updates itself
-- The common actions have shortcuts: `Ctrl+O` to choose an input, `Ctrl+Return` to start, `F5` to identify songs, `Esc` to cancel, `Ctrl+P` to play/pause the preview
+- The settings page checks for new releases: an update opens one dialog
+  with its changelog and a link to the release page — nothing updates itself
+- The common actions have shortcuts: `Ctrl+O` to choose an input, `Ctrl+Return` to
+  start, `F5` to identify songs, `Esc` to cancel, `Ctrl+P` to play/pause the preview
 - GUI and CLI reuse the corresponding MR Remove and AI separation task pipelines
 
 ## Installation
 
-If you would rather not install anything, the [browser build](https://purivox.wwchun.top/) runs the same pipelines. It
+If you would rather not install anything, the [browser build](https://purivox.wwchun.top/)
+runs the same pipelines. It
 leaves out AI track separation, whose ONNX runtime has no WebAssembly build, and a long enough
 stage recording is refused because a browser tab has a memory ceiling. See
 [Browser Build (WebAssembly)](docs/en/web.md) for the details.
@@ -59,7 +62,8 @@ The macOS archive unpacks to `Purivox.app`, which belongs in Applications. It is
 rather than with an Apple developer identity, so the first launch has to go through Finder's
 right-click "Open". The ONNX Runtime arm64 wheel it builds on requires macOS 14 or newer.
 
-To run from source, [uv](https://docs.astral.sh/uv/) is required. The project uses `.python-version` to select Python
+To run from source, [uv](https://docs.astral.sh/uv/) is
+required. The project uses `.python-version` to select Python
 automatically and manages an isolated environment inside the repository. Do not install another
 Qt Fluent component that also exports `qfluentwidgets` into this environment.
 
@@ -184,7 +188,7 @@ Architecture, algorithms, testing, and release information are available in
 [the technical documentation](docs/en/README.md):
 
 - [Architecture and Data Flow](docs/en/architecture.md)
-- [Reference-Guided Vocal Isolation](docs/en/reference-removal.md)
+- [Reference Cancellation](docs/en/reference-removal.md)
 - [Full Stage Processing](docs/en/full-stage.md)
 - [AI Track Separation](docs/en/neural-separation.md)
 - [Browser Build (WebAssembly)](docs/en/web.md)

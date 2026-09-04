@@ -170,7 +170,7 @@ rate and bit depth.
 
 ```text
 Read and convert to stereo → resample to 44.1 kHz → find or download the model
-→ chunked MDX-Net inference → background = mix - vocals
+→ chunked MDX-Net inference → background = mix — vocals
 → resample back to the song's own rate → write two WAV files
 ```
 

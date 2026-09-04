@@ -4,13 +4,15 @@
   <strong>简体中文</strong> · <a href="README_EN.md">English</a>
 </p>
 
-**[▶ 在浏览器中直接使用](https://purivox.wwchun.top/)** —— 无需安装，音频全程留在你自己的标签页里，不会上传到服务器。
+**[▶ 在浏览器中直接使用](https://purivox.wwchun.top/)**——无需安装，
+音频全程留在你自己的标签页里，不会上传到服务器。
 
 Purivox 是一款面向舞台和现场录音的垫音消除工具，有桌面版和浏览器版两种形态，
 基于 Python、PySide6 和 PySide6-Fluent-Widgets 开发。核心的 MR Remove 功能支持两种处理方式：
 
 - **单曲垫音消除**：提供舞台 / 现场音频和对应的歌曲音源，程序自动完成同步并去除垫音。
-- **整场垫音消除**：提供整场舞台 / 现场音频和多个歌曲音源，程序自动定位每首歌出现的位置并分段去除垫音。
+- **整场垫音消除**：提供整场舞台 / 现场音频和多个歌曲音源，
+  程序自动定位每首歌出现的位置并分段去除垫音。
 
 垫音消除只处理歌曲音源能够解释的内容，因此会保留音源中没有的现场人声、讲话、欢呼和环境声。
 歌曲音源越准确，效果越好；录音削波、明显混响、编曲不同或选错音源，都会影响结果。
@@ -31,12 +33,14 @@ Purivox 是一款面向舞台和现场录音的垫音消除工具，有桌面版
 - 导出沿用输入文件的采样率与位深，不为凑规格而升采样
 - 处理完成后可在应用内试听并查看音频统计信息
 - 设置页可检查新版本，有更新时弹窗显示 Changelog 并跳转 Release 页面，不做自动更新
-- 常用操作有快捷键：`Ctrl+O` 选择输入、`Ctrl+Return` 开始、`F5` 识别歌曲、`Esc` 取消、`Ctrl+P` 试听播放 / 暂停
+- 常用操作有快捷键：`Ctrl+O` 选择输入、`Ctrl+Return` 开始、
+  `F5` 识别歌曲、`Esc` 取消、`Ctrl+P` 试听播放 / 暂停
 - 图形界面与命令行共用对应的 MR Remove 与 AI 分离处理管线
 
 ## 安装
 
-不想安装可以直接用[浏览器版](https://purivox.wwchun.top/)：它跑的是同一套处理管线，只是不含 AI 音轨分离
+不想安装可以直接用[浏览器版](https://purivox.wwchun.top/)：
+它跑的是同一套处理管线，只是不含 AI 音轨分离
 （其依赖的 ONNX 运行时没有浏览器版本），且受浏览器内存上限约束，整场录音过长时会被拒绝。
 详见[浏览器版（WebAssembly）](docs/web.md)。
 
@@ -45,10 +49,11 @@ Purivox 是一款面向舞台和现场录音的垫音消除工具，有桌面版
 `purivox-linux-x86_64.tar.gz`，macOS（Apple Silicon）用 `purivox-macos-arm64.tar.gz`，
 每次发布都附带 `SHA256SUMS`。
 
-macOS 版解压得到 `Purivox.app`，拖进「应用程序」即可；它只有 ad-hoc 签名，没有 Apple 开发者签名，
-所以第一次打开要在访达里右键选「打开」。依赖里 ONNX Runtime 的 arm64 wheel 要求 macOS 14 或更高。
+macOS 版解压得到 `Purivox.app`，拖进“应用程序”即可；它只有 ad-hoc 签名，没有 Apple 开发者签名，
+所以第一次打开要在访达里右键选“打开”。依赖里 ONNX Runtime 的 arm64 wheel 要求 macOS 14 或更高。
 
-从源码运行需要先安装 [uv](https://docs.astral.sh/uv/)。项目会根据 `.python-version` 自动选择 Python 版本，
+从源码运行需要先安装 [uv](https://docs.astral.sh/uv/)。
+项目会根据 `.python-version` 自动选择 Python 版本，
 并在仓库内维护隔离环境。请不要在该环境中安装其他会导出 `qfluentwidgets` 的 Qt Fluent 组件。
 
 ```bash
@@ -68,7 +73,8 @@ uv run --locked purivox
 1. 打开“垫音消除”，选择“单曲”。
 2. 选择要处理的舞台 / 现场音频，以及内容对应的歌曲音源。
 3. 程序会自动对齐。建议先用默认的 75% 强度处理，图形界面使用固定的统计窗口。
-4. 试听结果后再调整强度。如果声音出现明显的抽吸感，或人声变薄，请降低强度，或确认歌曲音源选择是否正确。
+4. 试听结果后再调整强度。如果声音出现明显的抽吸感，或人声变薄，
+   请降低强度，或确认歌曲音源选择是否正确。
 
 请尽量使用与现场一致的歌曲版本。母带不同、经过剪辑、变速、升降调或包含额外内容，都会降低消除效果。
 
@@ -156,7 +162,7 @@ uv run --locked purivox ai "歌曲.wav" --output-dir "输出目录" --model mdxn
 算法、架构、测试和发布说明已移至 [docs/](docs/README.md)：
 
 - [架构与数据流](docs/architecture.md)
-- [参考引导人声提取](docs/reference-removal.md)
+- [参考对消](docs/reference-removal.md)
 - [完整舞台实现](docs/full-stage.md)
 - [AI 音轨分离实现](docs/neural-separation.md)
 - [浏览器版（WebAssembly）](docs/web.md)
@@ -165,7 +171,10 @@ uv run --locked purivox ai "歌曲.wav" --output-dir "输出目录" --model mdxn
 ## 致谢与许可
 
 - [Vocal-Extractor](https://github.com/IamYei/Vocal-Extractor)：为频域人声提取方向提供启发。
-- [Ultimate Vocal Remover GUI](https://github.com/Anjok07/ultimatevocalremovergui)：AI 处理流程参考其 MDX-Net 管线。
-- [TRvlvr/model_repo](https://github.com/TRvlvr/model_repo)：提供 MDX-Net 模型文件；模型许可与致谢要求以各发布页为准。
+- [Ultimate Vocal Remover GUI](https://github.com/Anjok07/ultimatevocalremovergui)：
+  AI 处理流程参考其 MDX-Net 管线。
+- [TRvlvr/model_repo](https://github.com/TRvlvr/model_repo)：
+  提供 MDX-Net 模型文件；模型许可与致谢要求以各发布页为准。
 
-本项目以 [AGPL-3.0-or-later](LICENSE) 发布。PySide6-Fluent-Widgets 开源版本使用 GPLv3，商业使用前请先确认其上游许可。
+本项目以 [AGPL-3.0-or-later](LICENSE) 发布。PySide6-Fluent-Widgets
+开源版本使用 GPLv3，商业使用前请先确认其上游许可。
