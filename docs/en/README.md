@@ -18,7 +18,7 @@ mathematical models use LaTeX.
 | [Full Stage Processing](full-stage.md) | Multi-source fingerprints, candidate clustering, timeline generation, segmented rendering, and boundary protection |
 | [AI Track Separation](neural-separation.md) | Model locations, verification, MDX-Net input/output, and overlap-add inference |
 | [Browser Build (WebAssembly)](web.md) | The Pyodide runtime, the changes for a Qt-free build, the memory ceiling, cancellation, and deployment |
-| [Development, Testing, and Release](development.md) | Environment setup, code conventions, quality gates, packaging, and standalone builds |
+| [Contributing](CONTRIBUTING.md) | Environment setup, code conventions, translations, verifying a change, commit conventions, and release |
 
 ## Suggested Reading
 
@@ -29,7 +29,7 @@ mathematical models use LaTeX.
 - To change Full Stage automatic placement, read both **Full Stage Processing** and the
   cross-feature orchestration boundaries in the architecture document.
 - To add a model or modify inference, read **AI Track Separation**.
-- Before submitting code or building a release, read **Development, Testing, and Release**.
+- Before submitting code or building a release, read **Contributing**.
 
 These documents describe the current Python implementation. Synthetic regression results are not
 claims about quality on real music.

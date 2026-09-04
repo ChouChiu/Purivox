@@ -192,7 +192,7 @@ Architecture, algorithms, testing, and release information are available in
 - [Full Stage Processing](docs/en/full-stage.md)
 - [AI Track Separation](docs/en/neural-separation.md)
 - [Browser Build (WebAssembly)](docs/en/web.md)
-- [Development, Testing, and Release](docs/en/development.md)
+- [Contributing](docs/en/CONTRIBUTING.md)
 
 ## Acknowledgements and License
 
