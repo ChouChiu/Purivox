@@ -38,6 +38,7 @@ Vocal Isolation, and their results should not be compared directly.
 - Chunked long-audio processing, task cancellation, and atomic output writes
 - Exports keep the input file's sample rate and bit depth, never upsampled to hit a format
 - In-app result preview and audio statistics
+- The settings page checks for new releases: an update opens one dialog with its changelog and a link to the release page — nothing updates itself
 - The common actions have shortcuts: `Ctrl+O` to choose an input, `Ctrl+Return` to start, `F5` to identify songs, `Esc` to cancel, `Ctrl+P` to play/pause the preview
 - GUI and CLI reuse the corresponding MR Remove and AI separation task pipelines
 

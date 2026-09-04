@@ -3,8 +3,15 @@ from __future__ import annotations
 from functools import partial
 from pathlib import Path
 
-from PySide6.QtCore import QEvent
-from PySide6.QtGui import QCloseEvent, QColor, QKeySequence, QPalette, QShortcut
+from PySide6.QtCore import QEvent, QTimer, QUrl
+from PySide6.QtGui import (
+    QCloseEvent,
+    QColor,
+    QDesktopServices,
+    QKeySequence,
+    QPalette,
+    QShortcut,
+)
 from PySide6.QtWidgets import QApplication, QWidget
 from qfluentwidgets import (
     FluentIcon,
@@ -32,6 +39,8 @@ from features.reference_removal import (
 )
 from features.reference_removal.page import MrPage
 from features.settings import SettingsPage
+from features.settings.dialog import UpdateDialog
+from features.settings.updates import Release, UpdateChecker, installed_version
 from shared.branding import application_icon
 from shared.config import cfg
 from shared.i18n import install_language, tr
@@ -47,6 +56,10 @@ class MainWindow(FluentWindow):
         self.setWindowIcon(application_icon())
         install_language(str(cfg.language.value))
         self.jobs = JobPresenter(self)
+        self.updates = UpdateChecker(self)
+        # A check nobody asked for reports only what it found, never that it
+        # found nothing or could not reach the release host.
+        self.silent_update_check = True
         self.close_pending = False
         self.home = HomePage(self)
         self.mr = MrPage()
@@ -63,6 +76,9 @@ class MainWindow(FluentWindow):
         self._build_shortcuts()
         self._connect()
         self.retranslate()
+        # Runs once the event loop is up, so the window is on screen before a
+        # release dialog can mask it.
+        QTimer.singleShot(0, self._check_updates_at_startup)
 
     def _build_navigation(self) -> None:
         self.home_nav = self.addSubInterface(self.home, FluentIcon.HOME, "")
@@ -135,6 +151,11 @@ class MainWindow(FluentWindow):
         cfg.language.valueChanged.connect(self._language_changed)
         cfg.theme.valueChanged.connect(lambda value: self._apply_theme(str(value)))
         cfg.log_level.valueChanged.connect(lambda value: set_log_level(str(value)))
+        self.settings.update_check_requested.connect(self.check_updates)
+        self.updates.update_available.connect(self._update_available)
+        self.updates.up_to_date.connect(self._update_up_to_date)
+        self.updates.failed.connect(self._update_failed)
+        self.updates.finished.connect(self._update_check_finished)
         self.jobs.finished.connect(self._job_finished)
 
     def _language_changed(self, value: object) -> None:
@@ -196,6 +217,56 @@ class MainWindow(FluentWindow):
         ):
             keys = shortcut.key().toString(QKeySequence.SequenceFormat.NativeText)
             control.setToolTip(f"{control.text()} ({keys})")
+
+    def check_updates(self) -> None:
+        """Check on request, which reports its outcome whichever way it goes."""
+        self.silent_update_check = False
+        self._start_update_check()
+
+    def _check_updates_at_startup(self) -> None:
+        if not bool(cfg.check_updates.value):
+            return
+        self.silent_update_check = True
+        self._start_update_check()
+
+    def _start_update_check(self) -> None:
+        self.settings.set_checking_updates(True)
+        self.updates.check()
+
+    def _update_available(self, release: Release) -> None:
+        """Show what the release changed; downloading it stays the user's move."""
+        dialog = UpdateDialog(release, self)
+        accepted = dialog.exec()
+        # The dialog is a child of the window and filters its events, so a
+        # closed one has to be dropped rather than left behind for the session.
+        dialog.deleteLater()
+        if accepted:
+            QDesktopServices.openUrl(QUrl(release.url))
+
+    def _update_up_to_date(self) -> None:
+        if self.silent_update_check:
+            return
+        InfoBar.success(
+            tr("done_title"),
+            tr("update_latest", version=installed_version()),
+            duration=3500,
+            position=InfoBarPosition.TOP_RIGHT,
+            parent=self,
+        )
+
+    def _update_failed(self, message: str) -> None:
+        if self.silent_update_check:
+            return
+        InfoBar.error(
+            tr("err_title"),
+            tr("update_failed", msg=message),
+            duration=6000,
+            position=InfoBarPosition.TOP_RIGHT,
+            parent=self,
+        )
+
+    def _update_check_finished(self) -> None:
+        self.settings.set_checking_updates(False)
 
     def _warning(self, key: str) -> None:
         InfoBar.warning(

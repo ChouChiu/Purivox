@@ -492,8 +492,48 @@
         <translation>起動時に新しいバージョンを確認</translation>
     </message>
     <message>
-        <source>update_unavailable</source>
-        <translation>更新元が未設定のため、現在利用できません</translation>
+        <source>update_check_description</source>
+        <translation>自動更新は行いません</translation>
+    </message>
+    <message>
+        <source>update_now</source>
+        <translation>更新を確認</translation>
+    </message>
+    <message>
+        <source>update_now_button</source>
+        <translation>今すぐ確認</translation>
+    </message>
+    <message>
+        <source>update_installed</source>
+        <translation>現在のバージョン v{version}</translation>
+    </message>
+    <message>
+        <source>update_checking</source>
+        <translation>更新を確認しています…</translation>
+    </message>
+    <message>
+        <source>update_latest</source>
+        <translation>v{version} は最新のバージョンです</translation>
+    </message>
+    <message>
+        <source>update_failed</source>
+        <translation>更新の確認に失敗しました: {msg}</translation>
+    </message>
+    <message>
+        <source>update_title</source>
+        <translation>v{version} の更新</translation>
+    </message>
+    <message>
+        <source>update_notes_empty</source>
+        <translation>このリリースには更新内容の記載がありません。</translation>
+    </message>
+    <message>
+        <source>update_open_release</source>
+        <translation>リリースページを開く</translation>
+    </message>
+    <message>
+        <source>update_later</source>
+        <translation>後で</translation>
     </message>
     <message>
         <source>ai_title</source>

@@ -11,6 +11,15 @@ ORGANIZATION_NAME = "Purivox"
 _ICON_SIZES = (16, 24, 32, 48, 64, 128, 256)
 
 
+def user_agent() -> str:
+    """Identify the application to a server from Qt's metadata, not a literal."""
+    from PySide6.QtCore import QCoreApplication
+
+    name = QCoreApplication.applicationName() or APPLICATION_NAME
+    version = QCoreApplication.applicationVersion()
+    return f"{name}/{version}" if version else name
+
+
 def application_icon() -> QIcon:
     # Imported here so the CLI can read the application identity above without
     # pulling QtGui and QtSvg into a run that never opens a window.

@@ -22,7 +22,7 @@ src/features/                    Self-contained pages, models, and processing lo
 ├── full_stage/                  Full Stage analysis and timeline models
 ├── neural_separation/           MDX-Net models, model store, and inference
 ├── home/                        Home page
-└── settings/                    Settings page
+└── settings/                    Settings page and the release check
 src/shared/                      Audio, spectra, job validation, configuration, logging,
                                  task protocol, and widgets
 src/web/                         Browser shell: the job entry points and memory budget under Pyodide

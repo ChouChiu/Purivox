@@ -76,7 +76,7 @@ jobs synchronously; SIGINT triggers token cancellation.
 | `src/features/reference_removal/` | MR pipeline: `dsp/algorithms.py` (coherent cancellation), `dsp/transfer.py` (transfer estimation), `dsp/alignment.py`, `finder.py` (automatic accompaniment match), `processing.py`, `page.py`, `models.py` |
 | `src/features/full_stage/` | Multi-source fingerprint matching, timeline models, `timeline_model.py` (`QAbstractTableModel` behind the editable timeline), and the full-stage page |
 | `src/features/neural_separation/` | AI pipeline: `inference.py` (MdxNet ONNX wrapper), `model_store.py` (search + `QNetworkAccessManager` download + `QSaveFile` verify-then-commit), `catalog.py` (4 shipped model entries, `MODEL_BASE_URL`), `processing.py`, `page.py` |
-| `src/features/home/`, `src/features/settings/` | HomePage (brand + entry cards), SettingsPage (language/theme/log level) |
+| `src/features/home/`, `src/features/settings/` | HomePage (brand + entry cards), SettingsPage (language/theme/log level/update check), `settings/updates.py` (GitHub release query + version compare), `settings/dialog.py` (the release dialog) |
 | `src/shared/audio/` | `io.py`: mapped audio I/O/resampling/atomic writes, `BLOCK_FRAMES` (262 144) and `AUDIO_EXTENSIONS`, `release_mapped_pages()`; `analysis.py`: shared `AudioStats`, block copy, peak/RMS analysis |
 | `src/shared/dsp/` | `spectral.py`: librosa-compatible `stft`/`istft` (`n_fft=2048`, `hop=512`) and `log_flux_bands()`, the onset feature shared by full-stage matching and coarse alignment |
 | `src/shared/ui/` | `responsive.py` (`LayoutMode`/`LayoutMetrics` breakpoints, `ResponsiveColumns`, `FoldingRow`, `allow_shrinking`, `HeightForWidth`, `ElidedLabel`), `cards.py` (`FormCard` folding rows, `PageScrollArea` breakpoint dispatch), `widgets.py` (`SmoothComboBox` with the qfw slide animation disabled, file-dialog filters, `normalized_wav_path` output-field rules) |
@@ -209,7 +209,7 @@ Language keys: `zh_cn`, `en_us`, `ja_jp`, `ko_kr`.
   and the CLI — goes down into `shared` (feature packages cannot import each other). Existing
   examples: `shared.audio.BLOCK_FRAMES`, `shared.audio.AUDIO_EXTENSIONS`,
   `shared.jobs.validate_reference_settings`, `shared.dsp.log_flux_bands`,
-  `shared.ui.AUDIO_FILE_FILTER`, `shared.ui.normalized_wav_path`.
+  `shared.ui.AUDIO_FILE_FILTER`, `shared.ui.normalized_wav_path`, `shared.branding.user_agent`.
 - **Front-end vocabulary**: before writing a new string, check the `.ts` catalogues — the desktop
   has already named most states (`warn_no_song`, `stage_need_sources`, `preview_empty`,
   `stage_analysis_summary`, `switch_on`/`switch_off`, the whole `home_*` set). Reuse beats inventing
@@ -257,6 +257,7 @@ Language keys: `zh_cn`, `en_us`, `ja_jp`, `ko_kr`.
 | `src/features/reference_removal/dsp/transfer.py` | Smoothed spectral statistics, the vectorised LDL^{H} solve, and the complex transfer with its adjusted multiple coherence |
 | `src/features/reference_removal/dsp/alignment.py` | GCC-PHAT coarse alignment + local drift tracking + Lanczos warp |
 | `src/features/neural_separation/inference.py` / `model_store.py` | MdxNet ONNX wrapper (chunked overlap-add); model search, Qt-network download, incremental SHA-256 verified before `QSaveFile.commit()` |
+| `src/features/settings/updates.py` | `UpdateChecker`: the GitHub release query, the tag/version comparison, and the `Release` the window turns into a dialog. The application never installs anything — the dialog's button opens the release page |
 | `src/features/full_stage/timeline_model.py` | `TimelineModel`: the analysis as an editable `QAbstractTableModel` (`data`/`flags`/`setData`), with `clip_edited` / `edit_rejected` for page status text |
 | `src/resources/model_data.json` | 65-entry MDX-Net spec table keyed by model-MD5 (`compensate`, `mdx_dim_f_set`, `mdx_dim_t_set`, `mdx_n_fft_scale_set`, `primary_stem`) |
 | `src/resources/i18n/*.ts` / `*.qm` | UI strings: Qt Linguist XML sources keyed by snake_case identifiers in one `Purivox` context, plus the `pyside6-lrelease` output the app loads (143 keys; parity, freshness and literal-key use all tested). Edit the `.ts`, recompile, commit both |
@@ -299,7 +300,8 @@ Language keys: `zh_cn`, `en_us`, `ja_jp`, `ko_kr`.
   data/flags/edit rejection (`tests/features/full_stage/test_timeline_model.py`), and model
   download/verify/cancel against a localhost HTTP server
   (`tests/features/neural_separation/test_model_store.py` — it repoints
-  `catalog.MODEL_BASE_URL`, so no test ever reaches the real release host).
+  `catalog.MODEL_BASE_URL`, so no test ever reaches the real release host), and the update check
+  (`tests/features/settings/test_updates.py`, which repoints `updates.RELEASES_API` the same way).
 - **Architecture gate**: `tests/test_architecture.py` parses ASTs — any `shared → app/features`
   or feature↔feature import fails the suite.
 - **Expectations**: synthetic DSP metrics are regression evidence only — they do not claim

@@ -492,8 +492,48 @@
         <translation>Check for new versions at startup</translation>
     </message>
     <message>
-        <source>update_unavailable</source>
-        <translation>No update source is configured, so this feature is currently unavailable</translation>
+        <source>update_check_description</source>
+        <translation>No automatic download or install</translation>
+    </message>
+    <message>
+        <source>update_now</source>
+        <translation>Check for updates</translation>
+    </message>
+    <message>
+        <source>update_now_button</source>
+        <translation>Check now</translation>
+    </message>
+    <message>
+        <source>update_installed</source>
+        <translation>Current version v{version}</translation>
+    </message>
+    <message>
+        <source>update_checking</source>
+        <translation>Checking for updates…</translation>
+    </message>
+    <message>
+        <source>update_latest</source>
+        <translation>v{version} is already the latest version</translation>
+    </message>
+    <message>
+        <source>update_failed</source>
+        <translation>Update check failed: {msg}</translation>
+    </message>
+    <message>
+        <source>update_title</source>
+        <translation>Update v{version}</translation>
+    </message>
+    <message>
+        <source>update_notes_empty</source>
+        <translation>This release ships no notes.</translation>
+    </message>
+    <message>
+        <source>update_open_release</source>
+        <translation>Open the release page</translation>
+    </message>
+    <message>
+        <source>update_later</source>
+        <translation>Later</translation>
     </message>
     <message>
         <source>ai_title</source>

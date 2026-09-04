@@ -492,8 +492,48 @@
         <translation>시작할 때 새 버전 확인</translation>
     </message>
     <message>
-        <source>update_unavailable</source>
-        <translation>업데이트 소스가 설정되지 않아 현재 사용할 수 없습니다</translation>
+        <source>update_check_description</source>
+        <translation>자동 업데이트는 하지 않습니다</translation>
+    </message>
+    <message>
+        <source>update_now</source>
+        <translation>업데이트 확인</translation>
+    </message>
+    <message>
+        <source>update_now_button</source>
+        <translation>지금 확인</translation>
+    </message>
+    <message>
+        <source>update_installed</source>
+        <translation>현재 버전 v{version}</translation>
+    </message>
+    <message>
+        <source>update_checking</source>
+        <translation>업데이트를 확인하는 중…</translation>
+    </message>
+    <message>
+        <source>update_latest</source>
+        <translation>v{version}이(가) 이미 최신 버전입니다</translation>
+    </message>
+    <message>
+        <source>update_failed</source>
+        <translation>업데이트 확인에 실패했습니다: {msg}</translation>
+    </message>
+    <message>
+        <source>update_title</source>
+        <translation>v{version} 업데이트</translation>
+    </message>
+    <message>
+        <source>update_notes_empty</source>
+        <translation>이 릴리스에는 변경 내용이 없습니다.</translation>
+    </message>
+    <message>
+        <source>update_open_release</source>
+        <translation>릴리스 페이지 열기</translation>
+    </message>
+    <message>
+        <source>update_later</source>
+        <translation>나중에</translation>
     </message>
     <message>
         <source>ai_title</source>

@@ -11,10 +11,12 @@ from PySide6.QtWidgets import QApplication, QListWidgetItem
 from qfluentwidgets import MenuAnimationType
 from qfluentwidgets.components.widgets.menu import DummyMenuAnimationManager
 
+from app import main_window
 from app.main_window import MainWindow
 from features.full_stage import ClipKind, FullStageAnalysis, TimelineClip
 from features.full_stage.page import FullStagePage
 from features.reference_removal.page import MrPage
+from features.settings.updates import Release
 from shared.audio import AudioStats
 from shared.config import cfg, load_config
 from shared.i18n import tr
@@ -587,3 +589,70 @@ def test_every_page_stays_inside_a_narrow_window(qtbot):
             assert page.content.minimumSizeHint().width() <= page.viewport().width(), (
                 f"{page.objectName()} does not fit a {width}x{height} window"
             )
+
+
+def test_the_settings_page_checks_for_updates_on_request(qtbot, monkeypatch):
+    load_config()
+    window = MainWindow()
+    qtbot.addWidget(window)
+    started: list[bool] = []
+    monkeypatch.setattr(window.updates, "check", lambda: bool(started.append(True)) or True)
+
+    window.settings.update_now_card.button.click()
+
+    assert started == [True]
+    assert not window.silent_update_check, "a requested check reports whatever it finds"
+    assert not window.settings.update_now_card.button.isEnabled()
+    assert window.settings.update_now_card.contentLabel.text() == tr("update_checking")
+
+    window.updates.finished.emit()
+    assert window.settings.update_now_card.button.isEnabled()
+    assert window.settings.update_now_card.contentLabel.text() == tr(
+        "update_installed", version=QApplication.applicationVersion()
+    )
+
+
+@pytest.mark.parametrize("enabled", [False, True])
+def test_the_startup_check_follows_its_switch(qtbot, monkeypatch, enabled: bool):
+    load_config()
+    previous = cfg.check_updates.value
+    cfg.set(cfg.check_updates, enabled)
+    try:
+        window = MainWindow()
+        qtbot.addWidget(window)
+        started: list[bool] = []
+        monkeypatch.setattr(window.updates, "check", lambda: bool(started.append(True)) or True)
+        qtbot.wait(50)
+    finally:
+        cfg.set(cfg.check_updates, previous)
+
+    assert started == ([True] if enabled else [])
+    assert window.silent_update_check, "a check nobody asked for stays quiet"
+
+
+def test_an_available_release_opens_its_page_on_request(qtbot, monkeypatch):
+    load_config()
+    window = MainWindow()
+    qtbot.addWidget(window)
+    release = Release("9.9.9", "- everything", "https://example.invalid/releases/tag/v9.9.9")
+    opened: list[str] = []
+
+    class _AcceptedDialog:
+        def __init__(self, offered, parent):
+            assert offered is release
+            assert parent is window
+
+        def exec(self) -> int:
+            return 1
+
+        def deleteLater(self) -> None:
+            pass
+
+    monkeypatch.setattr(main_window, "UpdateDialog", _AcceptedDialog)
+    monkeypatch.setattr(
+        main_window.QDesktopServices, "openUrl", lambda url: opened.append(url.toString())
+    )
+
+    window.updates.update_available.emit(release)
+
+    assert opened == [release.url]

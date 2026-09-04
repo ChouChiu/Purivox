@@ -492,8 +492,48 @@
         <translation>启动时检查新版本</translation>
     </message>
     <message>
-        <source>update_unavailable</source>
-        <translation>暂未配置更新来源，此功能目前不可用</translation>
+        <source>update_check_description</source>
+        <translation>不会自动下载或安装</translation>
+    </message>
+    <message>
+        <source>update_now</source>
+        <translation>检查更新</translation>
+    </message>
+    <message>
+        <source>update_now_button</source>
+        <translation>立即检查</translation>
+    </message>
+    <message>
+        <source>update_installed</source>
+        <translation>当前版本 v{version}</translation>
+    </message>
+    <message>
+        <source>update_checking</source>
+        <translation>正在检查更新…</translation>
+    </message>
+    <message>
+        <source>update_latest</source>
+        <translation>已经是最新版本 v{version}</translation>
+    </message>
+    <message>
+        <source>update_failed</source>
+        <translation>检查更新失败: {msg}</translation>
+    </message>
+    <message>
+        <source>update_title</source>
+        <translation>v{version} 更新</translation>
+    </message>
+    <message>
+        <source>update_notes_empty</source>
+        <translation>这个版本没有提供更新说明。</translation>
+    </message>
+    <message>
+        <source>update_open_release</source>
+        <translation>前往 Release 页面</translation>
+    </message>
+    <message>
+        <source>update_later</source>
+        <translation>稍后</translation>
     </message>
     <message>
         <source>ai_title</source>

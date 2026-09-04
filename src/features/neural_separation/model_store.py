@@ -5,7 +5,6 @@ import os
 from pathlib import Path
 
 from PySide6.QtCore import (
-    QCoreApplication,
     QEventLoop,
     QIODevice,
     QSaveFile,
@@ -21,6 +20,7 @@ from PySide6.QtNetwork import (
 )
 
 from features.neural_separation.catalog import ModelEntry
+from shared.branding import user_agent
 from shared.i18n import tr
 from shared.processing import (
     CancellationToken,
@@ -61,16 +61,9 @@ def find_model(entry: ModelEntry, override: Path | None = None) -> Path | None:
     return None
 
 
-def _user_agent() -> str:
-    """Identify the application from Qt's own metadata rather than a literal."""
-    name = QCoreApplication.applicationName() or "Purivox"
-    version = QCoreApplication.applicationVersion()
-    return f"{name}/{version}" if version else name
-
-
 def _request(url: str) -> QNetworkRequest:
     request = QNetworkRequest(QUrl(url))
-    request.setHeader(QNetworkRequest.KnownHeaders.UserAgentHeader, _user_agent())
+    request.setHeader(QNetworkRequest.KnownHeaders.UserAgentHeader, user_agent())
     # Release assets redirect to a storage host, and a stalled transfer must
     # fail instead of holding the job open forever.
     request.setAttribute(

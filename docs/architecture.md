@@ -20,7 +20,7 @@ src/features/                    各功能自包含的页面、模型与处理�
 ├── full_stage/                  完整舞台分析与时间线模型
 ├── neural_separation/           MDX-Net 模型、模型仓库与推理
 ├── home/                        首页
-└── settings/                    设置页
+└── settings/                    设置页与版本检查
 src/shared/                      音频、频谱、任务参数校验、配置、日志、任务协议和通用控件
 src/web/                         浏览器外壳，Pyodide 里的作业入口与内存预算
 src/resources/                   翻译和模型规格等只读资源
