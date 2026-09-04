@@ -125,7 +125,7 @@ PURIVOX_BASE=/repo/ bun run build          # only for a Pages *project* site sub
 # translations: edit the .ts, recompile, commit both
 uv run --locked pyside6-lrelease src/resources/i18n/<locale>.ts -qm src/resources/i18n/<locale>.qm
 
-# onefile executable (dist/Purivox.bin)
+# onefile executable (dist/Purivox.bin; macOS builds dist/Purivox.app instead)
 uv sync --locked --group deploy
 uv run --locked --group deploy pyside6-deploy -c pysidedeploy.spec
 ```
@@ -265,8 +265,9 @@ Python ≥3.11, pinned to 3.14 for development by `.python-version`; uv with `uv
 (vendored `qfluentwidgets`) and never a second Fluent package; Qt is mandatory even for the CLI,
 which falls back to `QAudioDecoder` for decoding. numpy ≥2, scipy, soundfile, soxr, onnxruntime
 (CPU), all range-pinned. ruff only (`line-length = 100`, E/F/I/UP/B/SIM/RUF), `ruff format`, no
-black or isort. Nuitka 4.1.3 via `pyside6-deploy`, onefile (`dist/Purivox.bin` / `Purivox.exe`);
-ONNX weights are downloaded at runtime, never packaged.
+black or isort. Nuitka 4.1.3 via `pyside6-deploy`, onefile (`dist/Purivox.bin` / `Purivox.exe`) and
+a macOS arm64 app bundle (`dist/Purivox.app`, from a CI-derived spec); ONNX weights are downloaded
+at runtime, never packaged.
 
 ## Testing
 

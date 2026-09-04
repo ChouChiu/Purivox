@@ -51,8 +51,13 @@ stage recording is refused because a browser tab has a memory ceiling. See
 
 The desktop application can be downloaded from the
 [latest release](https://github.com/ChouChiu/Purivox/releases/latest): `Purivox.exe` on Windows,
-and a `.deb`, an `.rpm` or the self-contained `purivox-linux-x86_64.tar.gz` on Linux. Every
-release ships a `SHA256SUMS` alongside them.
+a `.deb`, an `.rpm` or the self-contained `purivox-linux-x86_64.tar.gz` on Linux, and
+`purivox-macos-arm64.tar.gz` on Apple Silicon macOS. Every release ships a `SHA256SUMS` alongside
+them.
+
+The macOS archive unpacks to `Purivox.app`, which belongs in Applications. It is signed ad-hoc
+rather than with an Apple developer identity, so the first launch has to go through Finder's
+right-click "Open". The ONNX Runtime arm64 wheel it builds on requires macOS 14 or newer.
 
 To run from source, [uv](https://docs.astral.sh/uv/) is required. The project uses `.python-version` to select Python
 automatically and manages an isolated environment inside the repository. Do not install another

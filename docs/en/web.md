@@ -232,7 +232,7 @@ The output lands in `web/dist/`. Vite's `base` defaults to `/`, since the site i
 root of its own domain (<https://purivox.wwchun.top/>). To publish it as a GitHub Pages *project* site instead
 (`username.github.io/repository/`), override it with `PURIVOX_BASE=/repository/ bun run build`, or
 every asset under that subpath will 404. CI builds this in the `web` job of
-`.github/workflows/build.yml` and publishes to Pages from `main`.
+`.github/workflows/common.yml` and publishes to Pages from `main`.
 
 The Pyodide runtime loads from jsDelivr at the version pinned in `PYODIDE_URL`
 (`web/src/runtime/PurivoxClient.ts`) rather than living in the repository: scipy alone is tens of

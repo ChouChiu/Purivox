@@ -208,7 +208,7 @@ cd web && bun run build
 （<https://purivox.wwchun.top/>）的根路径上。
 若要发布成 GitHub Pages 的项目站点（`用户名.github.io/仓库名/`），
 用 `PURIVOX_BASE=/仓库名/ bun run build` 覆盖，否则子路径下的资源会 404。
-CI 在 `.github/workflows/build.yml` 的 `web` 作业里构建，并在 `main` 上发布到 Pages。
+CI 在 `.github/workflows/common.yml` 的 `web` 作业里构建，并在 `main` 上发布到 Pages。
 
 Pyodide 运行时从 jsDelivr 加载，版本固定在 `PYODIDE_URL`
 （`web/src/runtime/PurivoxClient.ts`），不进仓库 —— 单是 scipy 就有几十 MB，

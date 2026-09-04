@@ -1,0 +1,664 @@
+name: Common
+
+# Every artifact this repository produces is built here, and both triggers run
+# the very same file: build.yml on a branch or a pull request, release.yml on a
+# tag.  Nothing calls it with parameters, because a release must not be built
+# differently from what the branch builds.
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+  # The web job publishes the static site; Pages needs both to deploy.
+  pages: write
+  id-token: write
+
+env:
+  QT_QPA_PLATFORM: offscreen
+  UV_NO_PROGRESS: "1"
+  UV_PYTHON_PREFERENCE: only-managed
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  quality:
+    name: Quality gates
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Check the tag matches the packaged version
+        # A release build fails here, in the first minutes, rather than after an
+        # hour of compiling: the tag is what the update check compares against,
+        # so a tag that does not name the version it ships must never publish.
+        if: ${{ github.ref_type == 'tag' }}
+        run: |
+          version="$(sed -n 's/^__version__ = "\(.*\)"$/\1/p' src/app/version.py)"
+          tag="${GITHUB_REF_NAME#v}"
+          if [[ "${tag%%-*}" != "$version" ]]; then
+            echo "::error::${GITHUB_REF_NAME} does not name the packaged version ${version}"
+            exit 1
+          fi
+          echo "releasing ${GITHUB_REF_NAME} from version ${version}"
+
+      - name: Setup uv
+        id: setup-uv
+        uses: astral-sh/setup-uv@v10.0.1
+        with:
+          version: "0.12.2"
+          python-version: "3.14"
+          enable-cache: true
+          cache-python: true
+          cache-dependency-glob: |
+            pyproject.toml
+            uv.lock
+
+      - name: Prepare logs
+        run: mkdir -p logs
+
+      - name: Restore system cache
+        id: system-cache
+        uses: actions/cache@v6
+        with:
+          path: ${{ runner.temp }}/apt-archives
+          key: >-
+            apt-${{ runner.os }}-${{ runner.arch }}-ubuntu-24.04-libegl1-libpulse0-v1
+
+      - name: Install system deps
+        run: |
+          {
+            apt_cache_dir="${RUNNER_TEMP}/apt-archives"
+            sudo install -d -m 0755 "$apt_cache_dir"
+            sudo install -d -o _apt -g root -m 0700 "$apt_cache_dir/partial"
+            sudo apt-get update
+            sudo apt-get install --yes --no-install-recommends \
+              -o Dir::Cache::archives="$apt_cache_dir" \
+              libegl1 libpulse0
+            sudo chown -R "$(id -u):$(id -g)" "$apt_cache_dir"
+          } 2>&1 | tee logs/system-deps.log
+
+      - name: Sync dependencies
+        run: uv sync --locked --group deploy 2>&1 | tee logs/sync.log
+
+      - name: Lint code
+        id: lint
+        run: uv run --locked ruff check src tests 2>&1 | tee logs/lint.log
+
+      - name: Check formatting
+        id: format
+        run: uv run --locked ruff format --check src tests 2>&1 | tee logs/format.log
+
+      - name: Run tests
+        id: tests
+        run: >-
+          uv run --locked pytest --junitxml=test-results/pytest.xml
+          2>&1 | tee logs/tests.log
+
+      - name: Run self-test
+        id: self-test
+        run: uv run --locked purivox --selftest 2>&1 | tee logs/self-test.log
+
+      - name: Check test report
+        id: test-report
+        if: ${{ always() }}
+        run: |
+          if [[ -f test-results/pytest.xml ]]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Upload test results
+        id: test-artifact
+        if: ${{ steps.test-report.outputs.exists == 'true' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-results-${{ github.run_id }}
+          path: test-results/pytest.xml
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload logs
+        id: logs-artifact
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: quality-logs-${{ github.run_id }}
+          path: logs/*.log
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Write summary
+        if: ${{ always() }}
+        run: |
+          cat >> "$GITHUB_STEP_SUMMARY" <<'MARKDOWN'
+          ## Quality summary
+
+          | Check | Result |
+          |---|---|
+          | Job | `${{ job.status }}` |
+          | Ruff | `${{ steps.lint.outcome }}` |
+          | Format | `${{ steps.format.outcome }}` |
+          | Tests | `${{ steps.tests.outcome }}` |
+          | Self-test | `${{ steps.self-test.outcome }}` |
+          | uv cache | `${{ steps.setup-uv.outputs.cache-hit }}` |
+          | System cache | `${{ steps.system-cache.outputs.cache-hit }}` |
+
+          - Test report: ${{ steps.test-artifact.outputs.artifact-url || 'Not uploaded' }}
+          - Quality logs: ${{ steps.logs-artifact.outputs.artifact-url || 'Not uploaded' }}
+          MARKDOWN
+
+  web:
+    name: Build browser bundle
+    needs: quality
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Setup bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.4.0"
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+        working-directory: web
+
+      - name: Lint and typecheck
+        id: check
+        # Biome's recommended rules, tsc, and the front-end layering check that
+        # mirrors tests/test_architecture.py.  `build` runs these too; naming
+        # them here tells a failed run apart from a broken bundle.
+        run: bun run check
+        working-directory: web
+
+      - name: Build site
+        id: site
+        # `prebuild` packs src/ into the archive Pyodide unpacks and turns the
+        # Qt Linguist catalogues into the JSON the page translates from, so the
+        # bundle can never drift from the Python it runs.  `check` runs tsc and
+        # the front-end layering check before Vite sees anything.
+        run: bun run build
+        working-directory: web
+
+      - name: Upload site artifact
+        id: site-artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: web-bundle-${{ github.run_id }}
+          path: web/dist
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Configure Pages
+        if: ${{ github.ref == 'refs/heads/main' }}
+        uses: actions/configure-pages@v5
+
+      - name: Package for Pages
+        if: ${{ github.ref == 'refs/heads/main' }}
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: web/dist
+
+      - name: Deploy to Pages
+        id: deploy
+        if: ${{ github.ref == 'refs/heads/main' }}
+        uses: actions/deploy-pages@v4
+
+      - name: Write summary
+        if: ${{ always() }}
+        run: |
+          cat >> "$GITHUB_STEP_SUMMARY" <<'MARKDOWN'
+          ## Browser bundle summary
+
+          | Item | Result |
+          |---|---|
+          | Job | `${{ job.status }}` |
+          | Lint + typecheck | `${{ steps.check.outcome }}` |
+          | Build | `${{ steps.site.outcome }}` |
+          | Deployed | ${{ steps.deploy.outputs.page_url || 'Not deployed (not main)' }} |
+
+          - Bundle artifact: ${{ steps.site-artifact.outputs.artifact-url || 'Not uploaded' }}
+          MARKDOWN
+
+  build:
+    name: Build Linux onefile
+    needs: quality
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Setup uv
+        id: setup-uv
+        uses: astral-sh/setup-uv@v10.0.1
+        with:
+          version: "0.12.2"
+          python-version: "3.14"
+          enable-cache: true
+          cache-python: true
+          cache-dependency-glob: |
+            pyproject.toml
+            uv.lock
+
+      - name: Prepare logs
+        run: mkdir -p logs
+
+      - name: Restore system cache
+        id: system-cache
+        uses: actions/cache@v6
+        with:
+          path: ${{ runner.temp }}/apt-archives
+          key: >-
+            apt-${{ runner.os }}-${{ runner.arch }}-ubuntu-24.04-libegl1-libpulse0-ccache-rpm-v1
+          restore-keys: |
+            apt-${{ runner.os }}-${{ runner.arch }}-ubuntu-24.04-libegl1-libpulse0-
+
+      - name: Install system deps
+        run: |
+          {
+            apt_cache_dir="${RUNNER_TEMP}/apt-archives"
+            sudo install -d -m 0755 "$apt_cache_dir"
+            sudo install -d -o _apt -g root -m 0700 "$apt_cache_dir/partial"
+            sudo apt-get update
+            sudo apt-get install --yes --no-install-recommends \
+              -o Dir::Cache::archives="$apt_cache_dir" \
+              libegl1 libpulse0 ccache rpm
+            sudo chown -R "$(id -u):$(id -g)" "$apt_cache_dir"
+          } 2>&1 | tee logs/system-deps.log
+
+      - name: Restore compiler cache
+        id: compiler-cache
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/ccache
+          key: >-
+            nuitka-${{ runner.os }}-py3.14-${{ hashFiles('uv.lock', 'pysidedeploy.spec',
+            'src/**/*.py', 'deployment/**/*.py') }}
+          restore-keys: |
+            nuitka-${{ runner.os }}-py3.14-
+
+      - name: Configure compiler cache
+        run: |
+          ccache --max-size=2G 2>&1 | tee logs/cache-config.log
+          ccache --zero-stats 2>&1 | tee -a logs/cache-config.log
+
+      - name: Sync dependencies
+        run: uv sync --locked --no-dev --group deploy 2>&1 | tee logs/sync.log
+
+      - name: Build distributions
+        id: distributions
+        run: uv build 2>&1 | tee logs/distributions.log
+
+      - name: Build onefile
+        id: onefile-build
+        run: >-
+          uv run --locked --no-dev --group deploy
+          pyside6-deploy -c pysidedeploy.spec --force
+          2>&1 | tee logs/onefile-build.log
+
+      - name: Show cache stats
+        if: ${{ !cancelled() }}
+        run: ccache --show-stats 2>&1 | tee logs/cache-stats.log
+
+      - name: Archive onefile
+        run: |
+          # Onefile emits one executable. It still goes into a tarball because
+          # GitHub artifacts do not preserve the executable bit.
+          tar -C dist -czf dist/purivox-linux-x86_64.tar.gz "Purivox.bin" \
+            2>&1 | tee logs/onefile.log
+
+      - name: Install packaging tools
+        run: |
+          # fpm builds both Linux packages from one staged tree; it shells out
+          # to rpmbuild, which the system deps step installed.
+          sudo gem install --no-document fpm 2>&1 | tee logs/packaging-tools.log
+
+      - name: Build deb and rpm
+        id: linux-packages
+        run: >-
+          deployment/package-linux.sh dist/Purivox.bin dist
+          2>&1 | tee logs/linux-packages.log
+
+      - name: Generate checksums
+        run: |
+          # The version-prefixed glob keeps purivox-linux-x86_64.tar.gz out of
+          # the Python distribution list, which a bare purivox-*.tar.gz matched.
+          sha256sum dist/purivox-*.whl dist/purivox-[0-9]*.tar.gz \
+            | tee dist/SHA256SUMS-python logs/checksums.log
+          sha256sum dist/purivox-linux-x86_64.tar.gz dist/purivox_*.deb dist/purivox-*.rpm \
+            | tee dist/SHA256SUMS-linux | tee -a logs/checksums.log
+
+      - name: Upload distributions
+        id: distributions-artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: python-distributions-${{ github.run_id }}
+          path: |
+            dist/purivox-*.whl
+            dist/purivox-[0-9]*.tar.gz
+            dist/SHA256SUMS-python
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0
+
+      - name: Upload Linux packages
+        id: linux-artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: linux-packages-${{ github.run_id }}
+          path: |
+            dist/purivox-linux-x86_64.tar.gz
+            dist/purivox_*.deb
+            dist/purivox-*.rpm
+            dist/SHA256SUMS-linux
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0
+
+      - name: Upload logs
+        id: logs-artifact
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: build-logs-${{ github.run_id }}
+          path: logs/*.log
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Write summary
+        if: ${{ always() }}
+        run: |
+          cat >> "$GITHUB_STEP_SUMMARY" <<'MARKDOWN'
+          ## Build summary
+
+          | Item | Result |
+          |---|---|
+          | Job | `${{ job.status }}` |
+          | Distributions | `${{ steps.distributions.outcome }}` |
+          | onefile build | `${{ steps.onefile-build.outcome }}` |
+          | deb + rpm | `${{ steps.linux-packages.outcome }}` |
+          | uv cache | `${{ steps.setup-uv.outputs.cache-hit }}` |
+          | System cache | `${{ steps.system-cache.outputs.cache-hit }}` |
+          | Compiler cache | `${{ steps.compiler-cache.outputs.cache-hit }}` |
+
+          ### Artifacts
+
+          - Python distributions: ${{ steps.distributions-artifact.outputs.artifact-url || 'Not uploaded' }}
+          - Linux packages: ${{ steps.linux-artifact.outputs.artifact-url || 'Not uploaded' }}
+          - Build logs: ${{ steps.logs-artifact.outputs.artifact-url || 'Not uploaded' }}
+          MARKDOWN
+
+  build-windows:
+    name: Build Windows onefile
+    needs: quality
+    runs-on: windows-2025
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Setup uv
+        id: setup-uv
+        uses: astral-sh/setup-uv@v10.0.1
+        with:
+          version: "0.12.2"
+          python-version: "3.14"
+          enable-cache: true
+          cache-python: true
+          cache-dependency-glob: |
+            pyproject.toml
+            uv.lock
+
+      - name: Prepare directories
+        run: |
+          # dist/ has to exist up front. In onefile mode pyside6-deploy places
+          # the result with shutil.copy, which does not create the parent, and
+          # this job has no `uv build` step to create it as a side effect.
+          mkdir -p logs dist
+
+      - name: Restore compiler cache
+        id: compiler-cache
+        uses: actions/cache@v6
+        with:
+          path: ~/AppData/Local/Nuitka/Nuitka/Cache
+          key: >-
+            nuitka-${{ runner.os }}-py3.14-${{ hashFiles('uv.lock', 'pysidedeploy.spec',
+            'src/**/*.py', 'deployment/**/*.py') }}
+          restore-keys: |
+            nuitka-${{ runner.os }}-py3.14-
+
+      - name: Sync dependencies
+        run: uv sync --locked --no-dev --group deploy 2>&1 | tee logs/sync.log
+
+      - name: Prepare deploy spec
+        run: |
+          # pyside6-deploy carries a single icon key and hands it to Nuitka as
+          # --windows-icon-from-ico, which will not accept the SVG the Linux
+          # build uses.
+          sed -e 's|^icon = .*|icon = deployment/purivox.ico|' \
+              pysidedeploy.spec > pysidedeploy-windows.spec
+          tee logs/deploy-spec.log < pysidedeploy-windows.spec
+
+      - name: Build onefile
+        id: onefile-build
+        run: >-
+          uv run --locked --no-dev --group deploy
+          pyside6-deploy -c pysidedeploy-windows.spec --force
+          2>&1 | tee logs/onefile-build.log
+
+      - name: Generate checksums
+        run: |
+          # Onefile emits a single .exe. Windows has no executable bit to
+          # preserve and the artifact upload zips it anyway, so it ships as is.
+          sha256sum dist/Purivox.exe \
+            | tee dist/SHA256SUMS-windows | tee logs/checksums.log
+
+      - name: Upload onefile
+        id: onefile-artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: windows-onefile-${{ github.run_id }}
+          path: |
+            dist/Purivox.exe
+            dist/SHA256SUMS-windows
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0
+
+      - name: Upload logs
+        id: logs-artifact
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: build-windows-logs-${{ github.run_id }}
+          path: logs/*.log
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Write summary
+        if: ${{ always() }}
+        run: |
+          cat >> "$GITHUB_STEP_SUMMARY" <<'MARKDOWN'
+          ## Windows build summary
+
+          | Item | Result |
+          |---|---|
+          | Job | `${{ job.status }}` |
+          | onefile build | `${{ steps.onefile-build.outcome }}` |
+          | uv cache | `${{ steps.setup-uv.outputs.cache-hit }}` |
+          | Compiler cache | `${{ steps.compiler-cache.outputs.cache-hit }}` |
+
+          ### Artifacts
+
+          - Windows onefile: ${{ steps.onefile-artifact.outputs.artifact-url || 'Not uploaded' }}
+          - Build logs: ${{ steps.logs-artifact.outputs.artifact-url || 'Not uploaded' }}
+          MARKDOWN
+
+  build-macos:
+    name: Build macOS arm64 bundle
+    needs: quality
+    runs-on: macos-15
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Setup uv
+        id: setup-uv
+        uses: astral-sh/setup-uv@v10.0.1
+        with:
+          version: "0.12.2"
+          python-version: "3.14"
+          enable-cache: true
+          cache-python: true
+          cache-dependency-glob: |
+            pyproject.toml
+            uv.lock
+
+      - name: Prepare directories
+        run: mkdir -p logs dist
+
+      - name: Restore compiler cache
+        id: compiler-cache
+        uses: actions/cache@v6
+        with:
+          # macOS runners carry no ccache, so Nuitka downloads its own and
+          # keeps both the binary and the compilation cache in here.
+          path: ~/Library/Caches/Nuitka
+          key: >-
+            nuitka-${{ runner.os }}-py3.14-${{ hashFiles('uv.lock', 'pysidedeploy.spec',
+            'src/**/*.py', 'deployment/**/*.py') }}
+          restore-keys: |
+            nuitka-${{ runner.os }}-py3.14-
+
+      - name: Sync dependencies
+        run: uv sync --locked --no-dev --group deploy 2>&1 | tee logs/sync.log
+
+      - name: Prepare deploy spec
+        run: |
+          # Two things have to be rewritten for macOS, so the job derives its
+          # own spec the way the Windows job does (the file is not in the tree):
+          #
+          # - the icon reaches Nuitka as --macos-app-icon, and anything that is
+          #   not already .icns goes through imageio, which is not installed and
+          #   reads no SVG either.
+          # - Nuitka names the bundle and fills its plist from the entry point,
+          #   which is deployment/main.py, so an untouched build produces
+          #   main.app announcing itself as "main" in the dock and the menu bar.
+          #   The identifier follows the project homepage, purivox.wwchun.top.
+          version="$(sed -n 's/^__version__ = "\(.*\)"$/\1/p' src/app/version.py)"
+          bundle_args="--output-folder-name=Purivox --output-filename=Purivox"
+          bundle_args="${bundle_args} --macos-app-name=Purivox"
+          bundle_args="${bundle_args} --macos-signed-app-name=top.wwchun.purivox"
+          bundle_args="${bundle_args} --macos-app-version=${version}"
+          sed -e 's|^icon = .*|icon = deployment/purivox.icns|' \
+              -e "s|^extra_args = .*|& ${bundle_args}|" \
+              pysidedeploy.spec > pysidedeploy-macos.spec
+          tee logs/deploy-spec.log < pysidedeploy-macos.spec
+
+      - name: Build app bundle
+        id: bundle-build
+        # macOS ignores `mode = onefile`: pyside6-deploy always passes
+        # --standalone --macos-create-app-bundle there, and the result is a
+        # bundle Nuitka signs ad-hoc at the end of the build.  Its own copy of
+        # that bundle into dist/ resolves symlinks, which both duplicates every
+        # Qt framework and invalidates the signature, so the build is pointed
+        # away from it: --output-folder-name leaves nothing under the name
+        # pyside6-deploy looks for (it logs that it found no executable and
+        # copies nothing), and --keep-deployment-files spares the bundle from
+        # the cleanup that follows.  The next step ships that bundle.
+        run: >-
+          uv run --locked --no-dev --group deploy
+          pyside6-deploy -c pysidedeploy-macos.spec --force --keep-deployment-files
+          2>&1 | tee logs/bundle-build.log
+
+      - name: Collect the app bundle
+        run: |
+          mv deployment/deployment/Purivox.app dist/Purivox.app
+          # The seal covers the symlinks Nuitka made for Contents/Frameworks,
+          # so this is what catches a bundle that was copied rather than moved.
+          codesign --verify --strict --verbose=2 dist/Purivox.app 2>&1 \
+            | tee logs/codesign.log
+
+      - name: Archive the bundle
+        run: |
+          # An .app is a directory: the tarball is what keeps the executable
+          # bits and the framework symlinks a bare artifact upload flattens.
+          # COPYFILE_DISABLE stops bsdtar writing an AppleDouble ._ entry
+          # beside every file it packs.
+          COPYFILE_DISABLE=1 tar -C dist -czf dist/purivox-macos-arm64.tar.gz Purivox.app \
+            2>&1 | tee logs/archive.log
+
+      - name: Generate checksums
+        run: |
+          # macOS ships shasum, not the coreutils sha256sum the other jobs use.
+          shasum -a 256 dist/purivox-macos-arm64.tar.gz \
+            | tee dist/SHA256SUMS-macos | tee logs/checksums.log
+
+      - name: Upload bundle
+        id: bundle-artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: macos-bundle-${{ github.run_id }}
+          path: |
+            dist/purivox-macos-arm64.tar.gz
+            dist/SHA256SUMS-macos
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0
+
+      - name: Upload logs
+        id: logs-artifact
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: build-macos-logs-${{ github.run_id }}
+          path: logs/*.log
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Write summary
+        if: ${{ always() }}
+        run: |
+          cat >> "$GITHUB_STEP_SUMMARY" <<'MARKDOWN'
+          ## macOS build summary
+
+          | Item | Result |
+          |---|---|
+          | Job | `${{ job.status }}` |
+          | Bundle build | `${{ steps.bundle-build.outcome }}` |
+          | uv cache | `${{ steps.setup-uv.outputs.cache-hit }}` |
+          | Compiler cache | `${{ steps.compiler-cache.outputs.cache-hit }}` |
+
+          ### Artifacts
+
+          - macOS bundle: ${{ steps.bundle-artifact.outputs.artifact-url || 'Not uploaded' }}
+          - Build logs: ${{ steps.logs-artifact.outputs.artifact-url || 'Not uploaded' }}
+          MARKDOWN
+

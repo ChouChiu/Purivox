@@ -42,7 +42,11 @@ Purivox 是一款面向舞台和现场录音的垫音消除工具，有桌面版
 
 桌面版可以直接从 [Release 页面](https://github.com/ChouChiu/Purivox/releases/latest)
 下载：Windows 用 `Purivox.exe`，Linux 用 `.deb`、`.rpm` 或自解压的
-`purivox-linux-x86_64.tar.gz`，每次发布都附带 `SHA256SUMS`。
+`purivox-linux-x86_64.tar.gz`，macOS（Apple Silicon）用 `purivox-macos-arm64.tar.gz`，
+每次发布都附带 `SHA256SUMS`。
+
+macOS 版解压得到 `Purivox.app`，拖进「应用程序」即可；它只有 ad-hoc 签名，没有 Apple 开发者签名，
+所以第一次打开要在访达里右键选「打开」。依赖里 ONNX Runtime 的 arm64 wheel 要求 macOS 14 或更高。
 
 从源码运行需要先安装 [uv](https://docs.astral.sh/uv/)。项目会根据 `.python-version` 自动选择 Python 版本，
 并在仓库内维护隔离环境。请不要在该环境中安装其他会导出 `qfluentwidgets` 的 Qt Fluent 组件。

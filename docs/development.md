@@ -174,34 +174,55 @@ uv run --locked --group deploy pyside6-deploy -c pysidedeploy.spec
 产物是单个可执行文件——Linux 为 `dist/Purivox.bin`，Windows 为 `dist/Purivox.exe`——内含 Python、Qt、
 Fluent Widgets、SciPy、SoundFile、soxr 和 ONNX Runtime，但不包含模型权重。
 
+macOS 上 `mode = onefile` 不生效：`pyside6-deploy` 在这个平台一律传 `--standalone
+--macos-create-app-bundle`，产物是应用包 `dist/Purivox.app`，内容同上。CI 只构建 arm64
+（Apple Silicon），因为锁文件里 ONNX Runtime 的 macOS wheel 只有 arm64 一种。
+
 onefile 程序每次运行都会把内容解包到临时目录，因此需要足够的临时空间。
 启动开销经实测不大：126 MB 的 Linux 产物跑完 `--selftest` 全流程约 3.1 秒，
 冷启动和热启动没有明显差别。发布前除自动化测试外，还应实际启动它，检查页面导航、模型查找、音频解码、
 任务取消和输出试听——尤其要确认解包路径下的资源文件仍能被找到。
 
-Windows 构建复用同一份 `pysidedeploy.spec`，但图标一项必须改写，因此 CI 会由它派生一份
-`pysidedeploy-windows.spec`（该文件不入库）：
+Windows 与 macOS 构建复用同一份 `pysidedeploy.spec`，各自在 CI 里派生一份改写过的副本
+（`pysidedeploy-windows.spec` 和 `pysidedeploy-macos.spec`，都不入库）：
 
-- `pyside6-deploy` 只有一个 `icon` 键，在 Windows 上会作为 `--windows-icon-from-ico` 传给
-  Nuitka，而 Linux 构建用的 SVG 不被接受。仓库内的 `deployment/purivox.ico` 由
-  `src/resources/purivox.svg` 渲染而来，含 16～256 共 7 种尺寸；改动图标时两者需要一起更新。
+- `pyside6-deploy` 只有一个 `icon` 键，在 Windows 上作为 `--windows-icon-from-ico`、在 macOS 上
+  作为 `--macos-app-icon` 传给 Nuitka，两者都不接受 Linux 构建用的 SVG。仓库里的
+  `deployment/purivox.ico`（16～256 共 7 种尺寸）和 `deployment/purivox.icns`（16～1024 共 10 个
+  条目）都由 `src/resources/purivox.svg` 渲染而来；改动图标时三者需要一起更新。不是 `.icns` 的图标
+  会被 Nuitka 交给 imageio 转换，而它既没装，也读不了 SVG。
+- macOS 应用包的名字和 Info.plist 都取自入口文件，入口是 `deployment/main.py`，不改就会得到一个在
+  程序坞和菜单栏里自称 main 的 `main.app`。派生的 spec 因此补上 `--output-folder-name`、
+  `--output-filename`、`--macos-app-name`、`--macos-signed-app-name`（按项目主页域名反写成
+  `top.wwchun.purivox`）和 `--macos-app-version`（读自 `src/app/version.py`）。
+- Nuitka 给应用包打的是 ad-hoc 签名，签名封存了它为 `Contents/Frameworks` 建立的符号链接，而
+  `pyside6-deploy` 往 `dist/` 复制时会跟随符号链接：每个 Qt framework 因此多存一份，封签也就此失效。
+  改过 `--output-folder-name` 之后它按原名找不到东西可复制（日志里会留一行「找不到可执行文件」），
+  `--keep-deployment-files` 则让 Nuitka 的原始产物留在 `deployment/deployment/`，由构建任务直接搬进
+  `dist/`，再用 `codesign --verify` 确认封签完好。
 
-共享规格里的 `--assume-yes-for-downloads` 对两个平台都必要：onefile 会下载打包引导所需的组件，
-缺少它 Nuitka 会停在确认提示上，Runner 会一直挂起。
+共享规格里的 `--assume-yes-for-downloads` 三个平台都要：onefile 会下载打包引导所需的组件，macOS 上
+Nuitka 还要下载 ccache；缺少它 Nuitka 会停在确认提示上，Runner 会一直挂起。
 
 `patchelf` 已从规格的 `packages` 中移除：`pyside6-deploy` 在 Linux 上本来就会自行安装它，而在
-Windows 上它会尝试安装一个只有 Linux wheel 的包并失败。
+Windows 和 macOS 上它会尝试安装一个只有 Linux wheel 的包并失败。
 
 ## 持续集成
 
-`.github/workflows/build.yml` 在 `main` 分支、`v*` 标签、Pull Request 和手动触发时运行。
-质量检查通过后，工作流并行构建 Linux 与 Windows 产物，再上传：
+构建步骤只写一遍，放在 `.github/workflows/common.yml` 里：它是一个 `workflow_call` 工作流，不带
+参数——发布用的产物必须和分支上构建出来的是同一种东西。两个触发器各自是一层薄壳，只负责调用它：
+`build.yml` 在 `main` 分支、Pull Request 和手动触发时跑，`release.yml` 在 `v*` 标签上跑，并在
+构建之后多一个 `publish` 任务。被调用的工作流和调用方共用同一次 run，因此 `publish` 能直接下载
+这次构建上传的工件。
+
+质量检查通过后，`common.yml` 并行构建 Linux、Windows 与 macOS 产物，再上传：
 
 - pytest JUnit XML；
 - 质量检查与构建命令的独立日志；
 - wheel、sdist 及 SHA-256 校验文件；
 - Linux 可执行文件的 tar.gz（用于保留可执行权限）、`.deb`、`.rpm` 及一份 SHA-256 校验文件；
-- Windows 可执行文件及 SHA-256 校验文件。
+- Windows 可执行文件及 SHA-256 校验文件；
+- macOS 应用包的 tar.gz（用于保留可执行权限和 framework 符号链接）及 SHA-256 校验文件。
 
 `.deb` 和 `.rpm` 由 `deployment/package-linux.sh` 用 fpm 从同一份暂存目录打出：可执行文件装到
 `/usr/bin/purivox`，另附 `deployment/purivox.desktop`、图标和许可证。onefile 自带 Python 与 Qt，
@@ -209,15 +230,17 @@ Windows 上它会尝试安装一个只有 Linux wheel 的包并失败。
 `pulseaudio-libs`）。onefile 的载荷附在可执行文件末尾，任何 strip 都会毁掉它，这也是不用发行版
 默认打包流程而交给 fpm 的原因。
 
-质量检查只在 Ubuntu 上运行：Windows 任务只产出可分发的二进制，不重复跑测试。
+质量检查只在 Ubuntu 上运行：Windows 与 macOS 任务只产出可分发的二进制，不重复跑测试。
 
 质量和构建任务都会生成 GitHub Job Summary，列出各项检查结果、缓存命中状态、日志和工件下载链接；
 即使前置步骤失败，也会尽可能写入已知结果。
 
 工件保留 14 天。uv 依赖缓存由 `uv.lock` 和 `pyproject.toml` 的内容共同失效，同时缓存 uv 管理的
 Python 3.14；不缓存 `.venv` 本身。Linux standalone 额外使用 ccache，根据锁文件、部署规格和
-Python 源码失效，上限为 2 GiB；Windows 任务按同一套键缓存 Nuitka 自带的编译缓存目录。
-同一分支有新提交时会取消旧任务，标签构建不会被取消。
+Python 源码失效，上限为 2 GiB；Windows 与 macOS 任务按同一套键缓存 Nuitka 自己的缓存目录——macOS
+Runner 上没有 ccache，Nuitka 会下载一份放进去，编译缓存也在那里。
+同一分支有新提交时会取消旧任务（`build.yml` 的 `cancel-in-progress`），标签构建不会被取消
+（`release.yml` 关掉了它——那是唯一能发布的一次运行）。
 
 Ubuntu Runner 会显式安装 Qt 加载所需的 `libegl1`。所有命令步骤都使用开启 `pipefail` 的 Bash，
 因此通过 `tee` 保存日志时不会掩盖原命令的失败状态。JUnit XML 仅在实际生成后上传。
@@ -235,10 +258,11 @@ git tag -a v1.0.0 -m "Purivox v1.0.0"
 git push origin main --follow-tags
 ```
 
-标签推送后 `build.yml` 会跑完整条流水线，`release` 任务再把这一次构建出来的产物发布出去：
-Windows 可执行文件，Linux 的 tar.gz、`.deb` 和 `.rpm`，wheel 与 sdist，以及重新生成的一份扁平
-`SHA256SUMS`（三个构建任务各自的校验文件里写的是 `dist/` 路径，在 Release 页面上无法对应，
-故不上传）。
+标签推送后 `release.yml` 会先跑完 `common.yml` 的整条流水线，`publish` 任务再把这一次构建出来的
+产物发布出去：
+Windows 可执行文件，Linux 的 tar.gz、`.deb` 和 `.rpm`，macOS 的 tar.gz，wheel 与 sdist，以及重新
+生成的一份扁平 `SHA256SUMS`（各构建任务自己的校验文件里写的是 `dist/` 路径，在 Release 页面上无法
+对应，故不上传）。
 
 质量检查的第一步会在标签构建里核对标签与 `src/app/version.py` 是否一致，不一致就在几分钟内失败，
 不会等编译跑完一个小时。Release 说明取自 `CHANGELOG.md` 中与标签同名的小节——应用内「检查更新」

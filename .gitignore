@@ -13,6 +13,7 @@ dist/
 *.onefile-build/
 deployment/deployment/
 pysidedeploy-windows.spec
+pysidedeploy-macos.spec
 models/*.onnx
 *.part
 *.tmp.wav

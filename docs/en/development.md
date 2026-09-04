@@ -205,6 +205,11 @@ The output is a single executable — `dist/Purivox.bin` on Linux and `dist/Puri
 Windows — containing Python, Qt, Fluent Widgets, SciPy, SoundFile, soxr, and ONNX Runtime, but not
 model weights.
 
+`mode = onefile` has no effect on macOS: `pyside6-deploy` always passes `--standalone
+--macos-create-app-bundle` there, and the output is the application bundle `dist/Purivox.app` with
+the same contents. CI builds arm64 only, because the lockfile's ONNX Runtime has no other macOS
+wheel.
+
 Onefile unpacks into a temporary directory on every run, so it needs matching scratch space. The
 startup cost is modest in practice: the 126 MB Linux build completes a full `--selftest` run in
 about 3.1 seconds, with no meaningful difference between a cold and a warm start. In addition to
@@ -212,26 +217,45 @@ automated testing, launch the executable before release and verify page navigati
 audio decoding, task cancellation, and output preview — in particular that resource files are
 still found under the unpacked path.
 
-The Windows build reuses the same `pysidedeploy.spec`, but the icon has to be rewritten, so CI
-derives a `pysidedeploy-windows.spec` from it (that file is not committed):
+The Windows and macOS builds reuse the same `pysidedeploy.spec`, each deriving its own rewritten
+copy in CI (`pysidedeploy-windows.spec` and `pysidedeploy-macos.spec`, neither committed):
 
 - `pyside6-deploy` carries a single `icon` key and hands it to Nuitka as
-  `--windows-icon-from-ico` on Windows, which will not accept the SVG the Linux build uses. The
-  committed `deployment/purivox.ico` is rendered from `src/resources/purivox.svg` at seven sizes
-  from 16 to 256 pixels; changing the icon means updating both.
+  `--windows-icon-from-ico` on Windows and `--macos-app-icon` on macOS, neither of which accepts
+  the SVG the Linux build uses. The committed `deployment/purivox.ico` (seven sizes from 16 to 256
+  pixels) and `deployment/purivox.icns` (ten entries from 16 to 1024) are both rendered from
+  `src/resources/purivox.svg`; changing the icon means updating all three. An icon that is not
+  already `.icns` goes to imageio, which is neither installed nor able to read SVG.
+- A macOS bundle takes its name and its Info.plist from the entry point, which is
+  `deployment/main.py`, so an untouched build produces a `main.app` calling itself main in the dock
+  and the menu bar. The derived spec therefore adds `--output-folder-name`, `--output-filename`,
+  `--macos-app-name`, `--macos-signed-app-name` (the project homepage domain reversed,
+  `top.wwchun.purivox`) and `--macos-app-version` (read from `src/app/version.py`).
+- Nuitka signs the bundle ad-hoc, and the seal covers the symlinks it made for
+  `Contents/Frameworks`; `pyside6-deploy`'s copy into `dist/` follows those symlinks, which stores
+  every Qt framework twice and invalidates the seal. With `--output-folder-name` changed it finds
+  nothing under the name it copies from (the log keeps one "executable not found" line), and
+  `--keep-deployment-files` leaves Nuitka's own output in `deployment/deployment/` for the build
+  job to move into `dist/` and check with `codesign --verify`.
 
-`--assume-yes-for-downloads` in the shared specification is required on both platforms: onefile
-downloads the components its bootstrap needs, and without the flag Nuitka stops on a confirmation
-prompt and hangs the runner.
+`--assume-yes-for-downloads` in the shared specification is required on all three platforms:
+onefile downloads the components its bootstrap needs and Nuitka downloads ccache on macOS, and
+without the flag Nuitka stops on a confirmation prompt and hangs the runner.
 
 `patchelf` was removed from the specification's `packages`: `pyside6-deploy` already installs it
-itself on Linux, and on Windows it would try to install a package that only publishes Linux
-wheels, and fail.
+itself on Linux, and on Windows and macOS it would try to install a package that only publishes
+Linux wheels, and fail.
 
 ## Continuous Integration
 
-`.github/workflows/build.yml` runs on the `main` branch, `v*` tags, pull requests, and manual
-dispatch. After the quality gates pass, the workflow builds the Linux and Windows outputs in
+The build steps are written once, in `.github/workflows/common.yml`: a `workflow_call` workflow
+that takes no parameters, because what a release ships must not be built differently from what a
+branch builds. Each trigger is a thin shell over it — `build.yml` on the `main` branch, pull
+requests, and manual dispatch; `release.yml` on `v*` tags, with one `publish` job after the build.
+A called workflow shares the run of its caller, so `publish` downloads the very artifacts that run
+uploaded.
+
+After the quality gates pass, `common.yml` builds the Linux, Windows, and macOS outputs in
 parallel, then uploads:
 
 - Pytest JUnit XML;
@@ -239,7 +263,9 @@ parallel, then uploads:
 - The wheel, source distribution, and their SHA-256 checksum files;
 - A tarball of the Linux executable, which preserves its executable bit, a `.deb`, an `.rpm`, and
   one SHA-256 checksum file covering them;
-- The Windows executable plus its SHA-256 checksum.
+- The Windows executable plus its SHA-256 checksum;
+- A tarball of the macOS application bundle, which preserves its executable bits and framework
+  symlinks, plus its SHA-256 checksum.
 
 `deployment/package-linux.sh` builds the `.deb` and the `.rpm` with fpm from one staged tree: the
 executable lands at `/usr/bin/purivox` next to `deployment/purivox.desktop`, the icon, and the
@@ -249,8 +275,8 @@ Qt still loads from the distribution (`libegl1` and `libpulse0` on deb, `mesa-li
 destroys it — which is why the packages are built this way rather than through a distribution's
 own tooling.
 
-The quality gates run on Ubuntu only: the Windows job produces the distributable binary and does
-not repeat the test suite.
+The quality gates run on Ubuntu only: the Windows and macOS jobs produce the distributable
+binaries and do not repeat the test suite.
 
 Both quality and build jobs write a GitHub Job Summary listing gate results, cache-hit status,
 logs, and artifact links. Even if an earlier step fails, the jobs write as much known information
@@ -260,8 +286,11 @@ Artifacts are retained for 14 days. The uv dependency cache is invalidated by th
 `uv.lock` and `pyproject.toml`, and also caches the Python 3.14 installation managed by uv; the
 `.venv` directory itself is not cached. Linux standalone builds additionally use ccache,
 invalidated by the lockfile, deployment specification, and Python source, with a 2 GiB limit; the
-Windows job caches Nuitka's own compiler cache directory under the same key scheme. A
-new commit on the same branch cancels an older run, while tag builds are never cancelled.
+Windows and macOS jobs cache Nuitka's own cache directory under the same key scheme — a macOS
+runner carries no ccache, so Nuitka downloads one in there, next to the compilation cache. A
+new commit on the same branch cancels an older run (`build.yml` sets `cancel-in-progress`), while
+tag builds are never cancelled — `release.yml` turns it off, that run being the only one that can
+publish.
 
 The Ubuntu runner explicitly installs `libegl1`, which Qt requires for loading. Every command step
 uses Bash with `pipefail`, so piping output through `tee` does not hide the command's failure
@@ -280,10 +309,11 @@ git tag -a v1.0.0 -m "Purivox v1.0.0"
 git push origin main --follow-tags
 ```
 
-Pushing the tag runs the whole pipeline, and the `release` job publishes what that run built: the
-Windows executable, the Linux tarball, `.deb` and `.rpm`, the wheel and source distribution, and
-one flat `SHA256SUMS` regenerated over them (the three per-job checksum files name `dist/` paths
-that do not resolve on a release page, so they are not uploaded).
+Pushing the tag has `release.yml` run all of `common.yml` first, and its `publish` job then
+publishes what that run built: the
+Windows executable, the Linux tarball, `.deb` and `.rpm`, the macOS tarball, the wheel and source
+distribution, and one flat `SHA256SUMS` regenerated over them (each per-job checksum file names
+`dist/` paths that do not resolve on a release page, so they are not uploaded).
 
 The first quality-gate step checks the tag against `src/app/version.py` on a tag build, so a
 mismatch fails within minutes instead of after an hour of compiling. Release notes come from the
