@@ -92,5 +92,9 @@ if [[ -z "$(git -C "$clone" status --porcelain)" ]]; then
   exit 0
 fi
 git -C "$clone" commit --quiet -m "purivox-bin ${version}-1"
-git -C "$clone" push --quiet
+# The AUR accepts `master` and declines every other branch, while a clone of a
+# repository that does not exist yet leaves HEAD on whatever this machine calls
+# its default branch. Naming the remote branch keeps that local setting out of
+# it.
+git -C "$clone" push --quiet origin HEAD:master
 echo "==> pushed purivox-bin ${version}-1"
