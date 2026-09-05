@@ -687,7 +687,7 @@
     </message>
     <message>
         <source>crash_message</source>
-        <translation>{error} — 日志已保存到 {path} 并为你打开，提交 Issue 时请附上这个文件。</translation>
+        <translation>{error} — 日志已保存到 {path} 并为你打开。点「提交 Issue」会把日志末尾复制到剪贴板，粘贴到表单里即可。</translation>
     </message>
     <message>
         <source>crash_report</source>
@@ -696,6 +696,10 @@
     <message>
         <source>crash_no_log</source>
         <translation>（本次运行没有日志文件）</translation>
+    </message>
+    <message>
+        <source>crash_log_paste</source>
+        <translation>日志已复制到剪贴板：点进这一栏，Ctrl+A 全选后 Ctrl+V 粘贴覆盖本行。</translation>
     </message>
 </context>
 </TS>

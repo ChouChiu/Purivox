@@ -1,0 +1,121 @@
+name: Bug 反馈 / Bug report
+description: 报告一个可复现的问题 / Report a reproducible problem
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        中文或英文都可以，写你顺手的那个。
+        Chinese or English — whichever you write faster.
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: 提交之前 / Before you file
+      options:
+        - label: 我搜索过既有 issue，没有找到相同的问题 / I searched the existing issues and found no duplicate
+          required: true
+        - label: 我用的是最新发布的版本，或者确认过问题在最新版仍然存在 / I am on the latest release, or have confirmed the problem is still there on it
+          required: false
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: 问题描述 / What happened
+      description: 实际发生了什么，以及你期望发生什么。/ What actually happened, and what you expected instead.
+      placeholder: |
+        点击「开始」后进度停在 40%，界面没有报错也没有继续。
+        The run stops at 40% with no error and never continues.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤 / Steps to reproduce
+      description: |
+        一步一步写，包括你用的参数，例如「打开单曲人声提取 → 输入 live.wav、伴奏 inst.flac →
+        强度 75、Sigma 3、开启自动对齐 → 点开始」。
+        One step per line, including the settings you used — "open Single Vocal Isolation, pick
+        live.wav and inst.flac, strength 75, sigma 3, auto-align on, press Start".
+      value: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Purivox 版本 / Purivox version
+      description: 设置页会显示当前版本。/ The settings page shows the running version.
+      placeholder: "1.0.0"
+    validations:
+      required: true
+
+  - type: input
+    id: os
+    attributes:
+      label: 操作系统 / Operating system
+      placeholder: "Windows 11 24H2 / Arch Linux 6.17 / macOS 15.2 (arm64)"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: build
+    attributes:
+      label: 运行方式 / How you run it
+      options:
+        - 桌面版图形界面 / Desktop GUI
+        - 命令行 / Command line
+        - 浏览器版 / Browser build
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: 涉及哪一部分 / Which part
+      description: 不确定就留空。/ Leave it empty if you are not sure.
+      multiple: true
+      options:
+        - 单曲人声提取 / Single vocal isolation
+        - 整场录音 / Full stage
+        - AI 分离 / AI separation
+        - 试听与音频信息 / Preview and audio statistics
+        - 界面、主题与语言 / Interface, theme and language
+        - 安装、打包与更新 / Install, packaging and updates
+
+  - type: textarea
+    id: audio
+    attributes:
+      label: 音频信息 / About the audio
+      description: |
+        采样率、位深、时长、声道数和容器格式。请不要上传有版权的音频。
+        Sample rate, bit depth, duration, channel count and container. Please do not upload copyrighted audio.
+      placeholder: |
+        输入 / Input: 44.1 kHz, 24-bit, 3:52, stereo, WAV
+        伴奏 / Accompaniment: 48 kHz, 16-bit, 3:50, stereo, FLAC
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: 日志 / Log
+      description: |
+        从应用的崩溃提示跳转过来的话，当天日志已经复制到剪贴板了：点进下面这一栏，Ctrl+A 全选、
+        Ctrl+V 粘贴覆盖预填的那行提示就行。
+
+        If the app's crash dialog brought you here, that day's log is already on your clipboard:
+        click the field below, select all with Ctrl+A, and paste over the prefilled line.
+
+        桌面版每次运行都会把日志追加到 `<应用数据目录>/Purivox/Purivox/logs/YYYY-MM-DD.log`：
+        Windows 是 `%LOCALAPPDATA%`，macOS 是 `~/Library/Application Support`，Linux 是 `~/.local/share`。
+        出现未处理的错误时应用会自动打开当天的日志。贴上出错前后几十行即可，注意抹掉你不想公开的路径。
+
+        Every desktop run appends to `<app data>/Purivox/Purivox/logs/YYYY-MM-DD.log` — `%LOCALAPPDATA%`
+        on Windows, `~/Library/Application Support` on macOS, `~/.local/share` on Linux. An unhandled
+        error opens that day's file for you. A few dozen lines around the failure is plenty; redact any
+        path you would rather not publish.
+      render: text

@@ -687,7 +687,7 @@
     </message>
     <message>
         <source>crash_message</source>
-        <translation>{error} — ログを {path} に保存して開きました。Issue にこのファイルを添付してください。</translation>
+        <translation>{error} — ログを {path} に保存して開きました。「Issue を報告」を押すとログの末尾をクリップボードにコピーします。フォームに貼り付けてください。</translation>
     </message>
     <message>
         <source>crash_report</source>
@@ -696,6 +696,10 @@
     <message>
         <source>crash_no_log</source>
         <translation>（今回の実行にログファイルはありません）</translation>
+    </message>
+    <message>
+        <source>crash_log_paste</source>
+        <translation>ログをクリップボードにコピーしました。この欄をクリックし、Ctrl+A で全選択してから Ctrl+V でこの行に上書きしてください。</translation>
     </message>
 </context>
 </TS>

@@ -3,9 +3,13 @@
 PySide6 prints an uncaught exception and lets the event loop carry on, so this
 is a report rather than a shutdown: the traceback goes into today's log file,
 that file opens in whatever the desktop reads text with, and the dialog points
-the user at the issue form.  Nothing about the exception travels in the issue
-URL - a message can carry a home directory, and the user pastes what they want
-from the file they now have in front of them.
+the user at the issue form.
+
+What travels in the issue URL is only what cannot identify the reporter - the
+version, the platform, and the exception's type.  Not its message and not the
+log: both carry absolute paths, and a URL is in the browser's history before
+anyone has read it.  The log goes through the clipboard instead, which costs no
+URL length, and only once the user has chosen to report.
 
 Only Python exceptions arrive here.  A native crash or a `qFatal` ends the
 process without unwinding; the Qt message handler has already put whatever Qt
@@ -18,12 +22,14 @@ import logging
 import sys
 from pathlib import Path
 from types import TracebackType
+from urllib.parse import urlencode
 
-from PySide6.QtCore import QUrl
-from PySide6.QtGui import QDesktopServices
+from PySide6.QtCore import QSysInfo, QUrl
+from PySide6.QtGui import QDesktopServices, QGuiApplication
 from PySide6.QtWidgets import QApplication, QWidget
 from qfluentwidgets import MessageBox
 
+from app.version import __version__
 from shared.branding import REPOSITORY_URL
 from shared.i18n import tr
 from shared.logging import log_file_path
@@ -31,6 +37,17 @@ from shared.logging import log_file_path
 logger = logging.getLogger(__name__)
 
 ISSUE_FORM_URL = f"{REPOSITORY_URL}/issues/new"
+# Named explicitly: with issue templates in the repository a bare `issues/new`
+# lands on the template chooser, and a crash already knows which form it wants.
+ISSUE_TEMPLATE = "bug_report.yml"
+# Both must match `.github/ISSUE_TEMPLATE/bug_report.yml`: a field is filled by
+# its `id`, and a dropdown by the text of the option.  test_crash_handler.py
+# reads the file and holds these to it.
+ISSUE_BUILD_OPTION = "桌面版图形界面 / Desktop GUI"
+ISSUE_LOG_FIELD = "logs"
+# Enough to cover a run that failed late, and short enough to stay a comment
+# rather than an attachment.
+LOG_TAIL_LINES = 200
 
 _previous_excepthook = sys.excepthook
 _reported = False
@@ -60,10 +77,43 @@ def report_crash(
     path = log_file_path()
     if path is not None:
         QDesktopServices.openUrl(QUrl.fromLocalFile(str(path)))
-    _show_report(f"{exc_type.__name__}: {exc}", path)
+    _show_report(exc_type.__name__, f"{exc_type.__name__}: {exc}", path)
 
 
-def _show_report(summary: str, path: Path | None) -> None:
+def issue_url(exception_name: str) -> str:
+    """The bug form, carrying the little that describes the build, not the user.
+
+    Encoded by `urlencode` rather than `QUrlQuery`, which leaves `+` alone: a
+    shortcut written `Ctrl+A` would reach the form as `Ctrl A`.
+    """
+
+    fields = {
+        "template": ISSUE_TEMPLATE,
+        "title": f"[Bug] {exception_name}",
+        "version": __version__,
+        "os": f"{QSysInfo.prettyProductName()} ({QSysInfo.currentCpuArchitecture()})",
+        "build": ISSUE_BUILD_OPTION,
+        ISSUE_LOG_FIELD: tr("crash_log_paste"),
+    }
+    return f"{ISSUE_FORM_URL}?{urlencode(fields)}"
+
+
+def copy_log_tail(path: Path) -> bool:
+    """Put the end of the log on the clipboard for the user to paste."""
+
+    clipboard = QGuiApplication.clipboard()
+    if clipboard is None:
+        return False
+    try:
+        lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+        logger.warning("cannot read %s to copy it", path, exc_info=True)
+        return False
+    clipboard.setText("\n".join(lines[-LOG_TAIL_LINES:]))
+    return True
+
+
+def _show_report(exception_name: str, summary: str, path: Path | None) -> None:
     parent = _dialog_parent()
     if parent is None:
         # Before the window exists, or after it is gone, the log file is the
@@ -76,8 +126,13 @@ def _show_report(summary: str, path: Path | None) -> None:
     )
     dialog.yesButton.setText(tr("crash_report"))
     dialog.cancelButton.setText(tr("update_later"))
-    if dialog.exec():
-        QDesktopServices.openUrl(QUrl(ISSUE_FORM_URL))
+    if not dialog.exec():
+        return
+    # Only now: taking over the clipboard is rude to someone who chose to
+    # dismiss the dialog and carry on.
+    if path is not None:
+        copy_log_tail(path)
+    QDesktopServices.openUrl(QUrl(issue_url(exception_name)))
 
 
 def _dialog_parent() -> QWidget | None:

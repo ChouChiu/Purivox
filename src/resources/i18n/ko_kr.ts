@@ -687,7 +687,7 @@
     </message>
     <message>
         <source>crash_message</source>
-        <translation>{error} — 로그를 {path}에 저장하고 열었습니다. 이슈에 이 파일을 첨부해 주세요.</translation>
+        <translation>{error} — 로그를 {path}에 저장하고 열었습니다. '이슈 보고'를 누르면 로그 끝부분을 클립보드에 복사합니다. 양식에 붙여넣으세요.</translation>
     </message>
     <message>
         <source>crash_report</source>
@@ -696,6 +696,10 @@
     <message>
         <source>crash_no_log</source>
         <translation>(이번 실행에는 로그 파일이 없습니다)</translation>
+    </message>
+    <message>
+        <source>crash_log_paste</source>
+        <translation>로그를 클립보드에 복사했습니다. 이 칸을 클릭한 뒤 Ctrl+A로 전체 선택하고 Ctrl+V로 이 줄을 덮어쓰세요.</translation>
     </message>
 </context>
 </TS>

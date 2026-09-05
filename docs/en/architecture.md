@@ -252,7 +252,11 @@ using the original timeline. Cancellation exceptions must never be swallowed.
 An exception nobody caught reaches `app/crash_handler.py`. PySide6 prints an uncaught exception and
 lets the event loop carry on, so this is a report rather than a shutdown: the traceback goes into
 that day's log at CRITICAL, the file opens in whatever the desktop reads text with, and a dialog
-points the user at the issue form. Nothing about the exception travels in that URL, and one run
-raises one dialog - an exception thrown from `paintEvent` repeats on every frame. A native crash or
+points the user at the issue form. That URL carries only what cannot identify the reporter - the
+version, the platform, and the exception's type. Not its message and not the log: both carry
+absolute paths, and a URL is in the browser's history before anyone has read it. The log goes
+through the clipboard instead, which costs no URL length and happens only once the user has chosen
+to report. One run raises one dialog - an exception thrown from `paintEvent` repeats on every
+frame. A native crash or
 a `qFatal` never gets here, but the Qt message handler has already put what Qt said about it in the
 same file.
