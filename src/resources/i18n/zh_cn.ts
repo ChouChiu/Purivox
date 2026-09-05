@@ -681,5 +681,21 @@
         <source>shortcut_hint</source>
         <translation>快捷键：Ctrl+O 选择文件 · Ctrl+Enter 开始 · Esc 取消 · F5 识别歌曲</translation>
     </message>
+    <message>
+        <source>crash_title</source>
+        <translation>程序遇到未处理的错误</translation>
+    </message>
+    <message>
+        <source>crash_message</source>
+        <translation>{error} — 日志已保存到 {path} 并为你打开，提交 Issue 时请附上这个文件。</translation>
+    </message>
+    <message>
+        <source>crash_report</source>
+        <translation>提交 Issue</translation>
+    </message>
+    <message>
+        <source>crash_no_log</source>
+        <translation>（本次运行没有日志文件）</translation>
+    </message>
 </context>
 </TS>

@@ -20,12 +20,12 @@ from PySide6.QtNetwork import (
     QNetworkRequest,
 )
 
-from shared.branding import user_agent
+from shared.branding import REPOSITORY, REPOSITORY_URL, user_agent
 
 logger = logging.getLogger(__name__)
 
-RELEASES_API = "https://api.github.com/repos/ChouChiu/Purivox/releases/latest"
-RELEASES_PAGE = "https://github.com/ChouChiu/Purivox/releases/latest"
+RELEASES_API = f"https://api.github.com/repos/{REPOSITORY}/releases/latest"
+RELEASES_PAGE = f"{REPOSITORY_URL}/releases/latest"
 _TRANSFER_TIMEOUT_MS = 15_000
 _LEADING_NUMBER = re.compile(r"\d+")
 

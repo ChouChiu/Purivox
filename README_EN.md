@@ -40,6 +40,8 @@ Vocal Isolation, and their results should not be compared directly.
 - In-app result preview and audio statistics
 - The settings page checks for new releases: an update opens one dialog
   with its changelog and a link to the release page — nothing updates itself
+- Every run appends to a log file named after the date; an unhandled exception opens
+  that day's log and offers the issue form
 - The common actions have shortcuts: `Ctrl+O` to choose an input, `Ctrl+Return` to
   start, `F5` to identify songs, `Esc` to cancel, `Ctrl+P` to play/pause the preview
 - GUI and CLI reuse the corresponding MR Remove and AI separation task pipelines

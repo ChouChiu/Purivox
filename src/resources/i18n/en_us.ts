@@ -681,5 +681,21 @@ Background: {background}</translation>
         <source>shortcut_hint</source>
         <translation>Shortcuts: Ctrl+O choose files · Ctrl+Enter start · Esc cancel · F5 find songs</translation>
     </message>
+    <message>
+        <source>crash_title</source>
+        <translation>Something went wrong</translation>
+    </message>
+    <message>
+        <source>crash_message</source>
+        <translation>{error} - the log was saved to {path} and opened for you; please attach it to the issue.</translation>
+    </message>
+    <message>
+        <source>crash_report</source>
+        <translation>Report an issue</translation>
+    </message>
+    <message>
+        <source>crash_no_log</source>
+        <translation>(this run has no log file)</translation>
+    </message>
 </context>
 </TS>

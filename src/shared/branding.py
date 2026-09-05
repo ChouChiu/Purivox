@@ -7,6 +7,10 @@ if TYPE_CHECKING:
 
 APPLICATION_NAME = "Purivox"
 ORGANIZATION_NAME = "Purivox"
+# Every link back to the project - releases, the issue form a crash offers -
+# is built from this one slug rather than spelled out again per feature.
+REPOSITORY = "ChouChiu/Purivox"
+REPOSITORY_URL = f"https://github.com/{REPOSITORY}"
 
 _ICON_SIZES = (16, 24, 32, 48, 64, 128, 256)
 

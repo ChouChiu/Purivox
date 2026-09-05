@@ -81,6 +81,7 @@ markers = ["slow: resource-intensive acceptance tests", "model: requires local O
 files = [
   "deployment/main.py",
   "src/app/__init__.py",
+  "src/app/crash_handler.py",
   "src/app/full_stage_processing.py",
   "src/app/job_presenter.py",
   "src/app/job_runner.py",

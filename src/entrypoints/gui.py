@@ -9,6 +9,7 @@ from contextlib import redirect_stdout
 from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import QApplication
 
+from app.crash_handler import install_crash_handler
 from app.version import __version__
 from shared.branding import APPLICATION_NAME, ORGANIZATION_NAME, application_icon
 from shared.i18n import install_language
@@ -18,12 +19,15 @@ logger = logging.getLogger(__name__)
 
 
 def run_gui(selftest: bool = False) -> int:
-    configure_logging()
     app = QApplication.instance() or QApplication(sys.argv[:1])
     app.setApplicationName(APPLICATION_NAME)
     app.setApplicationVersion(__version__)
     app.setOrganizationName(ORGANIZATION_NAME)
     app.setWindowIcon(application_icon())
+    # After the identity, because QStandardPaths derives the data directory the
+    # log file lives in from the application and organisation names.
+    configure_logging(log_to_file=True)
+    install_crash_handler()
     # QFluentWidgets prints a Pro advertisement while its package is imported.
     # Keep stdout reserved for CLI result data even in standalone builds.
     with redirect_stdout(io.StringIO()):

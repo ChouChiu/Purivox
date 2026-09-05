@@ -196,6 +196,9 @@ flowchart LR
 - `shared.i18n.tr(key, **values)` 通过 `QCoreApplication.translate()` 取当前安装语言的文本，再填充
   `{name}` 占位符；未知键返回键名本身。语言是应用级状态，任务对象不再携带语言字段。
 - 日志使用单行格式 `日期 时间 [级别] 模块: 消息`，Qt 与 FFmpeg 消息也会进入统一日志系统。
+- 桌面端每次运行除 stderr 外还追加写入 `log_directory()/YYYY-MM-DD.log`（应用数据目录下的
+  `logs/`），同一天的多次运行共用一个文件，超过 `LOG_RETENTION_DAYS` 天的文件在启动时删除。
+  浏览器版没有可写目录，因此文件日志由入口显式开启而非默认打开。
 - GUI 切换语言时，各页面通过 `retranslate()` 更新控件文本和下拉列表。
 - 各处理管线通过 `shared.progress.report_progress()` 统一翻译并生成 `ProgressEvent`，
   避免每个功能重复拼装进度协议。
@@ -207,3 +210,5 @@ flowchart LR
 工作线程信号显示错误提示。
 
 时间对齐失败是少数允许降级的情况：处理管线记录警告并使用原始时间线继续运行。取消异常不得被忽略。
+
+未被任何人接住的异常由 `app/crash_handler.py` 处理：PySide6 只打印回溯并让事件循环继续，因此它是一次上报而不是退出——回溯以 CRITICAL 写入当天日志，日志文件用系统默认程序打开，对话框把用户引向 Issue 页面。异常文本不会进入 Issue 链接，一次运行只弹一个对话框（`paintEvent` 里的异常每帧都会重来）。原生崩溃和 `qFatal` 不经过这里，但 Qt 消息处理器已经把它们写进了同一个日志文件。

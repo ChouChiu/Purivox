@@ -681,5 +681,21 @@
         <source>shortcut_hint</source>
         <translation>단축키: Ctrl+O 파일 선택 · Ctrl+Enter 시작 · Esc 취소 · F5 곡 검색</translation>
     </message>
+    <message>
+        <source>crash_title</source>
+        <translation>예기치 않은 오류가 발생했습니다</translation>
+    </message>
+    <message>
+        <source>crash_message</source>
+        <translation>{error} — 로그를 {path}에 저장하고 열었습니다. 이슈에 이 파일을 첨부해 주세요.</translation>
+    </message>
+    <message>
+        <source>crash_report</source>
+        <translation>이슈 보고</translation>
+    </message>
+    <message>
+        <source>crash_no_log</source>
+        <translation>(이번 실행에는 로그 파일이 없습니다)</translation>
+    </message>
 </context>
 </TS>

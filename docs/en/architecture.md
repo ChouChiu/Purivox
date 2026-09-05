@@ -230,6 +230,10 @@ lane, and status, preview and audio data in the secondary one.
   Language is application state, so job objects no longer carry a language field.
 - Logs use the single-line format `date time [level] module: message`; Qt and FFmpeg messages also
   enter the unified logging system.
+- On the desktop every run also appends to `log_directory()/YYYY-MM-DD.log` (a `logs/` directory
+  under the application data location) alongside stderr, so the runs of one day share one file and
+  files older than `LOG_RETENTION_DAYS` are removed at startup. The browser build has nowhere to
+  write, which is why file logging is asked for by the entry points rather than being the default.
 - When the GUI language changes, each page updates its widget text and combo boxes through
   `retranslate()`.
 - Every processing pipeline uses `shared.progress.report_progress()` to translate and create
@@ -244,3 +248,11 @@ worker-thread signals.
 
 Alignment failure is one of the few allowed fallbacks: the pipeline logs a warning and continues
 using the original timeline. Cancellation exceptions must never be swallowed.
+
+An exception nobody caught reaches `app/crash_handler.py`. PySide6 prints an uncaught exception and
+lets the event loop carry on, so this is a report rather than a shutdown: the traceback goes into
+that day's log at CRITICAL, the file opens in whatever the desktop reads text with, and a dialog
+points the user at the issue form. Nothing about the exception travels in that URL, and one run
+raises one dialog - an exception thrown from `paintEvent` repeats on every frame. A native crash or
+a `qFatal` never gets here, but the Qt message handler has already put what Qt said about it in the
+same file.

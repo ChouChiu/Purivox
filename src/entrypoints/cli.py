@@ -80,6 +80,7 @@ def main(argv: list[str] | None = None) -> int:
     app.setApplicationName(APPLICATION_NAME)
     app.setApplicationVersion(__version__)
     app.setOrganizationName(ORGANIZATION_NAME)
+    configure_logging(log_to_file=True)
     with redirect_stdout(io.StringIO()):
         from shared.config import cfg, load_config
 

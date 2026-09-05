@@ -681,5 +681,21 @@
         <source>shortcut_hint</source>
         <translation>ショートカット：Ctrl+O ファイル選択 · Ctrl+Enter 開始 · Esc キャンセル · F5 曲を検出</translation>
     </message>
+    <message>
+        <source>crash_title</source>
+        <translation>予期しないエラーが発生しました</translation>
+    </message>
+    <message>
+        <source>crash_message</source>
+        <translation>{error} — ログを {path} に保存して開きました。Issue にこのファイルを添付してください。</translation>
+    </message>
+    <message>
+        <source>crash_report</source>
+        <translation>Issue を報告</translation>
+    </message>
+    <message>
+        <source>crash_no_log</source>
+        <translation>（今回の実行にログファイルはありません）</translation>
+    </message>
 </context>
 </TS>
