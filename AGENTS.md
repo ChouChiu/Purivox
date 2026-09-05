@@ -1,6 +1,6 @@
 # Repository Guidelines
 
-Purivox v1.0.0 (`purivox`): vocal isolation from stage and live recordings. Python 3.11+, PySide6 +
+Purivox v1.0.1 (`purivox`): vocal isolation from stage and live recordings. Python 3.11+, PySide6 +
 PySide6-Fluent-Widgets, AGPL-3.0-or-later. `CLAUDE.md` symlinks here.
 
 ## Working Rules

@@ -1,7 +1,7 @@
 {
 	"name": "purivox-web",
 	"private": true,
-	"version": "1.0.0",
+	"version": "1.0.1",
 	"type": "module",
 	"description": "Purivox in the browser: the desktop pipelines run under Pyodide",
 	"scripts": {
