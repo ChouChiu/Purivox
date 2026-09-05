@@ -104,18 +104,24 @@ body:
     attributes:
       label: 日志 / Log
       description: |
-        从应用的崩溃提示跳转过来的话，当天日志已经复制到剪贴板了：点进下面这一栏，Ctrl+A 全选、
-        Ctrl+V 粘贴覆盖预填的那行提示就行。
+        从应用的崩溃提示跳转过来的话，日志末尾已经复制到剪贴板了，替换掉下面代码块里那行占位文字即可。
 
-        If the app's crash dialog brought you here, that day's log is already on your clipboard:
-        click the field below, select all with Ctrl+A, and paste over the prefilled line.
-
-        桌面版每次运行都会把日志追加到 `<应用数据目录>/Purivox/Purivox/logs/YYYY-MM-DD.log`：
+        手动来的话：桌面版每次运行都会把日志追加到 `<应用数据目录>/Purivox/Purivox/logs/YYYY-MM-DD.log`，
         Windows 是 `%LOCALAPPDATA%`，macOS 是 `~/Library/Application Support`，Linux 是 `~/.local/share`。
-        出现未处理的错误时应用会自动打开当天的日志。贴上出错前后几十行即可，注意抹掉你不想公开的路径。
+        贴出错前后几十行即可。粘贴前请自己读一遍，删掉不想公开的路径。
 
-        Every desktop run appends to `<app data>/Purivox/Purivox/logs/YYYY-MM-DD.log` — `%LOCALAPPDATA%`
-        on Windows, `~/Library/Application Support` on macOS, `~/.local/share` on Linux. An unhandled
-        error opens that day's file for you. A few dozen lines around the failure is plenty; redact any
-        path you would rather not publish.
-      render: text
+        If the app's crash dialog brought you here, the end of the log is already on your clipboard —
+        replace the placeholder line inside the code block below with it.
+
+        Filing by hand: every desktop run appends to `<app data>/Purivox/Purivox/logs/YYYY-MM-DD.log` —
+        `%LOCALAPPDATA%` on Windows, `~/Library/Application Support` on macOS, `~/.local/share` on
+        Linux. A few dozen lines around the failure is plenty. Read them over before pasting and
+        remove any path you would rather not publish.
+      value: |
+        <details open><summary>Log</summary>
+
+        ```text
+        [在此处粘贴日志 / paste the log here]
+        ```
+
+        </details>

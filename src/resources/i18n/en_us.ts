@@ -687,7 +687,7 @@ Background: {background}</translation>
     </message>
     <message>
         <source>crash_message</source>
-        <translation>{error} - the log was saved to {path} and opened for you. Reporting an issue copies its last lines to the clipboard; paste them into the form.</translation>
+        <translation>{error} - the log was saved to {path} and opened for you. Reporting an issue copies its last lines to the clipboard; paste them into the form's log block.</translation>
     </message>
     <message>
         <source>crash_report</source>
@@ -696,10 +696,6 @@ Background: {background}</translation>
     <message>
         <source>crash_no_log</source>
         <translation>(this run has no log file)</translation>
-    </message>
-    <message>
-        <source>crash_log_paste</source>
-        <translation>The log is on your clipboard: click this field, select all with Ctrl+A, then paste with Ctrl+V over this line.</translation>
     </message>
 </context>
 </TS>

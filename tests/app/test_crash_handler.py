@@ -136,11 +136,9 @@ def test_the_issue_url_carries_the_build_and_not_the_reporter(crash, monkeypatch
     assert query["title"] == ["[Bug] RuntimeError"]
     assert query["version"] == [__version__]
     assert query["build"] == [crash_handler.ISSUE_BUILD_OPTION]
-    assert query[crash_handler.ISSUE_LOG_FIELD] == [tr("crash_log_paste")]
     assert query["os"] and query["os"][0]
-    # Neither the exception message nor the log travels in the URL.
+    # The exception's message is the part most likely to be a path.
     assert "/home/someone" not in crash[1]
-    assert str(log) not in crash[1]
 
 
 def test_reporting_puts_the_log_tail_on_the_clipboard(crash, monkeypatch, tmp_path):
@@ -173,6 +171,19 @@ def test_the_prefilled_fields_exist_in_the_issue_template():
     """The form fills by field id and a dropdown by option text; both are literals here."""
     template = TEMPLATE.read_text(encoding="utf-8")
 
-    for field in ("version", "os", "build", crash_handler.ISSUE_LOG_FIELD):
+    for field in ("version", "os", "build"):
         assert f"id: {field}\n" in template, f"no {field} field in {TEMPLATE.name}"
     assert f"- {crash_handler.ISSUE_BUILD_OPTION}\n" in template
+
+
+def test_the_log_field_writes_its_own_block_instead_of_using_render():
+    """`render:` would wrap the submission in a code block on its own, but a
+    prefilled rendered text area cannot be edited - and this field arrives
+    prefilled, from its own `value:`.  So the block is spelled out there."""
+    fields = TEMPLATE.read_text(encoding="utf-8").split("  - type: ")
+    logs = next(field for field in fields if "id: logs\n" in field)
+    lines = [line.strip() for line in logs.splitlines()]
+
+    assert "render:" not in logs
+    assert "<details open><summary>Log</summary>" in lines
+    assert "```text" in lines

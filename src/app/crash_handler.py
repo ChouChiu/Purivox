@@ -5,11 +5,15 @@ is a report rather than a shutdown: the traceback goes into today's log file,
 that file opens in whatever the desktop reads text with, and the dialog points
 the user at the issue form.
 
-What travels in the issue URL is only what cannot identify the reporter - the
-version, the platform, and the exception's type.  Not its message and not the
-log: both carry absolute paths, and a URL is in the browser's history before
-anyone has read it.  The log goes through the clipboard instead, which costs no
-URL length, and only once the user has chosen to report.
+The issue URL carries only what the reporter would otherwise retype and cannot
+be mistaken for them: the version, the platform, the build and the exception's
+type.  Not its message, which is the part most likely to be a path.
+
+The log stays out of the URL.  It holds absolute paths, a URL is in the
+browser's history before anyone has read it, GitHub answers an over-long one
+with 414 rather than a shortened form, and a day's log measures more than the
+budget once percent-encoded.  It goes on the clipboard instead, so the reporter
+pastes it into the form's code block themselves and sees what they are sending.
 
 Only Python exceptions arrive here.  A native crash or a `qFatal` ends the
 process without unwinding; the Qt message handler has already put whatever Qt
@@ -44,7 +48,6 @@ ISSUE_TEMPLATE = "bug_report.yml"
 # its `id`, and a dropdown by the text of the option.  test_crash_handler.py
 # reads the file and holds these to it.
 ISSUE_BUILD_OPTION = "桌面版图形界面 / Desktop GUI"
-ISSUE_LOG_FIELD = "logs"
 # Enough to cover a run that failed late, and short enough to stay a comment
 # rather than an attachment.
 LOG_TAIL_LINES = 200
@@ -81,11 +84,7 @@ def report_crash(
 
 
 def issue_url(exception_name: str) -> str:
-    """The bug form, carrying the little that describes the build, not the user.
-
-    Encoded by `urlencode` rather than `QUrlQuery`, which leaves `+` alone: a
-    shortcut written `Ctrl+A` would reach the form as `Ctrl A`.
-    """
+    """The bug form, filled with the build and the exception's type."""
 
     fields = {
         "template": ISSUE_TEMPLATE,
@@ -93,23 +92,28 @@ def issue_url(exception_name: str) -> str:
         "version": __version__,
         "os": f"{QSysInfo.prettyProductName()} ({QSysInfo.currentCpuArchitecture()})",
         "build": ISSUE_BUILD_OPTION,
-        ISSUE_LOG_FIELD: tr("crash_log_paste"),
     }
     return f"{ISSUE_FORM_URL}?{urlencode(fields)}"
 
 
-def copy_log_tail(path: Path) -> bool:
-    """Put the end of the log on the clipboard for the user to paste."""
+def log_tail(path: Path) -> str:
+    """The end of the log, or nothing when the file cannot be read."""
 
-    clipboard = QGuiApplication.clipboard()
-    if clipboard is None:
-        return False
     try:
         lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
     except OSError:
-        logger.warning("cannot read %s to copy it", path, exc_info=True)
+        logger.warning("cannot read %s", path, exc_info=True)
+        return ""
+    return "\n".join(lines[-LOG_TAIL_LINES:])
+
+
+def copy_to_clipboard(text: str) -> bool:
+    """Hold the log so the form is one paste away."""
+
+    clipboard = QGuiApplication.clipboard()
+    if clipboard is None or not text:
         return False
-    clipboard.setText("\n".join(lines[-LOG_TAIL_LINES:]))
+    clipboard.setText(text)
     return True
 
 
@@ -131,7 +135,7 @@ def _show_report(exception_name: str, summary: str, path: Path | None) -> None:
     # Only now: taking over the clipboard is rude to someone who chose to
     # dismiss the dialog and carry on.
     if path is not None:
-        copy_log_tail(path)
+        copy_to_clipboard(log_tail(path))
     QDesktopServices.openUrl(QUrl(issue_url(exception_name)))
 
 

@@ -252,11 +252,15 @@ using the original timeline. Cancellation exceptions must never be swallowed.
 An exception nobody caught reaches `app/crash_handler.py`. PySide6 prints an uncaught exception and
 lets the event loop carry on, so this is a report rather than a shutdown: the traceback goes into
 that day's log at CRITICAL, the file opens in whatever the desktop reads text with, and a dialog
-points the user at the issue form. That URL carries only what cannot identify the reporter - the
-version, the platform, and the exception's type. Not its message and not the log: both carry
-absolute paths, and a URL is in the browser's history before anyone has read it. The log goes
-through the clipboard instead, which costs no URL length and happens only once the user has chosen
-to report. One run raises one dialog - an exception thrown from `paintEvent` repeats on every
+points the user at the issue form. That URL carries the version, the platform, the build and the
+exception's type - not its message, which is the part most likely to be a path. The log stays out
+of it: it holds absolute paths, a URL is in the browser's history before anyone has read it, GitHub
+answers an over-long one with 414 rather than a shortened form, and a day's log is over the budget
+once percent-encoded. It goes on the clipboard instead, written only once the user has chosen to
+report, and the reporter pastes it into the form's code block themselves and sees what they are
+sending. That field does not use the schema's `render:`: a prefilled rendered text area cannot be
+edited, and the field arrives prefilled from its own `value:`, so the `<details>` and the code
+fence are spelled out in the template. One run raises one dialog - an exception thrown from `paintEvent` repeats on every
 frame. A native crash or
 a `qFatal` never gets here, but the Qt message handler has already put what Qt said about it in the
 same file.
