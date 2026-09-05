@@ -48,6 +48,30 @@
         <translation>処理設定</translation>
     </message>
     <message>
+        <source>track_vocal</source>
+        <translation>ボーカル</translation>
+    </message>
+    <message>
+        <source>track_backing</source>
+        <translation>伴奏</translation>
+    </message>
+    <message>
+        <source>output_tracks</source>
+        <translation>書き出す内容:</translation>
+    </message>
+    <message>
+        <source>output_tracks_vocal</source>
+        <translation>ボーカルのみ</translation>
+    </message>
+    <message>
+        <source>output_tracks_backing</source>
+        <translation>伴奏のみ</translation>
+    </message>
+    <message>
+        <source>output_tracks_both</source>
+        <translation>ボーカルと伴奏</translation>
+    </message>
+    <message>
         <source>strength</source>
         <translation>ボーカル抽出強度:</translation>
     </message>

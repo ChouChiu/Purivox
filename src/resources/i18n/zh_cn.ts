@@ -48,6 +48,30 @@
         <translation>处理选项</translation>
     </message>
     <message>
+        <source>track_vocal</source>
+        <translation>消音结果</translation>
+    </message>
+    <message>
+        <source>track_backing</source>
+        <translation>垫音</translation>
+    </message>
+    <message>
+        <source>output_tracks</source>
+        <translation>导出内容:</translation>
+    </message>
+    <message>
+        <source>output_tracks_vocal</source>
+        <translation>仅消音结果</translation>
+    </message>
+    <message>
+        <source>output_tracks_backing</source>
+        <translation>仅垫音</translation>
+    </message>
+    <message>
+        <source>output_tracks_both</source>
+        <translation>消音结果与垫音</translation>
+    </message>
+    <message>
         <source>strength</source>
         <translation>垫音消除强度:</translation>
     </message>

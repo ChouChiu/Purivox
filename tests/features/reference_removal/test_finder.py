@@ -25,4 +25,16 @@ def test_accompaniment_finder_excludes_generated_output(tmp_path: Path):
     song.touch()
     (tmp_path / "Artist - Song_vocals.wav").touch()
     (tmp_path / "Artist - Song 消音.wav").touch()
+    (tmp_path / "Artist - Song_backing.wav").touch()
     assert not find_best_match(song).found
+
+
+def test_accompaniment_finder_still_accepts_a_source_named_after_the_backing_track(
+    tmp_path: Path,
+):
+    """The word for the backing track names the input, so it must not be skipped."""
+    song = tmp_path / "Artist - Song.wav"
+    song.touch()
+    source = tmp_path / "Artist - Song 垫音.wav"
+    source.touch()
+    assert find_best_match(song).path == source.resolve()

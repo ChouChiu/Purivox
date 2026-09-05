@@ -29,6 +29,7 @@ from features.reference_removal.preview import SeekSlider
 from shared.audio import AudioStats
 from shared.config import cfg
 from shared.i18n import tr
+from shared.jobs import BACKING_MARKER, VOCAL_MARKER, OutputTracks
 from shared.ui import (
     AUDIO_FILE_FILTER,
     UNBOUNDED_WIDTH,
@@ -39,6 +40,8 @@ from shared.ui import (
     Lane,
     LayoutMetrics,
     PageScrollArea,
+    SmoothComboBox,
+    allow_shrinking,
     normalized_wav_path,
 )
 
@@ -86,6 +89,9 @@ class MrPage(PageScrollArea):
         self.add_card(self.files)
 
         self.parameters = FormCard()
+        self.tracks_label, self.tracks = BodyLabel(), SmoothComboBox()
+        allow_shrinking(self.tracks)
+        self.parameters.add_row(self.tracks_label, self.tracks)
         self.strength_label, self.strength_value = BodyLabel(), BodyLabel("75%")
         self.strength = Slider(Qt.Orientation.Horizontal)
         self.strength.setRange(0, 100)
@@ -187,6 +193,7 @@ class MrPage(PageScrollArea):
         self.start_button.clicked.connect(self.start_requested)
         self.cancel_button.clicked.connect(self.cancel_requested)
         self.strength.valueChanged.connect(lambda value: self.strength_value.setText(f"{value}%"))
+        self.tracks.currentIndexChanged.connect(self._tracks_changed)
         self.preview_play.clicked.connect(self.toggle_preview)
         self.preview_stop.clicked.connect(self.stop_preview)
         self.preview_volume.valueChanged.connect(
@@ -231,6 +238,8 @@ class MrPage(PageScrollArea):
         self.output_label.setText(tr("output_file"))
         self.output_edit.setPlaceholderText(tr("output_name_hint"))
         self.strength_label.setText(tr("strength"))
+        self.tracks_label.setText(tr("output_tracks"))
+        self._retranslate_tracks()
         for button in (self.song_button, self.acc_button, self.output_button):
             button.setText(tr("browse"))
         self.auto_find.setOnText(tr("auto_find_on"))
@@ -256,6 +265,7 @@ class MrPage(PageScrollArea):
             self.acc_button,
             self.output_button,
             self.output_edit,
+            self.tracks,
             self.strength,
             self.auto_find,
         ):
@@ -278,9 +288,39 @@ class MrPage(PageScrollArea):
         self.clear_result()
         self.song_edit.setText(path)
         if not self._output_user_edited or not self.output_edit.text().strip():
-            self.output_edit.setText(str(Path(path).with_name(Path(path).stem + "_vocals.wav")))
-            self._output_user_edited = False
+            self._apply_default_output()
         self.song_changed.emit(path)
+
+    def selected_tracks(self) -> OutputTracks:
+        return OutputTracks(str(self.tracks.currentData() or OutputTracks.VOCAL.value))
+
+    def _default_output_suffix(self) -> str:
+        marker = BACKING_MARKER if self.selected_tracks() is OutputTracks.BACKING else VOCAL_MARKER
+        return f"{marker}.wav"
+
+    def _apply_default_output(self) -> None:
+        song = self.song_edit.text().strip()
+        if not song:
+            return
+        origin = Path(song)
+        self.output_edit.setText(str(origin.with_name(origin.stem + self._default_output_suffix())))
+        self._output_user_edited = False
+
+    def _retranslate_tracks(self) -> None:
+        # Rebuilding the items re-emits currentIndexChanged, and this page's slot
+        # renames the output file: a language switch must not touch it.
+        previous = str(self.tracks.currentData() or cfg.output_tracks.value)
+        self.tracks.blockSignals(True)
+        self.tracks.clear()
+        for choice in OutputTracks:
+            self.tracks.addItem(tr(f"output_tracks_{choice.value}"), userData=choice.value)
+        self.tracks.setCurrentIndex(max(0, self.tracks.findData(previous)))
+        self.tracks.blockSignals(False)
+
+    def _tracks_changed(self, _index: int) -> None:
+        self.clear_result()
+        if not self._output_user_edited:
+            self._apply_default_output()
 
     def _select_acc(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
@@ -309,7 +349,9 @@ class MrPage(PageScrollArea):
         self.clear_result()
 
     def normalized_output_path(self) -> Path | None:
-        path = normalized_wav_path(self.output_edit.text(), self.song_edit.text(), "_vocals.wav")
+        path = normalized_wav_path(
+            self.output_edit.text(), self.song_edit.text(), self._default_output_suffix()
+        )
         if path is None:
             return None
         if not self.output_edit.text().strip():

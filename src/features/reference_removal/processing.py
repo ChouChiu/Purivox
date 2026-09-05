@@ -1,31 +1,32 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import replace
 from pathlib import Path
 
 from features.reference_removal.dsp import align_audio, process_audio
 from features.reference_removal.models import ReferenceJob
 from shared.audio import (
-    analyze_audio,
+    AudioStats,
     create_pcm_audio,
+    export_audio,
     read_audio,
     resample_audio,
-    write_wav_atomic,
+    subtract_into,
 )
+from shared.jobs import OutputTracks, planned_outputs
 from shared.processing import CancellationToken, ProcessingResult, ProgressCallback
 from shared.progress import report_progress
 
 logger = logging.getLogger(__name__)
 
 
-def _validate_reference_paths(song: Path, accompaniment: Path, output: Path) -> None:
+def _validate_reference_paths(song: Path, accompaniment: Path, outputs: tuple[Path, ...]) -> None:
     resolved_song = song.expanduser().resolve()
     resolved_accompaniment = accompaniment.expanduser().resolve()
-    resolved_output = output.expanduser().resolve()
     if resolved_song == resolved_accompaniment:
         raise ValueError("song and accompaniment must be different files")
-    if resolved_output in {resolved_song, resolved_accompaniment}:
+    inputs = {resolved_song, resolved_accompaniment}
+    if any(output.expanduser().resolve() in inputs for output in outputs):
         raise ValueError("output path must not overwrite an input file")
 
 
@@ -39,7 +40,9 @@ def run_reference_job(
         job.song,
         job.accompaniment,
     )
-    _validate_reference_paths(job.song, job.accompaniment, job.output)
+    tracks = OutputTracks(job.tracks)
+    planned = planned_outputs(job.output, tracks)
+    _validate_reference_paths(job.song, job.accompaniment, planned)
     song = reference = processed_audio = None
     try:
         report_progress(progress, 0, "loading_song")
@@ -91,14 +94,23 @@ def run_reference_job(
             token,
             processed_audio.samples,
         )
-        report_progress(progress, 86, "analyzing_output")
-        stats = analyze_audio(processed_audio, token)
-        report_progress(progress, 90, "saving")
-        write_wav_atomic(job.output, processed_audio, token)
-        stats = replace(stats, file_size=job.output.stat().st_size)
-        report_progress(progress, 100, "done_status", path=job.output)
-        logger.info("reference job completed: %s", job.output.resolve())
-        return ProcessingResult((job.output.resolve(),), (stats,))
+        outputs: list[Path] = []
+        stats: list[AudioStats] = []
+        if tracks is not OutputTracks.BACKING:
+            stats.append(export_audio(processed_audio, job.output, token, progress, 86, 89))
+            outputs.append(job.output.resolve())
+        if tracks is not OutputTracks.VOCAL:
+            # The backing track is what cancellation took out, so it is the stage
+            # recording less the vocal - which also gives it the level the
+            # accompaniment actually had on stage.  The vocal is already on disk
+            # (or was never asked for), so the difference overwrites it in place.
+            subtract_into(song, processed_audio, token)
+            backing = planned[-1]
+            stats.append(export_audio(processed_audio, backing, token, progress, 93, 96))
+            outputs.append(backing.resolve())
+        report_progress(progress, 100, "done_status", path=outputs[0])
+        logger.info("reference job completed: %s", ", ".join(str(path) for path in outputs))
+        return ProcessingResult(tuple(outputs), tuple(stats))
     finally:
         for audio in (processed_audio, reference, song):
             if audio is not None:

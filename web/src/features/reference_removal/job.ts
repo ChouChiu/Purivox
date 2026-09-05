@@ -1,4 +1,5 @@
 import { sampleRate, seconds, totalBytes } from "../../shared/audio/prepare";
+import type { OutputTracks } from "../../shared/jobs";
 import { SHELL_SIGMA } from "../../shared/jobs";
 import type { PurivoxClient } from "../../shared/runtime/PurivoxClient";
 import { WORK_DIR } from "../../shared/runtime/PurivoxClient";
@@ -9,6 +10,7 @@ export function estimate(
 	client: PurivoxClient,
 	song: PreparedFile,
 	accompaniment: PreparedFile,
+	tracks: OutputTracks,
 ): Promise<Estimate> {
 	return client.call<Estimate>("estimate_reference", {
 		// Both are resampled onto the song's timeline before anything is allocated.
@@ -16,6 +18,7 @@ export function estimate(
 		song_seconds: seconds(song),
 		accompaniment_seconds: seconds(accompaniment),
 		file_bytes: totalBytes([song, accompaniment]),
+		both_tracks: tracks === "both",
 	});
 }
 
@@ -25,6 +28,7 @@ export function request(
 	accompaniment: PreparedFile,
 	outputName: string,
 	strength: number,
+	tracks: OutputTracks,
 ) {
 	return {
 		song: song.path,
@@ -33,5 +37,6 @@ export function request(
 		strength,
 		sigma: SHELL_SIGMA,
 		auto_align: true,
+		tracks,
 	};
 }

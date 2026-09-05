@@ -56,7 +56,8 @@ other, `app`/`web` never import `entrypoints`. `tests/test_architecture.py` and
 `web/scripts/check-architecture.mjs` parse the imports and fail the build otherwise. A new feature
 is one new directory under `src/features/`. Anything two features — or the GUI and the CLI — both
 need moves down into `shared` (`BLOCK_FRAMES`, `AUDIO_EXTENSIONS`, `validate_reference_settings`,
-`log_flux_bands`, `AUDIO_FILE_FILTER`, `normalized_wav_path`, `branding.user_agent`).
+`log_flux_bands`, `AUDIO_FILE_FILTER`, `normalized_wav_path`, `branding.user_agent`,
+`OutputTracks`, `subtract_into`, `export_audio`).
 
 | Path | What lives there |
 |---|---|
@@ -65,8 +66,8 @@ need moves down into `shared` (`BLOCK_FRAMES`, `AUDIO_EXTENSIONS`, `validate_ref
 | `src/features/full_stage/` | Multi-source fingerprint matching, timeline models, `timeline_model.py` (`QAbstractTableModel` behind the editable timeline, `clip_edited`/`edit_rejected`) |
 | `src/features/neural_separation/` | `inference.py` (MdxNet ONNX, chunked overlap-add), `model_store.py` (search + `QNetworkAccessManager` download + `QSaveFile` verify-then-commit), `catalog.py` (`MODEL_BASE_URL`, 4 entries) |
 | `src/features/home/`, `settings/` | Brand and entry cards; language/theme/log level, `updates.py` (GitHub release query + version compare) and `dialog.py`. The app never installs an update — the dialog opens the release page |
-| `src/shared/` (root) | `config.py` (the `cfg` `QConfig`), `i18n.py` (`tr()`, `install_language()`, `SUPPORTED_LANGUAGES`), `jobs.py` (the reference-settings contract behind `ReferenceJob`, `FullStageJob` and the CLI: `SIGMA_CHOICES`, `STRENGTH_RANGE`, `validate_reference_settings`), `logging.py`, `processing.py` (`CancellationToken`, `ProgressEvent`, `ProcessingResult`), `progress.py`, `branding.py` |
-| `src/shared/audio/` | `io.py`: mapped I/O, soxr resample, atomic WAV write, `BLOCK_FRAMES` (262 144), `AUDIO_EXTENSIONS`, `release_mapped_pages()`; `analysis.py`: `AudioStats`, peak/RMS |
+| `src/shared/` (root) | `config.py` (the `cfg` `QConfig`), `i18n.py` (`tr()`, `install_language()`, `SUPPORTED_LANGUAGES`), `jobs.py` (the reference-settings contract behind `ReferenceJob`, `FullStageJob` and the CLI: `SIGMA_CHOICES`, `STRENGTH_RANGE`, `validate_reference_settings`, `OutputTracks`, `planned_outputs`), `logging.py`, `processing.py` (`CancellationToken`, `ProgressEvent`, `ProcessingResult`), `progress.py`, `branding.py` |
+| `src/shared/audio/` | `io.py`: mapped I/O, soxr resample, atomic WAV write, `BLOCK_FRAMES` (262 144), `AUDIO_EXTENSIONS`, `release_mapped_pages()`; `analysis.py`: `AudioStats`, peak/RMS, block-wise `copy_audio`/`subtract_into`, `export_audio` |
 | `src/shared/dsp/` | `spectral.py`: librosa-compatible `stft`/`istft` (`n_fft=2048`, `hop=512`) and `log_flux_bands()`, shared by full-stage matching and coarse alignment |
 | `src/shared/ui/` | `responsive.py` (`LayoutMode`/`LayoutMetrics`, `ResponsiveColumns`, `FoldingRow`, `allow_shrinking`, `HeightForWidth`, `ElidedLabel`), `cards.py` (`FormCard`, `PageScrollArea`), `widgets.py` (`SmoothComboBox`, file filters, `normalized_wav_path`) |
 | `src/resources/` | `i18n/{zh_cn,en_us,ja_jp,ko_kr}.{ts,qm}`, `model_data.json` (65 MDX-Net specs keyed by model MD5), `purivox.svg`, `resource_path` |

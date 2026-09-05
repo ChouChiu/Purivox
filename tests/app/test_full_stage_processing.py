@@ -8,6 +8,7 @@ import soundfile as sf
 from app.full_stage_processing import _alignment_quality, run_full_stage_job
 from features.full_stage import ClipKind, FullStageAnalysis, FullStageJob, TimelineClip
 from shared.audio import AudioData
+from shared.jobs import OutputTracks
 from shared.processing import CancellationToken
 
 
@@ -104,3 +105,47 @@ def test_alignment_quality_rejects_a_shift_that_damages_an_existing_match():
     assert _alignment_quality(stage, reference, sample_rate) > _alignment_quality(
         stage, shifted, sample_rate
     )
+
+
+def test_full_stage_backing_export_is_silent_where_nothing_was_cancelled(tmp_path: Path):
+    """The render starts as a copy of the stage, so untouched ranges cancel to zero."""
+    sample_rate = 8_000
+    reference = _source(sample_rate, 4, 7)
+    stage = np.random.default_rng(8).normal(0, 0.01, (8 * sample_rate, 2)).astype(np.float32)
+    stage[2 * sample_rate : 6 * sample_rate] += reference
+    stage_path = tmp_path / "stage.wav"
+    source_path = tmp_path / "source.wav"
+    output_path = tmp_path / "stage_full_stage_vocals.wav"
+    sf.write(stage_path, stage, sample_rate, subtype="PCM_24")
+    sf.write(source_path, reference, sample_rate, subtype="PCM_24")
+    analysis = FullStageAnalysis(
+        8.0,
+        (
+            TimelineClip(ClipKind.UNMATCHED, 0.0, 2.0),
+            TimelineClip(ClipKind.SONG, 2.0, 6.0, source_path.resolve(), 0, 0.0, 4.0, 1.0),
+            TimelineClip(ClipKind.UNMATCHED, 6.0, 8.0),
+        ),
+    )
+    job = FullStageJob(
+        stage_path,
+        (source_path,),
+        output_path,
+        strength=100,
+        sigma=1,
+        tracks=OutputTracks.BOTH,
+    )
+
+    result = run_full_stage_job(job, analysis, CancellationToken())
+
+    backing_output = tmp_path / "stage_full_stage_backing.wav"
+    assert result.outputs == (output_path.resolve(), backing_output.resolve())
+    assert len(result.audio_stats) == 2
+    vocal, _ = sf.read(output_path, always_2d=True, dtype="float32")
+    backing, _ = sf.read(backing_output, always_2d=True, dtype="float32")
+    original, _ = sf.read(stage_path, always_2d=True, dtype="float32")
+    assert np.allclose(vocal + backing, original, atol=1e-6)
+    # Nothing was cancelled out of the unmatched head and tail.
+    assert np.max(np.abs(backing[: 2 * sample_rate])) < 1e-6
+    assert np.max(np.abs(backing[6 * sample_rate :])) < 1e-6
+    # The song range is where the backing track actually lives.
+    assert np.max(np.abs(backing[3 * sample_rate : 5 * sample_rate])) > 0.01

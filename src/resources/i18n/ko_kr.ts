@@ -48,6 +48,30 @@
         <translation>처리 옵션</translation>
     </message>
     <message>
+        <source>track_vocal</source>
+        <translation>보컬</translation>
+    </message>
+    <message>
+        <source>track_backing</source>
+        <translation>반주</translation>
+    </message>
+    <message>
+        <source>output_tracks</source>
+        <translation>내보낼 항목:</translation>
+    </message>
+    <message>
+        <source>output_tracks_vocal</source>
+        <translation>보컬만</translation>
+    </message>
+    <message>
+        <source>output_tracks_backing</source>
+        <translation>반주만</translation>
+    </message>
+    <message>
+        <source>output_tracks_both</source>
+        <translation>보컬과 반주</translation>
+    </message>
+    <message>
         <source>strength</source>
         <translation>보컬 추출 강도:</translation>
     </message>

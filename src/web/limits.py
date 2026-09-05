@@ -15,6 +15,10 @@ WASM_BUDGET_BYTES = 2_600_000_000
 WARN_FRACTION = 0.6
 # `AudioData` is planar float32 whatever the source was recorded at.
 BYTES_PER_SAMPLE = 4
+# A finished stem is written to the Emscripten filesystem, which is the same
+# linear memory, at the source's own depth; 24-bit stereo is 6 bytes a frame.
+# Only the "both" export holds two of them at once.
+WAV_BYTES_PER_SAMPLE = 3
 # One `_reference_cancel` block expands `_SPECTRAL_CELL_BUDGET` (4 million)
 # spectral cells into a handful of complex and real work arrays.  Browsers run
 # the single-worker layout, which spends the whole budget on one block.
@@ -48,22 +52,33 @@ def buffer_bytes(sample_rate: int, seconds: float, channels: int = 2) -> int:
     return int(channels * sample_rate * BYTES_PER_SAMPLE * seconds)
 
 
+def written_bytes(sample_rate: int, seconds: float, channels: int = 2) -> int:
+    """What one exported stem occupies in the browser filesystem."""
+    if sample_rate <= 0 or seconds < 0 or channels <= 0:
+        raise ValueError("sample rate, duration and channel count must be positive")
+    return int(channels * sample_rate * WAV_BYTES_PER_SAMPLE * seconds)
+
+
 def reference_peak_bytes(
     sample_rate: int,
     song_seconds: float,
     accompaniment_seconds: float,
     file_bytes: int = 0,
+    both_tracks: bool = False,
 ) -> MemoryEstimate:
     """Estimate the peak for `run_reference_job`.
 
     It holds the song, the reference resampled onto the song's timeline and one
     more full-length buffer at once - the alignment scratch first, then the
-    processed output - on top of the block working set.
+    processed output - on top of the block working set.  The backing track is
+    formed in that same output buffer, so exporting both stems costs no extra
+    buffer, only the first stem's file staying on the filesystem.
     """
     song = buffer_bytes(sample_rate, song_seconds)
     reference = buffer_bytes(sample_rate, accompaniment_seconds)
-    peak = file_bytes + song + reference + max(song, reference) + DSP_WORKING_SET_BYTES
-    return MemoryEstimate(peak)
+    written = written_bytes(sample_rate, song_seconds) if both_tracks else 0
+    peak = file_bytes + song + reference + max(song, reference) + written
+    return MemoryEstimate(peak + DSP_WORKING_SET_BYTES)
 
 
 def full_stage_peak_bytes(
@@ -71,6 +86,7 @@ def full_stage_peak_bytes(
     stage_seconds: float,
     longest_source_seconds: float,
     file_bytes: int = 0,
+    both_tracks: bool = False,
 ) -> MemoryEstimate:
     """Estimate the peak for `run_full_stage_job`.
 
@@ -81,5 +97,6 @@ def full_stage_peak_bytes(
     """
     stage = buffer_bytes(sample_rate, stage_seconds)
     source = buffer_bytes(sample_rate, longest_source_seconds)
-    peak = file_bytes + 2 * stage + 3 * source + DSP_WORKING_SET_BYTES
-    return MemoryEstimate(peak)
+    written = written_bytes(sample_rate, stage_seconds) if both_tracks else 0
+    peak = file_bytes + 2 * stage + 3 * source + written
+    return MemoryEstimate(peak + DSP_WORKING_SET_BYTES)

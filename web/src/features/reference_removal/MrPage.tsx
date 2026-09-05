@@ -6,6 +6,7 @@ import {
 	MessageBar,
 	MessageBarBody,
 	makeStyles,
+	Select,
 	Slider,
 	Title3,
 	tokens,
@@ -14,15 +15,17 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { prepare } from "../../shared/audio/prepare";
 import { useLanguage } from "../../shared/i18n/context";
+import type { OutputTracks } from "../../shared/jobs";
 import {
+	backingName,
 	DEFAULT_STRENGTH,
+	OUTPUT_TRACKS,
 	STRENGTH_MAXIMUM,
 	STRENGTH_MINIMUM,
 } from "../../shared/jobs";
 import type { PurivoxClient } from "../../shared/runtime/PurivoxClient";
 import type { Shortcuts } from "../../shared/runtime/shortcuts";
 import type {
-	AudioStats,
 	Estimate,
 	PreparedFile,
 	ReferenceResult,
@@ -32,6 +35,7 @@ import { AudioSummary } from "../../shared/ui/AudioSummary";
 import { FilePicker } from "../../shared/ui/FilePicker";
 import { JobPanel } from "../../shared/ui/JobPanel";
 import { MemoryNotice } from "../../shared/ui/MemoryNotice";
+import type { ResultTrack } from "../../shared/ui/ResultPanel";
 import { ResultPanel } from "../../shared/ui/ResultPanel";
 import { estimate, request } from "./job";
 
@@ -69,10 +73,8 @@ export function MrPage({ client, ready, active, onBind }: Props) {
 	const [budget, setBudget] = useState<Estimate | null>(null);
 	const [preparing, setPreparing] = useState<string | null>(null);
 	const [problem, setProblem] = useState<string | null>(null);
-	const [result, setResult] = useState<{
-		blob: Blob;
-		stats?: AudioStats;
-	} | null>(null);
+	const [tracks, setTracks] = useState<OutputTracks>("vocal");
+	const [result, setResult] = useState<readonly ResultTrack[]>([]);
 
 	const pick = useCallback(
 		async (
@@ -106,27 +108,48 @@ export function MrPage({ client, ready, active, onBind }: Props) {
 		async (first: PreparedFile | null, second: PreparedFile | null) => {
 			setBudget(
 				first !== null && second !== null
-					? await estimate(client, first, second)
+					? await estimate(client, first, second, tracks)
 					: null,
 			);
 		},
-		[client],
+		[client, tracks],
 	);
+
+	// Exporting both stems keeps one more file in the browser filesystem, which
+	// is the same heap the budget is measured against.
+	useEffect(() => {
+		void refreshEstimate(song, accompaniment);
+	}, [accompaniment, refreshEstimate, song]);
 
 	const run = useCallback(async () => {
 		if (song === null || accompaniment === null) return;
-		setResult(null);
+		setResult([]);
 		const payload = await start<ReferenceResult>(
 			"run_reference",
-			request(song, accompaniment, outputName, strength),
+			request(song, accompaniment, outputName, strength, tracks),
 		);
 		if (payload === null) return;
-		const blob = await client.download(payload.outputs[0]);
-		// The rendered file is now a Blob the browser owns; drop the runtime's copy
-		// so a second run does not hold two of them.
-		await client.remove(payload.outputs[0]);
-		setResult({ blob, stats: payload.audio_stats[0] });
-	}, [accompaniment, client, outputName, song, start, strength]);
+		const names =
+			tracks === "both" ? [outputName, backingName(outputName)] : [outputName];
+		const titles =
+			tracks === "both"
+				? ["track_vocal", "track_backing"]
+				: [tracks === "backing" ? "track_backing" : "track_vocal"];
+		const downloaded: ResultTrack[] = [];
+		for (const [index, path] of payload.outputs.entries()) {
+			const blob = await client.download(path);
+			// The rendered file is now a Blob the browser owns; drop the runtime's
+			// copy before fetching the next, so the two never sit in the heap at once.
+			await client.remove(path);
+			downloaded.push({
+				blob,
+				filename: names[index],
+				titleKey: titles[index],
+				stats: payload.audio_stats[index],
+			});
+		}
+		setResult(downloaded);
+	}, [accompaniment, client, outputName, song, start, strength, tracks]);
 
 	const openSong = useRef<(() => void) | null>(null);
 	const togglePreview = useRef<(() => void) | null>(null);
@@ -203,6 +226,22 @@ export function MrPage({ client, ready, active, onBind }: Props) {
 
 			<Card className={styles.card}>
 				<CardHeader header={<Title3>{t("params")}</Title3>} />
+				<Field label={t("output_tracks")}>
+					<Select
+						value={tracks}
+						disabled={state.running}
+						onChange={(_event, data) => {
+							setTracks(data.value as OutputTracks);
+							setResult([]);
+						}}
+					>
+						{OUTPUT_TRACKS.map((choice) => (
+							<option key={choice} value={choice}>
+								{t(`output_tracks_${choice}`)}
+							</option>
+						))}
+					</Select>
+				</Field>
 				<Field label={`${t("strength")} ${strength}%`}>
 					<Slider
 						min={STRENGTH_MINIMUM}
@@ -241,9 +280,8 @@ export function MrPage({ client, ready, active, onBind }: Props) {
 			</Card>
 
 			<ResultPanel
-				blob={result?.blob ?? null}
-				filename={outputName}
-				stats={result?.stats}
+				tracks={result}
+				placeholderName={outputName}
 				registerToggle={(toggle) => {
 					togglePreview.current = toggle;
 				}}

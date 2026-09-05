@@ -1,4 +1,5 @@
 import { sampleRate, seconds, totalBytes } from "../../shared/audio/prepare";
+import type { OutputTracks } from "../../shared/jobs";
 import { SHELL_SIGMA } from "../../shared/jobs";
 import type { PurivoxClient } from "../../shared/runtime/PurivoxClient";
 import { WORK_DIR } from "../../shared/runtime/PurivoxClient";
@@ -9,12 +10,14 @@ export function estimate(
 	client: PurivoxClient,
 	stage: PreparedFile,
 	sources: PreparedFile[],
+	tracks: OutputTracks,
 ): Promise<Estimate> {
 	return client.call<Estimate>("estimate_full_stage", {
 		sample_rate: sampleRate(stage),
 		stage_seconds: seconds(stage),
 		longest_source_seconds: Math.max(0, ...sources.map(seconds)),
 		file_bytes: totalBytes([stage, ...sources]),
+		both_tracks: tracks === "both",
 	});
 }
 
@@ -25,6 +28,7 @@ export function request(
 	outputName: string,
 	strength: number,
 	includeFragments: boolean,
+	tracks: OutputTracks,
 ) {
 	return {
 		stage: stage?.path ?? "",
@@ -34,5 +38,6 @@ export function request(
 		sigma: SHELL_SIGMA,
 		include_fragments: includeFragments,
 		auto_align: true,
+		tracks,
 	};
 }

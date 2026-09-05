@@ -308,3 +308,21 @@ metrics only detect implementation regressions. Real material must
 still be exported with identical input and settings for direct
 comparison, listening closely to vocal level, sibilance, breathing, harmonies, reverb tails, and
 audience sound.
+
+## Exported Stems
+
+One cancellation can export two tracks. The vocal is what the pipeline produces; the backing
+track is defined as the stage/live audio minus that vocal, formed by a block-wise subtraction in
+the time domain. That definition buys two things: the backing carries the level the accompaniment
+actually had on stage rather than the level of the song source file, and the two stems add back up
+to the original recording exactly - a constructive identity that does not depend on how well
+cancellation worked.
+
+When only one stem is exported it is written to the path the user named. When both are, the second
+name is derived from the first: a trailing `_vocals` becomes `_backing`, and a name without that
+marker simply gains it. The subtraction overwrites the same buffer once the first stem is on disk,
+so exporting both costs no additional full-length buffer.
+
+Note the peak protection above: where the vocal exceeds -1 dBFS and is scaled down as a whole, the
+vocal energy removed by that scaling lands in the backing track. The identity still holds, but the
+backing is then not purely the backing. The protection itself rarely triggers.

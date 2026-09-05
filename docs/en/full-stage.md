@@ -154,6 +154,13 @@ stage recording's own sample rate and bit depth. Unmatched ranges are already a 
 the original, so raising the export to a fixed floor would only enlarge the file without adding
 spectral detail absent from the original recording.
 
+When the backing track is also requested, the stage recording less the render is written as a
+second file once the vocal is on disk, subtracted in place. The render buffer started as a copy of
+the stage and had each segment blended over it, so the difference is exactly what was cancelled:
+across unmatched ranges the two are identical and the backing is silent there - nothing was
+cancelled out of them. The 50 ms fades at the segment boundaries stay consistent too, with the
+backing fading under the same weights.
+
 Explanatory power is calculated by fitting small $2\times2$ direct models in multiple windows,
 measuring their residual ratios, and taking the median, so that one abnormal window cannot
 dominate the decision. This selection gate prevents an already correct timeline position from

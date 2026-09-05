@@ -13,6 +13,7 @@ from qfluentwidgets import (
 )
 
 from shared.i18n import SUPPORTED_LANGUAGES
+from shared.jobs import OutputTracks
 from shared.logging import LOG_LEVELS
 
 
@@ -33,6 +34,12 @@ class AppConfig(QConfig):
         OptionsValidator(list(LOG_LEVELS)),
     )
     auto_find = ConfigItem("Reference", "AutoFind", True, BoolValidator())
+    output_tracks = OptionsConfigItem(
+        "Reference",
+        "OutputTracks",
+        OutputTracks.VOCAL.value,
+        OptionsValidator([choice.value for choice in OutputTracks]),
+    )
     model = OptionsConfigItem(
         "Neural",
         "Model",

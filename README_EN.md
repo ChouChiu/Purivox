@@ -87,7 +87,10 @@ uv run --locked purivox
 2. Select the stage/live audio to process and the corresponding song source.
 3. Alignment runs automatically. Start with the default removal strength of 75%; the graphical
    interface uses a fixed statistical window.
-4. Preview the result before adjusting the strength. If you hear obvious pumping or thinning of
+4. Under **Export**, choose which stems to save: the vocal only, the backing track only, or
+   both. The backing track is the stage/live audio minus the vocal, so it carries the level the
+   accompaniment actually had on stage, and the two stems add back up to the original recording.
+5. Preview the result before adjusting the strength. If you hear obvious pumping or thinning of
    the live vocal, reduce the strength or confirm that the song source is correct.
 
 Use a song source that matches the version played at the venue as closely as possible. Different
@@ -102,7 +105,8 @@ masters, edits, speeds, keys, or extra content will reduce removal quality.
    and match confidence.
 4. If necessary, double-click to edit recording times or source ranges, or clear the checkbox for
    a segment that should not be processed.
-5. Confirm the output location and processing options, then process the full recording.
+5. Confirm the output location, the export choice, and the processing options, then process
+   the full recording.
 
 Unidentified ranges retain their original content and duration. Inter-song speech, audience
 interaction, advertisements, and empty-stage audio are not removed automatically. Full-stage
@@ -154,6 +158,7 @@ Common reference-cancellation options:
 | `--strength` | `0`–`100` | Vocal isolation strength; default: `75` |
 | `--sigma` | `1`, `3`, `8`, `16` | Statistical window in seconds (advanced option); default: `3`; the GUI always uses `3` |
 | `--align` / `--no-align` | on / off | Automatic alignment; enabled by default |
+| `--tracks` | `vocal`, `backing`, `both` | Which stems to export; default: `vocal` |
 | `--lang` | `zh_cn`, `en_us`, `ja_jp`, `ko_kr` | Language used for progress messages |
 
 Run the AI separation tool independently:

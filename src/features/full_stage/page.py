@@ -25,7 +25,9 @@ from qfluentwidgets import (
 
 from features.full_stage.models import ClipKind, FullStageAnalysis, TimelineClip
 from features.full_stage.timeline_model import SOURCE, TimelineModel
+from shared.config import cfg
 from shared.i18n import tr
+from shared.jobs import BACKING_MARKER, VOCAL_MARKER, OutputTracks
 from shared.ui import (
     AUDIO_FILE_FILTER,
     WAV_FILE_FILTER,
@@ -33,6 +35,8 @@ from shared.ui import (
     Lane,
     LayoutMetrics,
     PageScrollArea,
+    SmoothComboBox,
+    allow_shrinking,
     normalized_wav_path,
 )
 
@@ -66,6 +70,7 @@ class FullStagePage(PageScrollArea):
         )
         self.files.add_row(self.stage_label, self.stage_edit, self.stage_button)
         self.files.add_row(self.output_label, self.output_edit, self.output_button)
+        self._output_user_edited = False
         self.add_card(self.files)
 
         self.sources_card = FormCard()
@@ -85,6 +90,9 @@ class FullStagePage(PageScrollArea):
         self.add_card(self.sources_card)
 
         self.parameters = FormCard()
+        self.tracks_label, self.tracks = BodyLabel(), SmoothComboBox()
+        allow_shrinking(self.tracks)
+        self.parameters.add_row(self.tracks_label, self.tracks)
         self.strength_label, self.strength_value = BodyLabel(), BodyLabel("75%")
         self.strength = Slider(Qt.Orientation.Horizontal)
         self.strength.setRange(0, 100)
@@ -141,6 +149,8 @@ class FullStagePage(PageScrollArea):
 
         self.stage_button.clicked.connect(self._select_stage)
         self.output_button.clicked.connect(self._select_output)
+        self.output_edit.textEdited.connect(self._output_edited)
+        self.tracks.currentIndexChanged.connect(self._tracks_changed)
         self.add_sources.clicked.connect(self._add_sources)
         self.remove_source.clicked.connect(self._remove_source)
         self.analyze_button.clicked.connect(self.analyze_requested)
@@ -180,6 +190,8 @@ class FullStagePage(PageScrollArea):
         self.remove_clip.setText(tr("stage_remove_clip"))
         self.parameters.title_label.setText(tr("params"))
         self.strength_label.setText(tr("strength"))
+        self.tracks_label.setText(tr("output_tracks"))
+        self._retranslate_tracks()
         self.include_fragments_label.setText(tr("stage_include_fragments"))
         self.include_fragments.setOnText(tr("switch_on"))
         self.include_fragments.setOffText(tr("switch_off"))
@@ -199,12 +211,50 @@ class FullStagePage(PageScrollArea):
             for index in range(self.sources.count())
         )
 
+    def selected_tracks(self) -> OutputTracks:
+        return OutputTracks(str(self.tracks.currentData() or OutputTracks.VOCAL.value))
+
+    def _default_output_suffix(self) -> str:
+        marker = BACKING_MARKER if self.selected_tracks() is OutputTracks.BACKING else VOCAL_MARKER
+        return f"_full_stage{marker}.wav"
+
+    def _apply_default_output(self) -> None:
+        stage = self.stage_edit.text().strip()
+        if not stage:
+            return
+        origin = Path(stage)
+        self.output_edit.setText(str(origin.with_name(origin.stem + self._default_output_suffix())))
+        self._output_user_edited = False
+
+    def _retranslate_tracks(self) -> None:
+        # Rebuilding the items re-emits currentIndexChanged, and this page's slot
+        # renames the output file: a language switch must not touch it.
+        previous = str(self.tracks.currentData() or cfg.output_tracks.value)
+        self.tracks.blockSignals(True)
+        self.tracks.clear()
+        for choice in OutputTracks:
+            self.tracks.addItem(tr(f"output_tracks_{choice.value}"), userData=choice.value)
+        self.tracks.setCurrentIndex(max(0, self.tracks.findData(previous)))
+        self.tracks.blockSignals(False)
+
+    def _tracks_changed(self, _index: int) -> None:
+        # The export choice does not change what the matcher found, so the
+        # timeline stays as it is.
+        if not self._output_user_edited:
+            self._apply_default_output()
+
+    def _output_edited(self, _text: str) -> None:
+        self._output_user_edited = True
+
     def normalized_output_path(self) -> Path | None:
         path = normalized_wav_path(
-            self.output_edit.text(), self.stage_edit.text(), "_full_stage_vocals.wav"
+            self.output_edit.text(), self.stage_edit.text(), self._default_output_suffix()
         )
         if path is None:
             return None
+        if not self.output_edit.text().strip():
+            # The name came from the stage recording, so it is not the user's own.
+            self._output_user_edited = False
         self.output_edit.setText(str(path))
         return path
 
@@ -219,6 +269,7 @@ class FullStagePage(PageScrollArea):
             self.add_sources,
             self.remove_source,
             self.sources,
+            self.tracks,
             self.strength,
             self.include_fragments,
             self.timeline,
@@ -259,9 +310,8 @@ class FullStagePage(PageScrollArea):
 
     def set_stage(self, path: str) -> None:
         self.stage_edit.setText(path)
-        self.output_edit.setText(
-            str(Path(path).with_name(Path(path).stem + "_full_stage_vocals.wav"))
-        )
+        if not self._output_user_edited or not self.output_edit.text().strip():
+            self._apply_default_output()
         self.invalidate_analysis()
 
     def _select_output(self) -> None:
@@ -272,6 +322,7 @@ class FullStagePage(PageScrollArea):
             WAV_FILE_FILTER,
         )
         if path:
+            self._output_user_edited = True
             self.output_edit.setText(path)
 
     def _add_sources(self) -> None:

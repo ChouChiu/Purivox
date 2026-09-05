@@ -14,6 +14,7 @@ from app.full_stage_processing import analyze_full_stage_job, run_full_stage_job
 from features.full_stage import FullStageJob
 from features.reference_removal import ReferenceJob, run_reference_job
 from shared.audio import AudioStats
+from shared.jobs import OutputTracks
 from shared.processing import CancellationToken, ProgressEvent
 from web.limits import MemoryEstimate, full_stage_peak_bytes, reference_peak_bytes
 from web.timeline import add_clip, analysis_from_dict, analysis_to_dict, edit_clip, remove_clip
@@ -111,6 +112,7 @@ def estimate_reference(request: str) -> str:
                 float(data["song_seconds"]),
                 float(data["accompaniment_seconds"]),
                 int(data.get("file_bytes", 0)),
+                bool(data.get("both_tracks", False)),
             )
         )
     )
@@ -126,6 +128,7 @@ def estimate_full_stage(request: str) -> str:
                 float(data["stage_seconds"]),
                 float(data["longest_source_seconds"]),
                 int(data.get("file_bytes", 0)),
+                bool(data.get("both_tracks", False)),
             )
         )
     )
@@ -141,6 +144,7 @@ def run_reference(request: str, on_progress: JsonCallback | None = None) -> str:
         strength=int(data.get("strength", 75)),
         sigma=int(data.get("sigma", 3)),
         auto_align=bool(data.get("auto_align", True)),
+        tracks=OutputTracks(data.get("tracks", OutputTracks.VOCAL)),
     )
     result = run_reference_job(job, CancellationToken(), _progress_callback(on_progress))
     return _dump(
@@ -160,6 +164,7 @@ def _full_stage_job(data: dict[str, Any]) -> FullStageJob:
         sigma=int(data.get("sigma", 3)),
         include_fragments=bool(data.get("include_fragments", True)),
         auto_align=bool(data.get("auto_align", True)),
+        tracks=OutputTracks(data.get("tracks", OutputTracks.VOCAL)),
     )
 
 

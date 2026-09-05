@@ -5,7 +5,7 @@ from enum import StrEnum
 from pathlib import Path
 
 from shared.audio import AudioStats
-from shared.jobs import validate_reference_settings
+from shared.jobs import OutputTracks, planned_outputs, validate_reference_settings
 
 
 class ClipKind(StrEnum):
@@ -74,15 +74,17 @@ class FullStageJob:
     sigma: int = 3
     include_fragments: bool = True
     auto_align: bool = True
+    tracks: OutputTracks = OutputTracks.VOCAL
 
     def __post_init__(self) -> None:
         if not self.sources:
             raise ValueError("at least one source is required")
         validate_reference_settings(self.strength, self.sigma)
         resolved_stage = self.stage.expanduser().resolve()
-        resolved_output = self.output.expanduser().resolve()
         resolved_sources = tuple(source.expanduser().resolve() for source in self.sources)
-        if resolved_output == resolved_stage or resolved_output in resolved_sources:
+        inputs = {resolved_stage, *resolved_sources}
+        planned = planned_outputs(self.output, OutputTracks(self.tracks))
+        if any(output.expanduser().resolve() in inputs for output in planned):
             raise ValueError("output path must not overwrite an input file")
         if resolved_stage in resolved_sources:
             raise ValueError("stage audio must not also be a source")

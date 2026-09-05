@@ -20,6 +20,11 @@ const useStyles = makeStyles({
 		flexDirection: "column",
 		gap: tokens.spacingVerticalM,
 	},
+	track: {
+		display: "flex",
+		flexDirection: "column",
+		gap: tokens.spacingVerticalM,
+	},
 	stats: {
 		display: "grid",
 		// Two columns on a phone, as many as fit on a desktop.
@@ -28,6 +33,7 @@ const useStyles = makeStyles({
 	},
 	empty: { color: tokens.colorNeutralForeground3 },
 	statsTitle: { marginTop: tokens.spacingVerticalS },
+	trackTitle: { marginTop: tokens.spacingVerticalS },
 	stat: { display: "flex", flexDirection: "column" },
 	label: {
 		color: tokens.colorNeutralForeground3,
@@ -44,31 +50,84 @@ function channelLabel(
 	return t("audio_channel_count", { count: channels });
 }
 
-interface Props {
-	blob: Blob | null;
+/** One rendered stem: the bytes, the name it downloads as, and its statistics. */
+export interface ResultTrack {
+	blob: Blob;
 	filename: string;
+	/** Translation key naming the stem; omitted when there is only one. */
+	titleKey?: string;
 	stats?: AudioStats;
+}
+
+interface Props {
+	tracks: readonly ResultTrack[];
+	/** Shown before the first render, when there is nothing to preview yet. */
+	placeholderName: string;
 	/** Hand the caller a play/pause toggle, for the Ctrl+P shortcut. */
 	registerToggle?(toggle: () => void): void;
 }
 
-/** Preview and download one rendered file; nothing leaves the tab until asked. */
-export function ResultPanel({ blob, filename, stats, registerToggle }: Props) {
+/** Preview and download the rendered stems; nothing leaves the tab until asked. */
+export function ResultPanel({
+	tracks,
+	placeholderName,
+	registerToggle,
+}: Props) {
 	const styles = useStyles();
 	const { t } = useLanguage();
-	const [url, setUrl] = useState<string | null>(null);
+	const [urls, setUrls] = useState<readonly string[]>([]);
 
 	useEffect(() => {
-		if (blob === null) {
-			setUrl(null);
-			return;
-		}
-		const created = URL.createObjectURL(blob);
-		setUrl(created);
-		// The blob holds the whole rendered file; release it as soon as the page
+		const created = tracks.map((track) => URL.createObjectURL(track.blob));
+		setUrls(created);
+		// Each blob holds a whole rendered file; release them as soon as the page
 		// shows a different result, or a long session accumulates every render.
-		return () => URL.revokeObjectURL(created);
-	}, [blob]);
+		return () => {
+			for (const url of created) URL.revokeObjectURL(url);
+		};
+	}, [tracks]);
+
+	// An empty panel still shows the player and the download button, disabled,
+	// so the card does not change shape the moment a render lands.
+	const shown = tracks.length === 0 ? [null] : tracks;
+
+	return (
+		<Card className={styles.card}>
+			<CardHeader header={<Title3>{t("preview_title")}</Title3>} />
+			{tracks.length === 0 ? (
+				<Text className={styles.empty}>{t("preview_empty")}</Text>
+			) : null}
+			{shown.map((track, index) => (
+				<Stem
+					key={track?.filename ?? "empty"}
+					track={track}
+					url={urls[index] ?? null}
+					filename={track?.filename ?? placeholderName}
+					// Ctrl+P has always driven one player; keep it on the first stem.
+					registerToggle={index === 0 ? registerToggle : undefined}
+					showTitle={tracks.length > 1}
+				/>
+			))}
+		</Card>
+	);
+}
+
+function Stem({
+	track,
+	url,
+	filename,
+	registerToggle,
+	showTitle,
+}: {
+	track: ResultTrack | null;
+	url: string | null;
+	filename: string;
+	registerToggle?(toggle: () => void): void;
+	showTitle: boolean;
+}) {
+	const styles = useStyles();
+	const { t } = useLanguage();
+	const stats = track?.stats;
 
 	const rows = useMemo(() => {
 		if (stats === undefined) return [];
@@ -81,15 +140,17 @@ export function ResultPanel({ blob, filename, stats, registerToggle }: Props) {
 			[t("audio_bit_depth"), `${stats.bit_depth} bit`],
 			[t("audio_peak"), decibels(stats.peak_dbfs)],
 			[t("audio_rms"), decibels(stats.rms_dbfs)],
-			[t("audio_file_size"), formatBytes(stats.file_size || (blob?.size ?? 0))],
+			[
+				t("audio_file_size"),
+				formatBytes(stats.file_size || (track?.blob.size ?? 0)),
+			],
 		];
-	}, [blob?.size, stats, t]);
+	}, [stats, t, track?.blob.size]);
 
 	return (
-		<Card className={styles.card}>
-			<CardHeader header={<Title3>{t("preview_title")}</Title3>} />
-			{url === null ? (
-				<Text className={styles.empty}>{t("preview_empty")}</Text>
+		<div className={styles.track}>
+			{showTitle && track?.titleKey !== undefined ? (
+				<Title3 className={styles.trackTitle}>{t(track.titleKey)}</Title3>
 			) : null}
 			<AudioPlayer
 				url={url}
@@ -120,6 +181,6 @@ export function ResultPanel({ blob, filename, stats, registerToggle }: Props) {
 					))}
 				</div>
 			) : null}
-		</Card>
+		</div>
 	);
 }

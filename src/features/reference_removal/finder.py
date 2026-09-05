@@ -7,7 +7,7 @@ from pathlib import Path
 from shared.audio import AUDIO_EXTENSIONS
 
 _KEYWORDS = ("伴奏", "accompaniment", "instrumental", "inst", "karaoke", "off vocal", "minus one")
-_OUTPUT_MARKERS = ("_vocals", "-vocals", "消音")
+_OUTPUT_MARKERS = ("_vocals", "-vocals", "_backing", "-backing", "消音")
 _EXTENSIONS = frozenset(AUDIO_EXTENSIONS)
 
 

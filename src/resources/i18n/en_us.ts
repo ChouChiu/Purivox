@@ -48,6 +48,30 @@
         <translation>Processing options</translation>
     </message>
     <message>
+        <source>track_vocal</source>
+        <translation>Vocal</translation>
+    </message>
+    <message>
+        <source>track_backing</source>
+        <translation>Backing track</translation>
+    </message>
+    <message>
+        <source>output_tracks</source>
+        <translation>Export:</translation>
+    </message>
+    <message>
+        <source>output_tracks_vocal</source>
+        <translation>Vocal only</translation>
+    </message>
+    <message>
+        <source>output_tracks_backing</source>
+        <translation>Backing track only</translation>
+    </message>
+    <message>
+        <source>output_tracks_both</source>
+        <translation>Vocal and backing track</translation>
+    </message>
+    <message>
         <source>strength</source>
         <translation>Vocal isolation strength:</translation>
     </message>

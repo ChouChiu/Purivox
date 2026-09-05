@@ -20,7 +20,13 @@ from features.neural_separation import (
 from features.reference_removal import ReferenceJob, run_reference_job
 from shared.branding import APPLICATION_NAME, ORGANIZATION_NAME
 from shared.i18n import SUPPORTED_LANGUAGES, install_language
-from shared.jobs import SIGMA_CHOICES, STRENGTH_MAXIMUM, STRENGTH_MINIMUM, STRENGTH_RANGE
+from shared.jobs import (
+    SIGMA_CHOICES,
+    STRENGTH_MAXIMUM,
+    STRENGTH_MINIMUM,
+    STRENGTH_RANGE,
+    OutputTracks,
+)
 from shared.logging import configure_logging, set_log_level
 from shared.processing import CancellationToken, ProcessingCancelled, ProgressEvent
 
@@ -48,6 +54,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     reference.add_argument("--sigma", type=int, choices=SIGMA_CHOICES, default=3)
     reference.add_argument("--align", action=argparse.BooleanOptionalAction, default=True)
+    reference.add_argument(
+        "--tracks",
+        type=OutputTracks,
+        choices=list(OutputTracks),
+        default=OutputTracks.VOCAL,
+    )
     reference.add_argument("--lang", choices=SUPPORTED_LANGUAGES, default=SUPPORTED_LANGUAGES[0])
 
     neural = commands.add_parser("ai", help="MDX-Net vocal extraction")
@@ -98,6 +110,7 @@ def main(argv: list[str] | None = None) -> int:
                 strength=args.strength,
                 sigma=args.sigma,
                 auto_align=args.align,
+                tracks=args.tracks,
             )
             result = run_reference_job(job, token, _print_progress)
         else:

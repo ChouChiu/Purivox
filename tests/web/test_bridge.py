@@ -266,3 +266,44 @@ def test_probe_reports_an_unreadable_container_instead_of_raising(tmp_path: Path
 
     assert payload["supported"] is False
     assert payload["reason"]
+
+
+def test_run_reference_exports_both_stems(reference_scene):
+    song, accompaniment, output = reference_scene
+
+    payload = bridge.run_reference(
+        json.dumps(
+            {
+                "song": str(song),
+                "accompaniment": str(accompaniment),
+                "output": str(output),
+                "strength": 75,
+                "sigma": 3,
+                "auto_align": False,
+                "tracks": "both",
+            }
+        )
+    )
+
+    result = json.loads(payload)
+    backing = output.with_name("out_backing.wav")
+    assert result["outputs"] == [str(output.resolve()), str(backing.resolve())]
+    assert len(result["audio_stats"]) == 2
+    assert output.is_file() and backing.is_file()
+
+
+def test_estimate_reference_charges_for_the_second_exported_file(reference_scene):
+    request = json.dumps(
+        {
+            "sample_rate": 44_100,
+            "song_seconds": 300.0,
+            "accompaniment_seconds": 300.0,
+            "file_bytes": 0,
+        }
+    )
+    single = json.loads(bridge.estimate_reference(request))
+    both = json.loads(
+        bridge.estimate_reference(json.dumps({**json.loads(request), "both_tracks": True}))
+    )
+    # The stem sitting in the Emscripten filesystem is heap like everything else.
+    assert both["peak_bytes"] > single["peak_bytes"]

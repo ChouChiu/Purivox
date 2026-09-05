@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import replace
+from pathlib import Path
 
 import numpy as np
 
@@ -14,13 +14,15 @@ from features.full_stage import (
 )
 from features.reference_removal.dsp import align_audio, process_audio
 from shared.audio import (
-    analyze_audio,
+    AudioStats,
     copy_audio,
     create_pcm_audio,
+    export_audio,
     read_audio,
     resample_audio,
-    write_wav_atomic,
+    subtract_into,
 )
+from shared.jobs import OutputTracks, planned_outputs
 from shared.processing import CancellationToken, ProgressCallback
 from shared.progress import report_progress
 
@@ -197,15 +199,28 @@ def run_full_stage_job(
                     if audio is not None:
                         audio.cleanup()
 
-        report_progress(progress, 86, "analyzing_output")
-        stats = analyze_audio(output, token)
-        output.release_pages()
-        report_progress(progress, 91, "saving")
-        write_wav_atomic(job.output, output, token)
-        stats = replace(stats, file_size=job.output.stat().st_size)
-        report_progress(progress, 100, "done_status", path=job.output)
-        logger.info("full-stage render completed: %s", job.output.resolve())
-        return FullStageResult(analysis, (job.output.resolve(),), (stats,))
+        tracks = OutputTracks(job.tracks)
+        planned = planned_outputs(job.output, tracks)
+        outputs: list[Path] = []
+        stats: list[AudioStats] = []
+        if tracks is not OutputTracks.BACKING:
+            stats.append(export_audio(output, job.output, token, progress, 86, 89))
+            output.release_pages()
+            outputs.append(job.output.resolve())
+        if tracks is not OutputTracks.VOCAL:
+            # The render started as a copy of the stage and had each enabled clip
+            # blended over it, so the stage less the render is exactly what
+            # cancellation removed.  Ranges no clip covered are identical in both,
+            # which leaves the backing silent there - as it should be, nothing was
+            # cancelled out of them.
+            subtract_into(stage, output, token)
+            backing = planned[-1]
+            stats.append(export_audio(output, backing, token, progress, 94, 96))
+            output.release_pages()
+            outputs.append(backing.resolve())
+        report_progress(progress, 100, "done_status", path=outputs[0])
+        logger.info("full-stage render completed: %s", ", ".join(str(path) for path in outputs))
+        return FullStageResult(analysis, tuple(outputs), tuple(stats))
     finally:
         for audio in (output, stage):
             if audio is not None:

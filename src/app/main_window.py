@@ -44,6 +44,7 @@ from features.settings.updates import Release, UpdateChecker, installed_version
 from shared.branding import application_icon
 from shared.config import cfg
 from shared.i18n import install_language, tr
+from shared.jobs import planned_outputs
 from shared.logging import set_log_level
 from shared.processing import ProcessingOperation
 
@@ -306,7 +307,9 @@ class MainWindow(FluentWindow):
         if song == accompaniment:
             self._warning("warn_same_inputs")
             return
-        if output in {song, accompaniment}:
+        tracks = self.mr.selected_tracks()
+        inputs = {song, accompaniment}
+        if any(path in inputs for path in planned_outputs(output, tracks)):
             self._warning("warn_output_conflict")
             return
         try:
@@ -317,11 +320,13 @@ class MainWindow(FluentWindow):
                 strength=self.mr.strength.value(),
                 sigma=_GUI_REFERENCE_SIGMA_SECONDS,
                 auto_align=True,
+                tracks=tracks,
             )
         except ValueError:
             self._warning("warn_invalid_parameters")
             return
         cfg.set(cfg.auto_find, self.mr.auto_find.isChecked())
+        cfg.set(cfg.output_tracks, tracks.value)
         self.mr.clear_result()
         self._start_worker(self.mr, partial(run_reference_job, job))
 
@@ -354,6 +359,7 @@ class MainWindow(FluentWindow):
         if output is None:
             self._warning("warn_no_out")
             return None
+        tracks = self.full_stage.selected_tracks()
         try:
             job = FullStageJob(
                 stage=Path(self.full_stage.stage_edit.text()).expanduser().resolve(),
@@ -363,10 +369,12 @@ class MainWindow(FluentWindow):
                 sigma=_GUI_REFERENCE_SIGMA_SECONDS,
                 include_fragments=self.full_stage.include_fragments.isChecked(),
                 auto_align=True,
+                tracks=tracks,
             )
         except ValueError:
             self._warning("warn_output_conflict")
             return None
+        cfg.set(cfg.output_tracks, tracks.value)
         return job
 
     def analyze_full_stage(self) -> None:

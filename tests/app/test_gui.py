@@ -20,6 +20,7 @@ from features.settings.updates import Release
 from shared.audio import AudioStats
 from shared.config import cfg, load_config
 from shared.i18n import tr
+from shared.jobs import OutputTracks
 from shared.ui import (
     CONTENT_MAX_WIDTH,
     Lane,
@@ -289,6 +290,7 @@ def test_reference_start_forwards_fixed_job_settings(qtbot, tmp_path: Path, monk
     job = started[0].args[0]
     assert job.sigma == 3
     assert job.auto_align
+    assert job.tracks is OutputTracks.VOCAL
 
 
 def test_combo_boxes_use_stable_menu_without_opacity_animation(qtbot):
@@ -641,3 +643,62 @@ def test_an_available_release_opens_its_page_on_request(qtbot, monkeypatch):
     window.updates.update_available.emit(release)
 
     assert opened == [release.url]
+
+
+def test_export_choice_renames_the_default_output_until_the_user_names_it(qtbot, tmp_path: Path):
+    page = MrPage()
+    qtbot.addWidget(page)
+    page.retranslate()
+    page.set_song(str(tmp_path / "concert.wav"))
+    assert Path(page.output_edit.text()).name == "concert_vocals.wav"
+
+    page.tracks.setCurrentIndex(page.tracks.findData(OutputTracks.BACKING.value))
+    assert page.selected_tracks() is OutputTracks.BACKING
+    assert Path(page.output_edit.text()).name == "concert_backing.wav"
+    assert page.normalized_output_path() == (tmp_path / "concert_backing.wav").resolve()
+
+    # A name the user typed is theirs; switching the export must not take it back.
+    page._output_edited("我的消音")
+    page.output_edit.setText("我的消音")
+    page.tracks.setCurrentIndex(page.tracks.findData(OutputTracks.BOTH.value))
+    assert page.output_edit.text() == "我的消音"
+
+
+def test_full_stage_export_choice_follows_the_same_rule(qtbot, tmp_path: Path):
+    page = FullStagePage()
+    qtbot.addWidget(page)
+    page.retranslate()
+    page.set_stage(str(tmp_path / "live.wav"))
+    assert Path(page.output_edit.text()).name == "live_full_stage_vocals.wav"
+
+    page.tracks.setCurrentIndex(page.tracks.findData(OutputTracks.BACKING.value))
+    assert Path(page.output_edit.text()).name == "live_full_stage_backing.wav"
+
+
+def test_export_choice_survives_a_language_switch(qtbot):
+    """Rebuilding the items re-emits the signal; the choice must not drift."""
+    page = MrPage()
+    qtbot.addWidget(page)
+    page.retranslate()
+    page.tracks.setCurrentIndex(page.tracks.findData(OutputTracks.BOTH.value))
+
+    page.retranslate()
+    page.retranslate()
+
+    assert page.tracks.count() == 3
+    assert page.selected_tracks() is OutputTracks.BOTH
+    # The labels come from f-string keys, which the literal-key check cannot see.
+    for choice in OutputTracks:
+        key = f"output_tracks_{choice.value}"
+        assert tr(key) != key
+    for key in ("output_tracks", "track_vocal", "track_backing"):
+        assert tr(key) != key
+
+
+def test_export_choice_is_disabled_while_a_job_runs(qtbot):
+    page = MrPage()
+    qtbot.addWidget(page)
+    page.set_running(True)
+    assert not page.tracks.isEnabled()
+    page.set_running(False)
+    assert page.tracks.isEnabled()
