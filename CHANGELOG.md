@@ -7,6 +7,85 @@ Each released version gets one section. The release workflow uses the section
 matching the tag as the GitHub Release notes, which is also what the in-app
 update dialog shows.
 
+## v1.1.0 — 2026-09-06
+
+**新增**
+
+- **从链接获取音源**：单曲页的两个文件行、整场页的舞台音频与音源列表都新增「获取」按钮。
+  粘贴 YouTube 或 YouTube Music 链接直接下载，或输入关键词搜索 YouTube 后双击结果下载。
+  链接里带播放列表时只取它指向的那一首。YouTube Music 只支持链接——它的搜索接口不返回
+  可下载的歌曲条目
+- **下载记录**：下载过的文件列在「已下载」里，换个任务可以再选一次，同一首不会重复下载，
+  链接换个形式（例如 YouTube 自动加上的 `&list=…`）也认得出是同一首。文件保存在应用数据
+  目录的 `downloads` 下，可以在对话框里打开文件夹查看，或连同文件一起删除
+- **命令行 `purivox fetch`**：`fetch <链接>` 直接下载，`fetch <关键词> --pick N` 搜索后下载
+  第 N 个，`fetch --list` 列出下载过的文件。成功时把路径打印到标准输出，可以直接接给
+  `purivox mr`
+
+**移除**
+
+- **AI 人声分离**：不使用歌曲音源的神经网络分离页面和 `purivox ai` 命令已经移除。
+  它与 Purivox 的其余部分不共享任何东西——不取歌曲音源，不做匹配、对齐和参考对消，
+  结果也无法与垫音消除的输出相比较——却让安装包一直背着 onnxruntime。
+  这类需求请交给 UVR5 等专用工具。首页原来的 AI 入口卡片改为打开整场垫音消除
+
+**改进**
+
+- 安装包明显变小：随神经网络分离一起移除的 onnxruntime，加上不再打包那些从未被加载的
+  图像编解码器与 Qt 插件，Linux 免安装包从约 127 MB 降到约 99 MB
+- 装有 ffmpeg 时下载结果转成 WAV，没有时保留原始容器（通常是 WebM/Opus）交给 Qt Multimedia
+  解码，两条路管线都读得了；`.webm` 也进了文件对话框的音频格式过滤器
+- 窄窗口下路径字段会让位，而不是把整页撑宽
+
+---
+
+**Added**
+
+- **Fetch a source from a link**: both file rows on the Single page, and the stage
+  audio and source list on the Full Stage page, gained a **Fetch** button. Paste a
+  YouTube or YouTube Music link to download it, or type keywords to search YouTube
+  and double-click a result. A link carrying a playlist yields the one track it
+  points at. YouTube Music is link-only — its search does not answer with
+  downloadable songs
+- **Downloads are remembered**: what has been fetched is listed under **Downloaded**
+  and stays available for later jobs. A track is never fetched twice: a link in
+  another shape — the `&list=…` YouTube adds on its own, say — is still recognised
+  as the same track. Files live under `downloads` in the application data
+  directory, and the dialog can open that folder or delete an entry with its file
+- **`purivox fetch` on the command line**: `fetch <link>` downloads it,
+  `fetch <keywords> --pick N` searches and takes the Nth result, and
+  `fetch --list` shows what has been downloaded. On success the path is printed to
+  standard output, ready to hand to `purivox mr`
+
+**Removed**
+
+- **Neural separation**: the AI page and the `purivox ai` command are gone. That
+  workflow shared nothing with the rest of Purivox — it took no song source and
+  ran none of the matching, alignment or reference cancellation the product is
+  built around, and its result could not be compared against a vocal isolation
+  one — while onnxruntime rode along in every installer. Reach for a dedicated
+  tool such as UVR5 instead. The home page's AI card now opens Full Stage
+
+**Improved**
+
+- A much smaller download: dropping onnxruntime along with neural separation, and
+  no longer packaging image codecs and Qt plugins the build carried but never
+  loaded, takes the Linux onefile from about 127 MB to about 99 MB
+- With ffmpeg installed a download is converted to WAV; without it the original
+  container is kept — usually WebM/Opus — and Qt Multimedia decodes it, so the
+  pipelines read either one. `.webm` joined the audio filter in the file dialogs
+- In a narrow window the path fields give way instead of widening the page
+
+**下载 / Downloads**
+
+- Windows：`Purivox.exe`
+- macOS（arm64）：`purivox-macos-arm64.tar.gz`
+- Linux：`purivox_1.1.0-1_amd64.deb`、`purivox-1.1.0-1.x86_64.rpm`，
+  或免安装的 `purivox-linux-x86_64.tar.gz`
+- Python 包：`purivox-1.1.0-py3-none-any.whl` / `purivox-1.1.0.tar.gz`
+- 校验：`SHA256SUMS-windows`、`SHA256SUMS-macos`、`SHA256SUMS-linux`、
+  `SHA256SUMS-python`
+
 ## v1.0.1 — 2026-09-05
 
 **新增**

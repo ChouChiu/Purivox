@@ -5,7 +5,7 @@
     <name>Purivox</name>
     <message>
         <source>window_title</source>
-        <translation>Purivox v1.0</translation>
+        <translation>Purivox v1.1</translation>
     </message>
     <message>
         <source>file_select</source>
