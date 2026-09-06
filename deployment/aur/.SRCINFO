@@ -1,5 +1,5 @@
 pkgbase = purivox-bin
-	pkgdesc = Reference-guided and neural vocal separation for stage and live recordings
+	pkgdesc = Reference-guided vocal isolation for stage and live recordings
 	pkgver = 1.0.1
 	pkgrel = 1
 	url = https://github.com/ChouChiu/Purivox

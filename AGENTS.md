@@ -23,29 +23,29 @@ PySide6-Fluent-Widgets, AGPL-3.0-or-later. `CLAUDE.md` symlinks here.
 
 ## The Product
 
-Two pipelines. The GUI, the CLI and the browser build are shells over them:
+One pipeline, two workflows over it. The GUI, the CLI and the browser build are shells:
 
 - **Reference cancellation** — align the song against the known accompaniment (GCC-PHAT + clock
   drift tracking), estimate a complex transfer, subtract the prediction, soft-mask the residual.
   The cancellation result is the output; there is no spatial post-processing. Used by **MR Remove**
   (`purivox mr`, GUI) on one pair, and by **Full Stage** (GUI) on the clips a timeline matched
   inside a continuous stage recording — only the enabled ones are processed.
-- **Neural separation** — UVR MDX-Net ONNX, no reference (`purivox ai`, GUI); models fetched on
-  demand and SHA-256 verified.
 
-GUI and CLI are thin shells over `run_reference_job` / `run_neural_job`; full-stage rendering is
-orchestrated in `src/app/full_stage_processing.py`. The **browser build** (`web/`) runs both
-reference workflows under Pyodide as a static site with no backend
-(<https://purivox.wwchun.top/>, `docs/web.md`); `onnxruntime` has no wasm build, so AI is
-desktop-only. `README.md` (Chinese) is authoritative for users, with `README_EN.md` and `docs/en/`
-as translations, paired file-for-file.
+Neural separation was removed in favour of dedicated tools such as UVR5: it carried onnxruntime,
+58 MB of the packaged binary, for a workflow that does not use a song source at all.
+
+GUI and CLI are thin shells over `run_reference_job`; full-stage rendering is orchestrated in
+`src/app/full_stage_processing.py`. The **browser build** (`web/`) runs both workflows under
+Pyodide as a static site with no backend (<https://purivox.wwchun.top/>, `docs/web.md`).
+`README.md` (Chinese) is authoritative for users, with `README_EN.md` and `docs/en/` as
+translations, paired file-for-file.
 
 ## Layout
 
 ```text
 src/entrypoints/   cli.py, gui.py — startup only
 src/app/           MainWindow, JobPresenter, JobRunner/worker, full_stage_processing
-src/features/      reference_removal, full_stage, neural_separation, home, settings
+src/features/      reference_removal, full_stage, home, settings
 src/shared/        audio/, dsp/, ui/, config, i18n, jobs, logging, processing, progress, branding
 src/web/           bridge.py (JSON in/out), timeline.py, limits.py — sibling of app
 web/               Vite + React + Fluent UI v9, same feature layering, bun
@@ -64,16 +64,15 @@ need moves down into `shared` (`BLOCK_FRAMES`, `AUDIO_EXTENSIONS`, `validate_ref
 | `src/app/` | `main_window.py` (FluentWindow shell: navigation, i18n/theme, auto-find, the window `QShortcut`s), `job_presenter.py` (page and result state), `job_runner.py`/`worker.py` (QThread lifecycle and adapter), `version.py` |
 | `src/features/reference_removal/` | `dsp/algorithms.py` (complex subtraction + residual mask, linked peak protection), `dsp/transfer.py` (smoothed spectra, vectorised LDL^H solve, adjusted multiple coherence), `dsp/alignment.py` (GCC-PHAT + drift tracking + Lanczos warp), `finder.py` (automatic accompaniment match), `processing.py`, `page.py`, `models.py` |
 | `src/features/full_stage/` | Multi-source fingerprint matching, timeline models, `timeline_model.py` (`QAbstractTableModel` behind the editable timeline, `clip_edited`/`edit_rejected`) |
-| `src/features/neural_separation/` | `inference.py` (MdxNet ONNX, chunked overlap-add), `model_store.py` (search + `QNetworkAccessManager` download + `QSaveFile` verify-then-commit), `catalog.py` (`MODEL_BASE_URL`, 4 entries) |
 | `src/features/home/`, `settings/` | Brand and entry cards; language/theme/log level, `updates.py` (GitHub release query + version compare) and `dialog.py`. The app never installs an update — the dialog opens the release page |
 | `src/shared/` (root) | `config.py` (the `cfg` `QConfig`), `i18n.py` (`tr()`, `install_language()`, `SUPPORTED_LANGUAGES`), `jobs.py` (the reference-settings contract behind `ReferenceJob`, `FullStageJob` and the CLI: `SIGMA_CHOICES`, `STRENGTH_RANGE`, `validate_reference_settings`, `OutputTracks`, `planned_outputs`), `logging.py`, `processing.py` (`CancellationToken`, `ProgressEvent`, `ProcessingResult`), `progress.py`, `branding.py` |
 | `src/shared/audio/` | `io.py`: mapped I/O, soxr resample, atomic WAV write, `BLOCK_FRAMES` (262 144), `AUDIO_EXTENSIONS`, `release_mapped_pages()`; `analysis.py`: `AudioStats`, peak/RMS, block-wise `copy_audio`/`subtract_into`, `export_audio` |
 | `src/shared/dsp/` | `spectral.py`: librosa-compatible `stft`/`istft` (`n_fft=2048`, `hop=512`) and `log_flux_bands()`, shared by full-stage matching and coarse alignment |
 | `src/shared/ui/` | `responsive.py` (`LayoutMode`/`LayoutMetrics`, `ResponsiveColumns`, `FoldingRow`, `allow_shrinking`, `HeightForWidth`, `ElidedLabel`), `cards.py` (`FormCard`, `PageScrollArea`), `widgets.py` (`SmoothComboBox`, file filters, `normalized_wav_path`) |
-| `src/resources/` | `i18n/{zh_cn,en_us,ja_jp,ko_kr}.{ts,qm}`, `model_data.json` (65 MDX-Net specs keyed by model MD5), `purivox.svg`, `resource_path` |
+| `src/resources/` | `i18n/{zh_cn,en_us,ja_jp,ko_kr}.{ts,qm}`, `purivox.svg`, `resource_path` |
 | `web/scripts/` | `build-python-archive.mjs` (packs `src/` for Pyodide), `build-i18n.mjs`, `build-assets.mjs`, `check-architecture.mjs`. Never a second implementation of the DSP |
 | `tests/`, `docs/` | Tests mirror `src/` path-for-path, `benchmarks/` behind `--runslow`; Chinese docs with one translation per file in `docs/en/` |
-| `deployment/`, `tools/`, `models/` | Nuitka entry shim + `.deb`/`.rpm` packaging; `eval_cancellation.py` (DSP A/B); ONNX weights, gitignored and never packaged |
+| `deployment/`, `tools/` | Nuitka entry shim + `.deb`/`.rpm` packaging; `eval_cancellation.py` (DSP A/B) |
 
 ## Pipelines
 
@@ -83,12 +82,6 @@ fallback) → upmix to stereo → resample the song to the stage rate (soxr) →
 crossfade) → peak/RMS stats → atomic WAV at the song's own rate and bit depth. `process_audio` has
 a pooled and an inline schedule because Pyodide has no pthreads; `test_dsp_execution.py` holds them
 to the same output.
-
-**Neural** (`features/neural_separation/processing.py`): resample to 44.1 kHz → `ensure_model`
-(`--models-dir` → `PURIVOX_MODELS` → system app-data dir → repo `models/`; TRvlvr download, SHA-256
-verified) → `MdxNet.separate` (chunked overlap-add with a hanning divider) → background =
-mix − vocal → resample both stems back → `<stem>_vocal.wav` + `<stem>_background.wav` at the song's
-bit depth.
 
 **Job lifecycle**: a page emits `start_requested`/`cancel_requested`; `MainWindow` builds the job
 dataclass and hands it to `JobPresenter`, which owns page and result state and delegates to
@@ -104,7 +97,6 @@ uv sync --locked
 
 uv run --locked purivox                            # GUI
 uv run --locked purivox mr <song> <acc> <out.wav> --strength 75 --sigma 8 --align --lang zh_cn
-uv run --locked purivox ai <song> [--output-dir <dir>] [--model mdxnet_1] [--models-dir <dir>]
 uv run --locked purivox --selftest                 # pipeline smoke, offscreen-safe
 
 # DSP A/B across a change
@@ -267,11 +259,10 @@ checks the roster against the tree.
 Python ≥3.11, pinned to 3.14 for development by `.python-version`; uv with `uv.lock` committed, the
 `dev` group synced by default and `deploy` opt-in. PySide6 ≥6.8 + `PySide6-Fluent-Widgets[full]`
 (vendored `qfluentwidgets`) and never a second Fluent package; Qt is mandatory even for the CLI,
-which falls back to `QAudioDecoder` for decoding. numpy ≥2, scipy, soundfile, soxr, onnxruntime
-(CPU), all range-pinned. ruff only (`line-length = 100`, E/F/I/UP/B/SIM/RUF), `ruff format`, no
-black or isort. Nuitka 4.1.3 via `pyside6-deploy`, onefile (`dist/Purivox.bin` / `Purivox.exe`) and
-a macOS arm64 app bundle (`dist/Purivox.app`, from a CI-derived spec); ONNX weights are downloaded
-at runtime, never packaged.
+which falls back to `QAudioDecoder` for decoding. numpy ≥2, scipy, soundfile, soxr, all
+range-pinned. ruff only (`line-length = 100`, E/F/I/UP/B/SIM/RUF), `ruff format`, no black or
+isort. Nuitka 4.1.3 via `pyside6-deploy`, onefile (`dist/Purivox.bin` / `Purivox.exe`) and a macOS
+arm64 app bundle (`dist/Purivox.app`, from a CI-derived spec).
 
 ## Testing
 
@@ -280,14 +271,13 @@ at runtime, never packaged.
   (`tests/benchmarks/test_long_audio.py`: seam smoothness, peak RSS ≤ 2 GiB).
 - `tests/` mirrors `src/` path-for-path, so a change's tests are at the mirrored path: DSP and
   alignment regressions under `tests/features/reference_removal/`, timeline and matching under
-  `full_stage/`, model download/verify/cancel under `neural_separation/`, runner and presenter
-  lifecycles and the pytest-qt GUI/layout tests under `tests/app/`, the browser shell's JSON
-  contract and Qt-free imports under `tests/web/`.
+  `full_stage/`, runner and presenter lifecycles and the pytest-qt GUI/layout tests under
+  `tests/app/`, the browser shell's JSON contract and Qt-free imports under `tests/web/`.
 - Three repository-wide gates: `test_architecture.py` (import boundaries), `test_packaging.py`
   (shipped-source roster, compiled catalogues), `test_documentation.py` (README index, doc
   translation pairing, internal links).
-- No test reaches a real host — the model-store and update tests repoint `catalog.MODEL_BASE_URL`
-  and `updates.RELEASES_API` at a localhost server.
+- No test reaches a real host — the update tests repoint `updates.RELEASES_API` at a localhost
+  server.
 - DSP changes are accepted on measurement, not argument: run `purivox --selftest` and
   `tools/eval_cancellation.py --compare` before committing. Synthetic metrics are regression
   evidence only and claim nothing about real music. `docs/reference-removal.md` documents the

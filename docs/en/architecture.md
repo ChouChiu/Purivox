@@ -20,13 +20,12 @@ src/app/                         Main window, task runner, and cross-feature orc
 src/features/                    Self-contained pages, models, and processing logic
 ├── reference_removal/           Single-track reference cancellation, preview controls, and DSP
 ├── full_stage/                  Full Stage analysis and timeline models
-├── neural_separation/           MDX-Net models, model store, and inference
 ├── home/                        Home page
 └── settings/                    Settings page and the release check
 src/shared/                      Audio, spectra, job validation, configuration, logging,
                                  task protocol, and widgets
 src/web/                         Browser shell: the job entry points and memory budget under Pyodide
-src/resources/                   Read-only resources such as translations and model specifications
+src/resources/                   Read-only resources such as the translations
 ```
 
 Dependencies flow in one direction:
@@ -129,17 +128,15 @@ WAV output is first written to a temporary file in the destination directory, an
 then atomically replaces the destination. Cancellation or failure therefore leaves no partially
 written final output.
 
-## Three Processing Pipelines
+## Two Processing Pipelines
 
 ```mermaid
 flowchart TB
     input["Audio input"] --> choice{"Workflow"}
     choice -->|Single| mr["Align song source<br/>coherent reference cancellation"]
     choice -->|Full Stage| stage["Multi-source matching<br/>timeline-based cancellation"]
-    choice -->|AI Track Separation| ai["Chunked model inference<br/>calculate vocals and background"]
     mr --> mrout["Vocal WAV<br/>in the song's own format"]
     stage --> stageout["Full Stage WAV<br/>in the stage's own format"]
-    ai --> aiout["Two WAV files<br/>in the song's own format"]
 ```
 
 ### Single
@@ -166,17 +163,10 @@ not introduce silence or shorten the output.
 Internal Full Stage processing and the final export both retain the stage/live audio's own sample
 rate and bit depth.
 
-### AI Track Separation
+### Export Format
 
-```text
-Read and convert to stereo → resample to 44.1 kHz → find or download the model
-→ chunked MDX-Net inference → background = mix — vocals
-→ resample back to the song's own rate → write two WAV files
-```
-
-An export matches the file it came from. Model inference is fixed at 44.1 kHz, so upsampling the
-result to a higher export format would only enlarge the file without producing spectral detail
-absent from the input or the model, and the pipeline no longer does it. For bit depth, an 8- or
+Both pipelines export at the input file's own sample rate and bit depth: upsampling would only
+enlarge the file without producing spectral detail absent from the input. For bit depth, an 8- or
 16-bit PCM input is written at 16 bits, and wider 24-/32-bit PCM, float and every lossy format are
 written at 24.
 
@@ -210,7 +200,7 @@ flowchart LR
 
 A control therefore folds because the *page* is narrow, not because it has already been squeezed —
 the latter would simply cut the page off, since the scroll areas keep their horizontal scroll bar
-switched off. For the same reason status labels and the model combo call
+switched off. For the same reason status labels and the combo boxes call
 `shared.ui.allow_shrinking()`: a completion message carrying a long path has no space to wrap at and
 would otherwise widen the whole page.
 

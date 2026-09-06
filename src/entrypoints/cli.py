@@ -11,12 +11,6 @@ from pathlib import Path
 from PySide6.QtCore import QCoreApplication
 
 from app.version import __version__
-from features.neural_separation import (
-    DEFAULT_MODEL_ID,
-    NeuralJob,
-    model_catalog,
-    run_neural_job,
-)
 from features.reference_removal import ReferenceJob, run_reference_job
 from shared.branding import APPLICATION_NAME, ORGANIZATION_NAME
 from shared.i18n import SUPPORTED_LANGUAGES, install_language
@@ -61,15 +55,6 @@ def build_parser() -> argparse.ArgumentParser:
         default=OutputTracks.VOCAL,
     )
     reference.add_argument("--lang", choices=SUPPORTED_LANGUAGES, default=SUPPORTED_LANGUAGES[0])
-
-    neural = commands.add_parser("ai", help="MDX-Net vocal extraction")
-    neural.add_argument("song", type=Path)
-    neural.add_argument("--output-dir", type=Path)
-    neural.add_argument(
-        "--model", choices=[entry.id for entry in model_catalog()], default=DEFAULT_MODEL_ID
-    )
-    neural.add_argument("--models-dir", type=Path)
-    neural.add_argument("--lang", choices=SUPPORTED_LANGUAGES, default=SUPPORTED_LANGUAGES[0])
     return parser
 
 
@@ -102,21 +87,16 @@ def main(argv: list[str] | None = None) -> int:
     token = CancellationToken()
     previous_handler = signal.signal(signal.SIGINT, lambda *_unused: token.cancel())
     try:
-        if args.command == "mr":
-            job = ReferenceJob(
-                song=args.song,
-                accompaniment=args.accompaniment,
-                output=args.output,
-                strength=args.strength,
-                sigma=args.sigma,
-                auto_align=args.align,
-                tracks=args.tracks,
-            )
-            result = run_reference_job(job, token, _print_progress)
-        else:
-            output_dir = args.output_dir or args.song.expanduser().resolve().parent
-            job = NeuralJob(args.song, output_dir, args.model, args.models_dir)
-            result = run_neural_job(job, token, _print_progress)
+        job = ReferenceJob(
+            song=args.song,
+            accompaniment=args.accompaniment,
+            output=args.output,
+            strength=args.strength,
+            sigma=args.sigma,
+            auto_align=args.align,
+            tracks=args.tracks,
+        )
+        result = run_reference_job(job, token, _print_progress)
         for output in result.outputs:
             print(output)
         return 0

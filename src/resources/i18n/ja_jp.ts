@@ -288,10 +288,6 @@
         <translation>全編処理</translation>
     </message>
     <message>
-        <source>nav_ai</source>
-        <translation>AI トラック分離</translation>
-    </message>
-    <message>
         <source>nav_settings</source>
         <translation>設定</translation>
     </message>
@@ -301,7 +297,7 @@
     </message>
     <message>
         <source>home_intro</source>
-        <translation>楽曲音源を使ってステージ / ライブ音声からライブボーカルを抽出するか、AI で一つの音声をボーカルと背景音に分離します。</translation>
+        <translation>楽曲音源を使ってステージ / ライブ音声からライブボーカルを抽出します。単曲でも公演全編でも処理できます。</translation>
     </message>
     <message>
         <source>home_choose_title</source>
@@ -313,27 +309,27 @@
     </message>
     <message>
         <source>home_mr_meta</source>
-        <translation>入力：ステージ / ライブ音声 + 楽曲音源</translation>
+        <translation>入力：ステージ / ライブ音声 1 本 + 楽曲音源 1 本</translation>
     </message>
     <message>
         <source>home_mr_description</source>
-        <translation>単曲モードはライブボーカルを直接抽出し、全編モードは複数の楽曲音源から各曲の位置を検出して区間ごとに抽出します。</translation>
-    </message>
-    <message>
-        <source>home_ai_meta</source>
-        <translation>必要：入力オーディオ 1 ファイル</translation>
-    </message>
-    <message>
-        <source>home_ai_description</source>
-        <translation>一つの音声からボーカルと背景音を別々に生成します。選択した AI モデルは初回に自動ダウンロードされます。</translation>
+        <translation>楽曲音源を録音に整列させて伴奏を打ち消し、そのステージのライブボーカルを取り出します。</translation>
     </message>
     <message>
         <source>home_open_mr</source>
-        <translation>ライブボーカル抽出を開始</translation>
+        <translation>単曲を処理</translation>
     </message>
     <message>
-        <source>home_open_ai</source>
-        <translation>AI 分離を開始</translation>
+        <source>home_full_stage_meta</source>
+        <translation>入力：公演全編の連続録音 + 複数の楽曲音源</translation>
+    </message>
+    <message>
+        <source>home_full_stage_description</source>
+        <translation>複数の楽曲音源で連続録音の中から各曲の位置を割り出し、区間ごとに伴奏を打ち消します。タイムラインは書き出す前に編集できます。</translation>
+    </message>
+    <message>
+        <source>home_open_full_stage</source>
+        <translation>全編を処理</translation>
     </message>
     <message>
         <source>stage_files</source>
@@ -560,88 +556,6 @@
         <translation>後で</translation>
     </message>
     <message>
-        <source>ai_title</source>
-        <translation>AI トラック分離</translation>
-    </message>
-    <message>
-        <source>ai_model_label</source>
-        <translation>分離モデル:</translation>
-    </message>
-    <message>
-        <source>ai_model_ready</source>
-        <translation>準備完了</translation>
-    </message>
-    <message>
-        <source>ai_model_need_download</source>
-        <translation>ダウンロードが必要です。初回分離時に自動でダウンロードします</translation>
-    </message>
-    <message>
-        <source>mdl_mdxnet_1</source>
-        <translation>推奨、全体的に安定した結果</translation>
-    </message>
-    <message>
-        <source>mdl_mdxnet_main</source>
-        <translation>全帯域と低域の細部を重視</translation>
-    </message>
-    <message>
-        <source>mdl_kim_vocal</source>
-        <translation>ボーカルの強調に適したモデル</translation>
-    </message>
-    <message>
-        <source>mdl_kuielab_b</source>
-        <translation>論文著者が学習した汎用モデル</translation>
-    </message>
-    <message>
-        <source>ai_extract</source>
-        <translation>分離を開始</translation>
-    </message>
-    <message>
-        <source>ai_need_song</source>
-        <translation>入力オーディオを選択してください。</translation>
-    </message>
-    <message>
-        <source>ai_invalid_model</source>
-        <translation>選択したモデルを利用できません。選択し直してください。</translation>
-    </message>
-    <message>
-        <source>ai_downloading</source>
-        <translation>モデル {name} をダウンロード中...</translation>
-    </message>
-    <message>
-        <source>ai_download_failed</source>
-        <translation>モデルのダウンロードに失敗: {msg}</translation>
-    </message>
-    <message>
-        <source>ai_loading_model</source>
-        <translation>AI モデルを準備中...</translation>
-    </message>
-    <message>
-        <source>ai_resampling</source>
-        <translation>オーディオを準備中...</translation>
-    </message>
-    <message>
-        <source>ai_inferring</source>
-        <translation>ボーカルと背景音を分離中...</translation>
-    </message>
-    <message>
-        <source>ai_saving</source>
-        <translation>ボーカルと背景音を保存中...</translation>
-    </message>
-    <message>
-        <source>ai_done</source>
-        <translation>分離が完了しました。保存先:
-ボーカル: {vocal}
-背景音: {background}</translation>
-    </message>
-    <message>
-        <source>ai_err_model_load</source>
-        <translation>AI モデルを読み込めません: {msg}</translation>
-    </message>
-    <message>
-        <source>ai_err_infer</source>
-        <translation>AI 分離に失敗しました: {msg}</translation>
-    </message>
-    <message>
         <source>web_boot_runtime</source>
         <translation>Python ランタイムを起動しています…</translation>
     </message>
@@ -676,10 +590,6 @@
     <message>
         <source>web_download</source>
         <translation>ダウンロード</translation>
-    </message>
-    <message>
-        <source>web_no_ai</source>
-        <translation>AI 音源分離はデスクトップ版のみです。必要な ONNX ランタイムにブラウザー版がありません。</translation>
     </message>
     <message>
         <source>web_output_hint</source>

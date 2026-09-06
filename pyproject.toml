@@ -5,14 +5,13 @@ build-backend = "hatchling.build"
 [project]
 name = "purivox"
 dynamic = ["version"]
-description = "Reference-guided and neural vocal separation with a PySide6 Fluent UI"
+description = "Reference-guided vocal isolation for stage and live recordings, with a PySide6 Fluent UI"
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "AGPL-3.0-or-later" }
 authors = [{ name = "Purivox contributors" }]
 dependencies = [
   "numpy>=2.0,<3",
-  "onnxruntime>=1.20,<2",
   "PySide6>=6.8,<7",
   "PySide6-Fluent-Widgets[full]>=1.11.3,<2",
   "scipy>=1.14,<2",
@@ -75,7 +74,7 @@ ignore = ["E501"]
 [tool.pytest.ini_options]
 addopts = "-ra --import-mode=importlib"
 testpaths = ["tests"]
-markers = ["slow: resource-intensive acceptance tests", "model: requires local ONNX weights"]
+markers = ["slow: resource-intensive acceptance tests"]
 
 [tool.pyside6-project]
 files = [
@@ -100,13 +99,6 @@ files = [
   "src/features/full_stage/timeline_model.py",
   "src/features/home/__init__.py",
   "src/features/home/page.py",
-  "src/features/neural_separation/__init__.py",
-  "src/features/neural_separation/catalog.py",
-  "src/features/neural_separation/inference.py",
-  "src/features/neural_separation/model_store.py",
-  "src/features/neural_separation/models.py",
-  "src/features/neural_separation/page.py",
-  "src/features/neural_separation/processing.py",
   "src/features/reference_removal/__init__.py",
   "src/features/reference_removal/dsp/__init__.py",
   "src/features/reference_removal/dsp/algorithms.py",

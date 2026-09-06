@@ -14,7 +14,6 @@ dist/
 deployment/deployment/
 pysidedeploy-windows.spec
 pysidedeploy-macos.spec
-models/*.onnx
 *.part
 *.tmp.wav
 web/public/__probe__

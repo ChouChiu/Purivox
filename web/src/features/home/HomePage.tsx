@@ -5,9 +5,7 @@ import {
 	Card,
 	CardHeader,
 	makeStyles,
-	mergeClasses,
 	Subtitle1,
-	Text,
 	Title2,
 	Title3,
 	tokens,
@@ -48,14 +46,14 @@ const useStyles = makeStyles({
 	},
 	// The description grows so both cards' buttons line up at the bottom.
 	body: { flexGrow: 1 },
-	unavailable: { opacity: 0.6 },
 });
 
 interface Props {
 	onOpenMr(): void;
+	onOpenFullStage(): void;
 }
 
-export function HomePage({ onOpenMr }: Props) {
+export function HomePage({ onOpenMr, onOpenFullStage }: Props) {
 	const styles = useStyles();
 	const { t } = useLanguage();
 
@@ -79,7 +77,7 @@ export function HomePage({ onOpenMr }: Props) {
 			<div className={styles.choices}>
 				<Card className={styles.choice}>
 					<CardHeader
-						header={<Subtitle1>{t("nav_mr")}</Subtitle1>}
+						header={<Subtitle1>{t("mr_single_title")}</Subtitle1>}
 						description={
 							<Caption1 className={styles.muted}>{t("home_mr_meta")}</Caption1>
 						}
@@ -92,19 +90,23 @@ export function HomePage({ onOpenMr }: Props) {
 					</div>
 				</Card>
 
-				{/* The AI workflow is listed so its absence is explained rather than
-				    silently missing; onnxruntime has no WebAssembly build. */}
-				<Card className={mergeClasses(styles.choice, styles.unavailable)}>
+				<Card className={styles.choice}>
 					<CardHeader
-						header={<Subtitle1>{t("nav_ai")}</Subtitle1>}
+						header={<Subtitle1>{t("nav_full_stage")}</Subtitle1>}
 						description={
-							<Caption1 className={styles.muted}>{t("home_ai_meta")}</Caption1>
+							<Caption1 className={styles.muted}>
+								{t("home_full_stage_meta")}
+							</Caption1>
 						}
 					/>
-					<Body1 className={styles.body}>{t("home_ai_description")}</Body1>
-					<Text size={200} className={styles.muted}>
-						{t("web_no_ai")}
-					</Text>
+					<Body1 className={styles.body}>
+						{t("home_full_stage_description")}
+					</Body1>
+					<div>
+						<Button appearance="primary" onClick={onOpenFullStage}>
+							{t("home_open_full_stage")}
+						</Button>
+					</div>
 				</Card>
 			</div>
 		</div>

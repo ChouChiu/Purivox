@@ -174,7 +174,10 @@ export function App() {
 				</div>
 
 				{section === "home" ? (
-					<HomePage onOpenMr={() => setSection("mr")} />
+					<HomePage
+						onOpenMr={() => setSection("mr")}
+						onOpenFullStage={() => setSection("stage")}
+					/>
 				) : null}
 				{/* The working pages stay mounted and are only hidden. Unmounting them
 				    would stop a preview mid-play and throw away a finished result or a

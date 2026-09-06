@@ -181,8 +181,8 @@ QT_QPA_PLATFORM=offscreen uv run --locked pytest tests/benchmarks --runslow
 ### 测试放在哪
 
 `tests/` 与 `src/` 路径一一对应，所以改动的测试就在镜像位置：DSP 与对齐回归在
-`tests/features/reference_removal/`，时间线与匹配在 `full_stage/`，模型下载 / 校验 / 取消在
-`neural_separation/`，运行器与协调器生命周期以及 pytest-qt 的界面测试在 `tests/app/`，
+`tests/features/reference_removal/`，时间线与匹配在 `full_stage/`，
+运行器与协调器生命周期以及 pytest-qt 的界面测试在 `tests/app/`，
 公共音频、任务协议和控件在 `tests/shared/`。
 
 Pytest 用 `importlib` 导入模式，允许不同目录使用与源码对应的相同测试文件名而不发生模块碰撞。
@@ -190,8 +190,7 @@ Pytest 用 `importlib` 导入模式，允许不同目录使用与源码对应的
 `test_documentation.py`（README 索引、文档翻译配对、内部链接）。重命名文档时同步改索引和引用，
 不要留下失效链接等人发现。
 
-没有测试会访问真实主机：模型仓库与更新检查的测试把 `catalog.MODEL_BASE_URL` 和
-`updates.RELEASES_API` 指向本地服务器。
+没有测试会访问真实主机：更新检查的测试把 `updates.RELEASES_API` 指向本地服务器。
 
 ### CI 会跑什么
 
@@ -225,10 +224,10 @@ refactor(dsp): run the pipelines where there is no Qt and no threads
 日常贡献不需要执行这一节。
 
 `uv build` 把 wheel 与 sdist 写到 `dist/`，版本号以 `src/app/version.py` 为唯一来源，
-由 Hatch 在构建时读取；ONNX 权重在忽略列表里，不进 wheel 或源码包。独立程序由 `pyside6-deploy`
+由 Hatch 在构建时读取。独立程序由 `pyside6-deploy`
 封装 Nuitka 构建（`uv sync --locked --group deploy`），Linux 与 Windows 是 onefile 的
-`dist/Purivox.bin` / `Purivox.exe`，macOS 是应用包 `dist/Purivox.app` 且只构建 arm64——锁文件里
-ONNX Runtime 的 macOS wheel 只有 arm64 一种。三者都内含 Python 与 Qt，不含模型权重。产物由 CI
+`dist/Purivox.bin` / `Purivox.exe`，macOS 是应用包 `dist/Purivox.app`，只构建 arm64——
+构建它的 CI 任务跑在 Apple Silicon 的 `macos-15` runner 上。三者都内含 Python 与 Qt。产物由 CI
 构建，发布前应实际启动一次，确认解包路径下的资源文件仍能被找到。
 
 发布由标签驱动，除打标签外没有手动步骤：

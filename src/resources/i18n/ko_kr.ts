@@ -288,10 +288,6 @@
         <translation>전체 공연</translation>
     </message>
     <message>
-        <source>nav_ai</source>
-        <translation>AI 트랙 분리</translation>
-    </message>
-    <message>
         <source>nav_settings</source>
         <translation>설정</translation>
     </message>
@@ -301,7 +297,7 @@
     </message>
     <message>
         <source>home_intro</source>
-        <translation>곡 음원으로 무대 / 라이브 오디오에서 라이브 보컬을 추출하거나, AI로 오디오 하나를 보컬과 배경음으로 분리합니다.</translation>
+        <translation>곡 음원으로 무대 / 라이브 오디오에서 라이브 보컬을 추출합니다. 한 곡도 공연 전체도 처리할 수 있습니다.</translation>
     </message>
     <message>
         <source>home_choose_title</source>
@@ -313,27 +309,27 @@
     </message>
     <message>
         <source>home_mr_meta</source>
-        <translation>입력: 무대 / 라이브 오디오 + 곡 음원</translation>
+        <translation>입력: 무대 / 라이브 녹음 1개 + 곡 음원 1개</translation>
     </message>
     <message>
         <source>home_mr_description</source>
-        <translation>한 곡 모드는 라이브 보컬을 바로 추출하고, 전체 공연 모드는 여러 곡 음원에서 각 곡의 위치를 찾은 뒤 구간별로 추출합니다.</translation>
-    </message>
-    <message>
-        <source>home_ai_meta</source>
-        <translation>필요 항목: 입력 오디오 파일 하나</translation>
-    </message>
-    <message>
-        <source>home_ai_description</source>
-        <translation>오디오 하나에서 보컬과 배경 트랙을 따로 만듭니다. 선택한 AI 모델은 처음 사용할 때 자동 다운로드됩니다.</translation>
+        <translation>곡 음원을 녹음에 정렬해 반주를 상쇄하고, 그 무대의 라이브 보컬만 남깁니다.</translation>
     </message>
     <message>
         <source>home_open_mr</source>
-        <translation>라이브 보컬 추출 시작</translation>
+        <translation>한 곡 처리</translation>
     </message>
     <message>
-        <source>home_open_ai</source>
-        <translation>AI 분리 시작</translation>
+        <source>home_full_stage_meta</source>
+        <translation>입력: 공연 전체 연속 녹음 + 여러 곡 음원</translation>
+    </message>
+    <message>
+        <source>home_full_stage_description</source>
+        <translation>여러 곡 음원으로 연속 녹음에서 각 곡의 위치를 찾은 뒤 구간별로 반주를 상쇄합니다. 타임라인은 내보내기 전에 편집할 수 있습니다.</translation>
+    </message>
+    <message>
+        <source>home_open_full_stage</source>
+        <translation>전체 공연 처리</translation>
     </message>
     <message>
         <source>stage_files</source>
@@ -560,88 +556,6 @@
         <translation>나중에</translation>
     </message>
     <message>
-        <source>ai_title</source>
-        <translation>AI 트랙 분리</translation>
-    </message>
-    <message>
-        <source>ai_model_label</source>
-        <translation>분리 모델:</translation>
-    </message>
-    <message>
-        <source>ai_model_ready</source>
-        <translation>준비 완료</translation>
-    </message>
-    <message>
-        <source>ai_model_need_download</source>
-        <translation>다운로드가 필요하며 처음 분리할 때 자동으로 다운로드됩니다</translation>
-    </message>
-    <message>
-        <source>mdl_mdxnet_1</source>
-        <translation>추천, 전반적으로 안정적인 결과</translation>
-    </message>
-    <message>
-        <source>mdl_mdxnet_main</source>
-        <translation>전체 대역과 저음 디테일을 우선</translation>
-    </message>
-    <message>
-        <source>mdl_kim_vocal</source>
-        <translation>보컬 강조에 더 적합한 모델</translation>
-    </message>
-    <message>
-        <source>mdl_kuielab_b</source>
-        <translation>논문 저자가 학습한 범용 모델</translation>
-    </message>
-    <message>
-        <source>ai_extract</source>
-        <translation>분리 시작</translation>
-    </message>
-    <message>
-        <source>ai_need_song</source>
-        <translation>입력 오디오를 먼저 선택해 주세요.</translation>
-    </message>
-    <message>
-        <source>ai_invalid_model</source>
-        <translation>선택한 모델을 사용할 수 없습니다. 다시 선택해 주세요.</translation>
-    </message>
-    <message>
-        <source>ai_downloading</source>
-        <translation>모델 {name} 다운로드 중...</translation>
-    </message>
-    <message>
-        <source>ai_download_failed</source>
-        <translation>모델 다운로드 실패: {msg}</translation>
-    </message>
-    <message>
-        <source>ai_loading_model</source>
-        <translation>AI 모델 준비 중...</translation>
-    </message>
-    <message>
-        <source>ai_resampling</source>
-        <translation>오디오 준비 중...</translation>
-    </message>
-    <message>
-        <source>ai_inferring</source>
-        <translation>보컬과 배경음 분리 중...</translation>
-    </message>
-    <message>
-        <source>ai_saving</source>
-        <translation>보컬과 배경음 저장 중...</translation>
-    </message>
-    <message>
-        <source>ai_done</source>
-        <translation>분리가 완료되었습니다. 저장 위치:
-보컬: {vocal}
-배경음: {background}</translation>
-    </message>
-    <message>
-        <source>ai_err_model_load</source>
-        <translation>AI 모델을 불러올 수 없습니다: {msg}</translation>
-    </message>
-    <message>
-        <source>ai_err_infer</source>
-        <translation>AI 분리에 실패했습니다: {msg}</translation>
-    </message>
-    <message>
         <source>web_boot_runtime</source>
         <translation>Python 런타임을 시작하는 중…</translation>
     </message>
@@ -676,10 +590,6 @@
     <message>
         <source>web_download</source>
         <translation>다운로드</translation>
-    </message>
-    <message>
-        <source>web_no_ai</source>
-        <translation>AI 트랙 분리는 데스크톱 전용입니다. 필요한 ONNX 런타임에 브라우저 빌드가 없습니다.</translation>
     </message>
     <message>
         <source>web_output_hint</source>

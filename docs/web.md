@@ -16,7 +16,6 @@
 |---|---|---|
 | 单曲垫音消除 | ✅ | `run_reference_job` 不含 Qt |
 | 整场垫音消除（识别 + 时间线 + 渲染） | ✅ | `analyze_full_stage_job` / `run_full_stage_job` 不含 Qt |
-| AI 音轨分离 | ❌ | `onnxruntime` 没有 WebAssembly 版的 Python 包 |
 
 算法只有一份源码。浏览器跑的就是桌面版的 `src/features/**`，构建时打包进
 `purivox-src.zip`，不存在第二套 TypeScript 实现。

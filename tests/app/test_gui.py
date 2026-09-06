@@ -37,8 +37,8 @@ def test_main_window_has_mr_workspace_with_two_subpages(qtbot):
     qtbot.addWidget(window)
     assert not window.windowIcon().isNull()
     assert not window.windowIcon().pixmap(32, 32).isNull()
-    pages = (window.home, window.mr_workspace, window.ai, window.settings)
-    assert len({page.objectName() for page in pages}) == 4
+    pages = (window.home, window.mr_workspace, window.settings)
+    assert len({page.objectName() for page in pages}) == 3
     assert window.mr_workspace.stack.count() == 2
     assert window.mr_workspace.stack.currentWidget() is window.mr
     window.mr_workspace.show_full_stage()
@@ -47,7 +47,6 @@ def test_main_window_has_mr_workspace_with_two_subpages(qtbot):
     assert window.mr_workspace.stack.currentWidget() is window.mr
     assert window.mr.title.text() == "单曲垫音消除"
     assert window.full_stage.title.text() == "整场垫音消除"
-    assert window.ai.model.count() == 4
     assert window.settings.log_level_card.configItem is cfg.log_level
     previous_level = cfg.log_level.value
     cfg.set(cfg.log_level, "ERROR")
@@ -56,7 +55,7 @@ def test_main_window_has_mr_workspace_with_two_subpages(qtbot):
     window.retranslate()
 
 
-def test_home_page_presents_mr_workspace_and_ai(qtbot):
+def test_home_page_presents_both_mr_workflows(qtbot):
     load_config()
     window = MainWindow()
     qtbot.addWidget(window)
@@ -66,14 +65,27 @@ def test_home_page_presents_mr_workspace_and_ai(qtbot):
     meta = window.home.mr_card.meta.text()
     assert "舞台 / 现场音频" in meta
     assert "歌曲音源" in meta
-    assert "一份待处理音频" in window.home.ai_card.meta.text()
-    assert window.home.mr_card.open_button.text() == "开始垫音消除"
-    assert window.home.ai_card.open_button.text() == "开始 AI 分离"
+    assert "多份歌曲音源" in window.home.full_stage_card.meta.text()
+    assert window.home.mr_card.open_button.text() == "处理单曲"
+    assert window.home.full_stage_card.open_button.text() == "处理整场"
 
     with qtbot.waitSignal(window.home.mr_requested):
         window.home.mr_card.open_button.click()
-    with qtbot.waitSignal(window.home.ai_requested):
-        window.home.ai_card.open_button.click()
+    with qtbot.waitSignal(window.home.full_stage_requested):
+        window.home.full_stage_card.open_button.click()
+
+
+def test_home_cards_open_the_matching_workspace_tab(qtbot):
+    load_config()
+    window = MainWindow()
+    qtbot.addWidget(window)
+
+    window.home.full_stage_card.open_button.click()
+    assert window.stackedWidget.currentWidget() is window.mr_workspace
+    assert window.mr_workspace.stack.currentWidget() is window.full_stage
+
+    window.home.mr_card.open_button.click()
+    assert window.mr_workspace.stack.currentWidget() is window.mr
 
 
 def _text(model, row: int, column: int) -> str:
@@ -451,31 +463,6 @@ def test_shortcut_hints_follow_the_interface_language(qtbot):
     assert window.mr.start_button.toolTip() == "开始处理 (Ctrl+Return)"
 
 
-def test_ai_page_watches_the_model_directories(qtbot, tmp_path: Path, monkeypatch):
-    """A weight that appears while the page is open refreshes its status."""
-    from features.neural_separation import page as ai_page
-    from features.neural_separation.catalog import get_model
-
-    monkeypatch.setattr(ai_page, "candidate_model_dirs", lambda override=None: (tmp_path,))
-    monkeypatch.setattr(
-        ai_page,
-        "find_model",
-        lambda entry, override=None: next(
-            (path for path in (tmp_path / entry.filename,) if path.is_file()), None
-        ),
-    )
-    page = ai_page.AiPage()
-    qtbot.addWidget(page)
-    page.retranslate()
-    assert str(tmp_path) in page.model_watcher.directories()
-    assert page.model_status.text() == tr("ai_model_need_download")
-
-    with qtbot.waitSignal(page.model_watcher.directoryChanged, timeout=5000):
-        (tmp_path / get_model(str(page.model.currentData())).filename).write_bytes(b"weights")
-
-    assert page.model_status.text() == tr("ai_model_ready")
-
-
 def _resize_window(window: MainWindow, width: int, height: int) -> None:
     """Resize and let every visible page act on its new viewport."""
     window.resize(width, height)
@@ -567,10 +554,10 @@ def test_every_page_stays_inside_a_narrow_window(qtbot):
     qtbot.waitExposed(window)
     width, height = window.minimumWidth(), window.minimumHeight()
 
-    for target in (window.home, window.mr_workspace, window.ai, window.settings):
+    for target in (window.home, window.mr_workspace, window.settings):
         window.switchTo(target)
         _resize_window(window, width, height)
-        for page in (window.home, window.mr, window.full_stage, window.ai, window.settings):
+        for page in (window.home, window.mr, window.full_stage, window.settings):
             if not page.isVisible():
                 continue
             assert page.content.minimumSizeHint().width() <= page.viewport().width(), (

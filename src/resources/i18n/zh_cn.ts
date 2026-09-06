@@ -288,10 +288,6 @@
         <translation>整场</translation>
     </message>
     <message>
-        <source>nav_ai</source>
-        <translation>AI 音轨分离</translation>
-    </message>
-    <message>
         <source>nav_settings</source>
         <translation>设置</translation>
     </message>
@@ -301,7 +297,7 @@
     </message>
     <message>
         <source>home_intro</source>
-        <translation>使用歌曲音源消除舞台 / 现场音频中的垫音，或使用 AI 将一份音频分离为人声与背景。</translation>
+        <translation>使用歌曲音源消除舞台 / 现场音频中的垫音，单曲和整场连续录音都可以处理。</translation>
     </message>
     <message>
         <source>home_choose_title</source>
@@ -313,27 +309,27 @@
     </message>
     <message>
         <source>home_mr_meta</source>
-        <translation>输入：舞台 / 现场音频 + 歌曲音源</translation>
+        <translation>输入：一段舞台 / 现场音频 + 一份歌曲音源</translation>
     </message>
     <message>
         <source>home_mr_description</source>
-        <translation>单曲模式直接消除垫音；整场模式先通过多个歌曲音源识别每首歌的位置，再逐段消除垫音。</translation>
-    </message>
-    <message>
-        <source>home_ai_meta</source>
-        <translation>需要：一份待处理音频</translation>
-    </message>
-    <message>
-        <source>home_ai_description</source>
-        <translation>只需一份音频，使用 AI 生成独立的人声和背景音轨；首次使用模型时会自动下载。</translation>
+        <translation>把歌曲音源对齐到录音上消除垫音，得到这一段舞台的现场人声。</translation>
     </message>
     <message>
         <source>home_open_mr</source>
-        <translation>开始垫音消除</translation>
+        <translation>处理单曲</translation>
     </message>
     <message>
-        <source>home_open_ai</source>
-        <translation>开始 AI 分离</translation>
+        <source>home_full_stage_meta</source>
+        <translation>输入：整场连续录音 + 多份歌曲音源</translation>
+    </message>
+    <message>
+        <source>home_full_stage_description</source>
+        <translation>先用多份歌曲音源在整场录音里定位每首歌，再逐段消除垫音；渲染前时间轴可以逐条确认和修改。</translation>
+    </message>
+    <message>
+        <source>home_open_full_stage</source>
+        <translation>处理整场</translation>
     </message>
     <message>
         <source>stage_files</source>
@@ -560,88 +556,6 @@
         <translation>稍后</translation>
     </message>
     <message>
-        <source>ai_title</source>
-        <translation>AI 音轨分离</translation>
-    </message>
-    <message>
-        <source>ai_model_label</source>
-        <translation>分离模型:</translation>
-    </message>
-    <message>
-        <source>ai_model_ready</source>
-        <translation>已就绪</translation>
-    </message>
-    <message>
-        <source>ai_model_need_download</source>
-        <translation>需要下载，首次提取时自动下载</translation>
-    </message>
-    <message>
-        <source>mdl_mdxnet_1</source>
-        <translation>推荐，综合表现稳定</translation>
-    </message>
-    <message>
-        <source>mdl_mdxnet_main</source>
-        <translation>更重视全频段和低频细节</translation>
-    </message>
-    <message>
-        <source>mdl_kim_vocal</source>
-        <translation>更适合突出人声</translation>
-    </message>
-    <message>
-        <source>mdl_kuielab_b</source>
-        <translation>论文作者训练的通用模型</translation>
-    </message>
-    <message>
-        <source>ai_extract</source>
-        <translation>开始分离</translation>
-    </message>
-    <message>
-        <source>ai_need_song</source>
-        <translation>请先选择输入音频。</translation>
-    </message>
-    <message>
-        <source>ai_invalid_model</source>
-        <translation>无法识别所选模型，请重新选择。</translation>
-    </message>
-    <message>
-        <source>ai_downloading</source>
-        <translation>正在下载模型 {name}...</translation>
-    </message>
-    <message>
-        <source>ai_download_failed</source>
-        <translation>模型下载失败: {msg}</translation>
-    </message>
-    <message>
-        <source>ai_loading_model</source>
-        <translation>正在准备 AI 模型...</translation>
-    </message>
-    <message>
-        <source>ai_resampling</source>
-        <translation>正在准备音频...</translation>
-    </message>
-    <message>
-        <source>ai_inferring</source>
-        <translation>正在分离人声与背景...</translation>
-    </message>
-    <message>
-        <source>ai_saving</source>
-        <translation>正在保存人声与背景音轨...</translation>
-    </message>
-    <message>
-        <source>ai_done</source>
-        <translation>分离完成，已保存：
-人声：{vocal}
-背景：{background}</translation>
-    </message>
-    <message>
-        <source>ai_err_model_load</source>
-        <translation>无法加载 AI 模型：{msg}</translation>
-    </message>
-    <message>
-        <source>ai_err_infer</source>
-        <translation>AI 分离失败：{msg}</translation>
-    </message>
-    <message>
         <source>web_boot_runtime</source>
         <translation>正在启动 Python 运行时…</translation>
     </message>
@@ -676,10 +590,6 @@
     <message>
         <source>web_download</source>
         <translation>下载</translation>
-    </message>
-    <message>
-        <source>web_no_ai</source>
-        <translation>AI 音轨分离仅桌面版提供：它依赖的 ONNX 运行时没有浏览器版本。</translation>
     </message>
     <message>
         <source>web_output_hint</source>

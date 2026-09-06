@@ -212,9 +212,8 @@ Synthetic metrics exist to catch implementation regressions and claim nothing ab
 
 `tests/` mirrors `src/` path for path, so a change's tests are at the mirrored location: DSP and
 alignment regressions under `tests/features/reference_removal/`, timeline and matching under
-`full_stage/`, model download / verification / cancellation under `neural_separation/`, runner and
-presenter lifecycles and the pytest-qt interface tests under `tests/app/`, and shared audio, job
-contracts, and widgets under `tests/shared/`.
+`full_stage/`, runner and presenter lifecycles and the pytest-qt interface tests under
+`tests/app/`, and shared audio, job contracts, and widgets under `tests/shared/`.
 
 Pytest uses the `importlib` import mode, so different directories may reuse the test file name that
 matches their source without a module collision. Three repository-wide gates sit alongside:
@@ -223,8 +222,8 @@ matches their source without a module collision. Three repository-wide gates sit
 renaming a document, update the index and the references with it rather than leaving a dead link
 for someone else to find.
 
-No test reaches a real host: the model-store and update-check tests point
-`catalog.MODEL_BASE_URL` and `updates.RELEASES_API` at a local server.
+No test reaches a real host: the update-check tests point `updates.RELEASES_API` at a local
+server.
 
 ### What CI Runs
 
@@ -263,13 +262,12 @@ heading matches the tag, and the in-app update dialog shows that same text.
 Ordinary contributions do not run anything in this section.
 
 `uv build` writes the wheel and sdist to `dist/`. The version has one source, `src/app/version.py`,
-which Hatch reads at build time; the ONNX weights are in the ignore list and reach neither the
-wheel nor the sdist. The standalone builds go through `pyside6-deploy` wrapping Nuitka
-(`uv sync --locked --group deploy`): Linux and Windows get the onefile `dist/Purivox.bin` /
+which Hatch reads at build time. The standalone builds go through `pyside6-deploy` wrapping
+Nuitka (`uv sync --locked --group deploy`): Linux and Windows get the onefile `dist/Purivox.bin` /
 `Purivox.exe`, macOS gets the `dist/Purivox.app` bundle and is built for arm64 only, because the
-lock file's macOS ONNX Runtime wheel comes in no other architecture. All three bundle Python and Qt
-and carry no model weights. CI builds them; before a release, actually launch one and confirm the
-resources under the unpacked path can still be found.
+job that builds it runs on the Apple Silicon `macos-15` runner. All three bundle Python and Qt. CI
+builds them; before a release, actually launch one and confirm the resources under the unpacked
+path can still be found.
 
 Releases are tag-driven, with no manual step beyond the tag:
 

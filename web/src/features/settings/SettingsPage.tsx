@@ -2,8 +2,6 @@ import {
 	Card,
 	CardHeader,
 	Field,
-	MessageBar,
-	MessageBarBody,
 	makeStyles,
 	Select,
 	Text,
@@ -68,13 +66,6 @@ export function SettingsPage({ theme, onTheme }: Props) {
 						<option value="dark">dark</option>
 					</Select>
 				</Field>
-			</Card>
-
-			<Card className={styles.card}>
-				<CardHeader header={<Title3>{t("nav_ai")}</Title3>} />
-				<MessageBar intent="info">
-					<MessageBarBody>{t("web_no_ai")}</MessageBarBody>
-				</MessageBar>
 				<Text className={styles.hint}>{t("web_boot_hint")}</Text>
 			</Card>
 		</div>

@@ -40,12 +40,6 @@ class AppConfig(QConfig):
         OutputTracks.VOCAL.value,
         OptionsValidator([choice.value for choice in OutputTracks]),
     )
-    model = OptionsConfigItem(
-        "Neural",
-        "Model",
-        "mdxnet_1",
-        OptionsValidator(["mdxnet_1", "mdxnet_main", "kim_vocal", "kuielab_b"]),
-    )
     check_updates = ConfigItem("Updates", "CheckAtStartup", False, BoolValidator())
 
 

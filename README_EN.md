@@ -21,11 +21,9 @@ designed to preserve live vocals, speech, cheering, and ambient sound that are a
 source. An accurate song source is essential: clipping, heavy reverberation, a different
 arrangement, or the wrong source can all reduce the quality of the result.
 
-The project also includes a separate **AI Track Separation** tool. It uses UVR MDX-Net ONNX
-models to predict vocal and background tracks from ordinary audio. AI separation does not use a
-song source and does not perform MR Remove's source matching, alignment, or source-guided removal.
-The two tools have different goals and output meanings: AI separation is not a substitute for
-Vocal Isolation, and their results should not be compared directly.
+For two-track separation without a song source, reach for a dedicated tool such as
+[Ultimate Vocal Remover](https://github.com/Anjok07/ultimatevocalremovergui); Purivox only does
+reference cancellation.
 
 ## Features
 
@@ -34,7 +32,6 @@ Vocal Isolation, and their results should not be compared directly.
 - Global time alignment, local clock-drift tracking, and coherent reference cancellation
 - Song identification, repeated-segment detection, and editable processing ranges for full-stage
   recordings
-- Four optional MDX-Net separation models, downloaded on demand and verified with SHA-256
 - Chunked long-audio processing, task cancellation, and atomic output writes
 - Exports keep the input file's sample rate and bit depth, never upsampled to hit a format
 - In-app result preview and audio statistics
@@ -44,14 +41,13 @@ Vocal Isolation, and their results should not be compared directly.
   that day's log and offers the issue form
 - The common actions have shortcuts: `Ctrl+O` to choose an input, `Ctrl+Return` to
   start, `F5` to identify songs, `Esc` to cancel, `Ctrl+P` to play/pause the preview
-- GUI and CLI reuse the corresponding MR Remove and AI separation task pipelines
+- GUI and CLI reuse the same MR Remove task pipelines
 
 ## Installation
 
 If you would rather not install anything, the [browser build](https://purivox.wwchun.top/)
-runs the same pipelines. It
-leaves out AI track separation, whose ONNX runtime has no WebAssembly build, and a long enough
-stage recording is refused because a browser tab has a memory ceiling. See
+runs the same pipelines. A long enough
+stage recording is refused there because a browser tab has a memory ceiling. See
 [Browser Build (WebAssembly)](docs/en/web.md) for the details.
 
 The desktop application can be downloaded from the
@@ -62,7 +58,7 @@ them.
 
 The macOS archive unpacks to `Purivox.app`, which belongs in Applications. It is signed ad-hoc
 rather than with an Apple developer identity, so the first launch has to go through Finder's
-right-click "Open". The ONNX Runtime arm64 wheel it builds on requires macOS 14 or newer.
+right-click "Open".
 
 To run from source, [uv](https://docs.astral.sh/uv/) is
 required. The project uses `.python-version` to select Python
@@ -112,21 +108,6 @@ Unidentified ranges retain their original content and duration. Inter-song speec
 interaction, advertisements, and empty-stage audio are not removed automatically. Full-stage
 processing is currently available only in the graphical interface.
 
-### Separate Tool: AI Track Separation
-
-AI Track Separation is intended for ordinary two-track separation. It does not use a song source
-and is not a fallback mode for MR Remove.
-
-1. Open **AI Track Separation**, then select the input audio and a model.
-2. Click **Start Separation**.
-3. When a model is used for the first time, the application downloads its weights automatically.
-   Keep the network connected until verification finishes.
-
-The tool creates:
-
-- `<song-name>_vocal.wav`: vocals predicted by the model
-- `<song-name>_background.wav`: the original mix minus the predicted vocals
-
 ## Command-Line Usage
 
 Display the version and help:
@@ -135,7 +116,6 @@ Display the version and help:
 uv run --locked purivox --version
 uv run --locked purivox --help
 uv run --locked purivox mr --help
-uv run --locked purivox ai --help
 ```
 
 Run reference cancellation with the default settings:
@@ -161,31 +141,17 @@ Common reference-cancellation options:
 | `--tracks` | `vocal`, `backing`, `both` | Which stems to export; default: `vocal` |
 | `--lang` | `zh_cn`, `en_us`, `ja_jp`, `ko_kr` | Language used for progress messages |
 
-Run the AI separation tool independently:
-
-```bash
-uv run --locked purivox ai "song.wav" --output-dir "output" --model mdxnet_1
-```
-
-Available models are `mdxnet_1`, `mdxnet_main`, `kim_vocal`, and `kuielab_b`. Use `--models-dir`
-to specify a weights directory, or set the `PURIVOX_MODELS` environment variable for a shared
-model directory.
-
 ## Input, Output, and Important Notes
 
 - libsndfile natively supports formats including WAV, FLAC, and OGG. Other formats supported by
   the system decoder are read through Qt Multimedia when possible.
 - MR Remove and Full Stage process at the stage/live audio's original sample rate throughout, and
   export at that same rate.
-- The separate AI tool still performs model inference at 44.1 kHz, then resamples back to the
-  song's own rate before writing stereo WAV files. These outputs are not equivalent to an MR
-  Remove result.
 - Every exported PCM WAV keeps the input file's sample rate and bit depth: an 8- or 16-bit PCM
   input is written at 16 bits, and wider 24-/32-bit PCM, float and every lossy format at 24.
-  Upsampling cannot create spectral detail absent from the input or model and only enlarges the
-  file, so the pipelines do not do it.
+  Upsampling cannot create spectral detail absent from the input and only enlarges the file, so
+  the pipelines do not do it.
 - An output path cannot overwrite an input file. Press `Ctrl+C` to cancel a CLI task.
-- Model weights are not included in the Python package or standalone application.
 - Synthetic tests only indicate that the implementation has no obvious regression. Judge final
   quality by listening to the same excerpt before and after processing.
 
@@ -197,7 +163,6 @@ Architecture, algorithms, testing, and release information are available in
 - [Architecture and Data Flow](docs/en/architecture.md)
 - [Reference Cancellation](docs/en/reference-removal.md)
 - [Full Stage Processing](docs/en/full-stage.md)
-- [AI Track Separation](docs/en/neural-separation.md)
 - [Browser Build (WebAssembly)](docs/en/web.md)
 - [Contributing](docs/en/CONTRIBUTING.md)
 
@@ -205,10 +170,8 @@ Architecture, algorithms, testing, and release information are available in
 
 - [Vocal-Extractor](https://github.com/IamYei/Vocal-Extractor): inspiration for frequency-domain
   vocal extraction.
-- [Ultimate Vocal Remover GUI](https://github.com/Anjok07/ultimatevocalremovergui): its MDX-Net
-  pipeline informed the AI processing workflow.
-- [TRvlvr/model_repo](https://github.com/TRvlvr/model_repo): provides the MDX-Net model files;
-  refer to each release page for its license and attribution requirements.
+- [Ultimate Vocal Remover GUI](https://github.com/Anjok07/ultimatevocalremovergui): neural
+  separation for when no song source exists.
 
 This project is released under [AGPL-3.0-or-later](LICENSE). The open-source edition of
 PySide6-Fluent-Widgets uses GPLv3; confirm its upstream license before commercial use.

@@ -50,9 +50,9 @@ common=(
   --license "AGPL-3.0-or-later"
   --maintainer "Purivox contributors"
   --url "https://github.com/ChouChiu/Purivox"
-  --description "Reference-guided and neural vocal separation
-Purivox cancels a known backing track out of a stage or live recording, and
-can separate vocals with UVR MDX-Net models when no source is available."
+  --description "Reference-guided vocal isolation
+Purivox cancels a known backing track out of a stage or live recording, one
+track at a time or across a whole show."
   --force
 )
 

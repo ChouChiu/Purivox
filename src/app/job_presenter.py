@@ -7,12 +7,11 @@ from qfluentwidgets import InfoBar, InfoBarPosition, StateToolTip
 from app.job_runner import JobRunner
 from features.full_stage import FullStageResult
 from features.full_stage.page import FullStagePage
-from features.neural_separation.page import AiPage
 from features.reference_removal.page import MrPage
 from shared.i18n import tr
 from shared.processing import ProcessingOperation, ProcessingResultLike
 
-ProcessingPage = MrPage | AiPage | FullStagePage
+ProcessingPage = MrPage | FullStagePage
 
 
 class JobPresenter(QObject):

@@ -30,8 +30,6 @@ from app.mr_workspace import MrWorkspace
 from features.full_stage import FullStageJob
 from features.full_stage.page import FullStagePage
 from features.home import HomePage
-from features.neural_separation import NeuralJob, get_model, run_neural_job
-from features.neural_separation.page import AiPage
 from features.reference_removal import (
     ReferenceJob,
     find_best_match,
@@ -66,7 +64,6 @@ class MainWindow(FluentWindow):
         self.mr = MrPage()
         self.full_stage = FullStagePage()
         self.mr_workspace = MrWorkspace(self.mr, self.full_stage, self)
-        self.ai = AiPage(self)
         self.settings = SettingsPage(self)
         self.resize(1040, 760)
         # Small enough to dock the window to a portrait half of a screen; the
@@ -84,7 +81,6 @@ class MainWindow(FluentWindow):
     def _build_navigation(self) -> None:
         self.home_nav = self.addSubInterface(self.home, FluentIcon.HOME, "")
         self.mr_nav = self.addSubInterface(self.mr_workspace, FluentIcon.MUSIC, "")
-        self.ai_nav = self.addSubInterface(self.ai, FluentIcon.MIX_VOLUMES, "")
         self.settings_nav = self.addSubInterface(
             self.settings, FluentIcon.SETTING, "", NavigationItemPosition.BOTTOM
         )
@@ -120,12 +116,12 @@ class MainWindow(FluentWindow):
 
     def _browse_current_input(self) -> None:
         page = self.current_page()
-        if isinstance(page, MrPage | AiPage | FullStagePage):
+        if isinstance(page, MrPage | FullStagePage):
             page.browse_primary_input()
 
     def _start_current(self) -> None:
         page = self.current_page()
-        if isinstance(page, MrPage | AiPage | FullStagePage):
+        if isinstance(page, MrPage | FullStagePage):
             page.start_requested.emit()
 
     def _analyze_current(self) -> None:
@@ -140,14 +136,12 @@ class MainWindow(FluentWindow):
 
     def _connect(self) -> None:
         self.home.mr_requested.connect(self._open_mr)
-        self.home.ai_requested.connect(lambda: self.switchTo(self.ai))
+        self.home.full_stage_requested.connect(self._open_full_stage)
         self.mr.start_requested.connect(self.start_reference)
         self.mr.cancel_requested.connect(self.cancel)
         self.full_stage.analyze_requested.connect(self.analyze_full_stage)
         self.full_stage.start_requested.connect(self.start_full_stage)
         self.full_stage.cancel_requested.connect(self.cancel)
-        self.ai.start_requested.connect(self.start_neural)
-        self.ai.cancel_requested.connect(self.cancel)
         self.mr.song_changed.connect(self._auto_find)
         cfg.language.valueChanged.connect(self._language_changed)
         cfg.theme.valueChanged.connect(lambda value: self._apply_theme(str(value)))
@@ -165,6 +159,10 @@ class MainWindow(FluentWindow):
 
     def _open_mr(self) -> None:
         self.mr_workspace.show_single()
+        self.switchTo(self.mr_workspace)
+
+    def _open_full_stage(self) -> None:
+        self.mr_workspace.show_full_stage()
         self.switchTo(self.mr_workspace)
 
     def _apply_theme(self, value: str) -> None:
@@ -190,13 +188,12 @@ class MainWindow(FluentWindow):
 
     def retranslate(self) -> None:
         self.setWindowTitle(tr("window_title"))
-        for page in (self.home, self.mr_workspace, self.ai, self.settings):
+        for page in (self.home, self.mr_workspace, self.settings):
             page.retranslate()
         self._apply_shortcut_hints()
         for navigation, key in (
             (self.home_nav, "nav_home"),
             (self.mr_nav, "nav_mr"),
-            (self.ai_nav, "nav_ai"),
             (self.settings_nav, "nav_settings"),
         ):
             navigation.setText(tr(key))
@@ -205,14 +202,11 @@ class MainWindow(FluentWindow):
         """Append each binding to the tooltip of the control it triggers."""
         for control, shortcut in (
             (self.mr.song_button, self.open_shortcut),
-            (self.ai.song_button, self.open_shortcut),
             (self.full_stage.stage_button, self.open_shortcut),
             (self.mr.start_button, self.start_shortcut),
-            (self.ai.start_button, self.start_shortcut),
             (self.full_stage.start_button, self.start_shortcut),
             (self.full_stage.analyze_button, self.analyze_shortcut),
             (self.mr.cancel_button, self.cancel_shortcut),
-            (self.ai.cancel_button, self.cancel_shortcut),
             (self.full_stage.cancel_button, self.cancel_shortcut),
             (self.mr.preview_play, self.preview_shortcut),
         ):
@@ -330,23 +324,6 @@ class MainWindow(FluentWindow):
         self.mr.clear_result()
         self._start_worker(self.mr, partial(run_reference_job, job))
 
-    def start_neural(self) -> None:
-        if self.jobs.running:
-            return
-        if not self.ai.song_edit.text():
-            self._warning("ai_need_song")
-            return
-        model_id = str(self.ai.model.currentData())
-        try:
-            get_model(model_id)
-        except KeyError:
-            self._warning("ai_invalid_model")
-            return
-        cfg.set(cfg.model, model_id)
-        song = Path(self.ai.song_edit.text())
-        job = NeuralJob(song, song.resolve().parent, model_id)
-        self._start_worker(self.ai, partial(run_neural_job, job))
-
     def _full_stage_job(self) -> FullStageJob | None:
         if not self.full_stage.stage_edit.text():
             self._warning("stage_need_audio")
@@ -402,7 +379,7 @@ class MainWindow(FluentWindow):
 
     def _start_worker(
         self,
-        page: MrPage | AiPage | FullStagePage,
+        page: MrPage | FullStagePage,
         operation: ProcessingOperation,
     ) -> None:
         # Kept as the single interception point for starting a job: the GUI

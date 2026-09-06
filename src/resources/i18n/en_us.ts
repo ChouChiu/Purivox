@@ -288,10 +288,6 @@
         <translation>Full Stage</translation>
     </message>
     <message>
-        <source>nav_ai</source>
-        <translation>AI Track Separation</translation>
-    </message>
-    <message>
         <source>nav_settings</source>
         <translation>Settings</translation>
     </message>
@@ -301,7 +297,7 @@
     </message>
     <message>
         <source>home_intro</source>
-        <translation>Use matching song sources to isolate live vocals from stage / live audio, or use AI to separate one audio file into vocals and background.</translation>
+        <translation>Use matching song sources to isolate live vocals from stage / live audio, one track or a whole show.</translation>
     </message>
     <message>
         <source>home_choose_title</source>
@@ -313,27 +309,27 @@
     </message>
     <message>
         <source>home_mr_meta</source>
-        <translation>Input: stage / live audio + song sources</translation>
+        <translation>Input: one stage / live recording + one song source</translation>
     </message>
     <message>
         <source>home_mr_description</source>
-        <translation>Single isolates vocals from one stage recording; Full Stage finds each song from multiple sources, then isolates the live vocals section by section.</translation>
-    </message>
-    <message>
-        <source>home_ai_meta</source>
-        <translation>Needs: one input audio file</translation>
-    </message>
-    <message>
-        <source>home_ai_description</source>
-        <translation>Uses one audio file to create separate vocal and background tracks; the selected AI model downloads automatically on first use.</translation>
+        <translation>Aligns the song source to the recording and cancels the backing track, leaving the live vocals of that one stage.</translation>
     </message>
     <message>
         <source>home_open_mr</source>
-        <translation>Start vocal isolation</translation>
+        <translation>Open Single</translation>
     </message>
     <message>
-        <source>home_open_ai</source>
-        <translation>Start AI separation</translation>
+        <source>home_full_stage_meta</source>
+        <translation>Input: one continuous show recording + several song sources</translation>
+    </message>
+    <message>
+        <source>home_full_stage_description</source>
+        <translation>Matches several song sources against the continuous recording to place each song, then cancels section by section; the timeline stays editable before rendering.</translation>
+    </message>
+    <message>
+        <source>home_open_full_stage</source>
+        <translation>Open Full Stage</translation>
     </message>
     <message>
         <source>stage_files</source>
@@ -560,88 +556,6 @@
         <translation>Later</translation>
     </message>
     <message>
-        <source>ai_title</source>
-        <translation>AI Track Separation</translation>
-    </message>
-    <message>
-        <source>ai_model_label</source>
-        <translation>Separation model:</translation>
-    </message>
-    <message>
-        <source>ai_model_ready</source>
-        <translation>Ready</translation>
-    </message>
-    <message>
-        <source>ai_model_need_download</source>
-        <translation>Download needed; it downloads automatically on the first extraction</translation>
-    </message>
-    <message>
-        <source>mdl_mdxnet_1</source>
-        <translation>Recommended; stable overall results</translation>
-    </message>
-    <message>
-        <source>mdl_mdxnet_main</source>
-        <translation>Prioritizes full-band and low-frequency detail</translation>
-    </message>
-    <message>
-        <source>mdl_kim_vocal</source>
-        <translation>Better suited to emphasizing vocals</translation>
-    </message>
-    <message>
-        <source>mdl_kuielab_b</source>
-        <translation>General-purpose model trained by the paper authors</translation>
-    </message>
-    <message>
-        <source>ai_extract</source>
-        <translation>Start separation</translation>
-    </message>
-    <message>
-        <source>ai_need_song</source>
-        <translation>Choose the input audio first.</translation>
-    </message>
-    <message>
-        <source>ai_invalid_model</source>
-        <translation>The selected model is not available; choose another.</translation>
-    </message>
-    <message>
-        <source>ai_downloading</source>
-        <translation>Downloading model {name}...</translation>
-    </message>
-    <message>
-        <source>ai_download_failed</source>
-        <translation>Model download failed: {msg}</translation>
-    </message>
-    <message>
-        <source>ai_loading_model</source>
-        <translation>Preparing AI model...</translation>
-    </message>
-    <message>
-        <source>ai_resampling</source>
-        <translation>Preparing audio...</translation>
-    </message>
-    <message>
-        <source>ai_inferring</source>
-        <translation>Separating vocals and background...</translation>
-    </message>
-    <message>
-        <source>ai_saving</source>
-        <translation>Saving vocal and background tracks...</translation>
-    </message>
-    <message>
-        <source>ai_done</source>
-        <translation>Separation complete. Saved:
-Vocals: {vocal}
-Background: {background}</translation>
-    </message>
-    <message>
-        <source>ai_err_model_load</source>
-        <translation>Could not load the AI model: {msg}</translation>
-    </message>
-    <message>
-        <source>ai_err_infer</source>
-        <translation>AI separation failed: {msg}</translation>
-    </message>
-    <message>
         <source>web_boot_runtime</source>
         <translation>Starting the Python runtime...</translation>
     </message>
@@ -676,10 +590,6 @@ Background: {background}</translation>
     <message>
         <source>web_download</source>
         <translation>Download</translation>
-    </message>
-    <message>
-        <source>web_no_ai</source>
-        <translation>AI track separation is desktop only: the ONNX runtime it needs has no browser build.</translation>
     </message>
     <message>
         <source>web_output_hint</source>

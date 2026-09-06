@@ -17,7 +17,6 @@ to end and is never uploaded anywhere.
 |---|---|---|
 | Single vocal isolation | ✅ | `run_reference_job` carries no Qt |
 | Full stage (matching, timeline, render) | ✅ | `analyze_full_stage_job` / `run_full_stage_job` carry no Qt |
-| AI track separation | ❌ | `onnxruntime` has no WebAssembly build of its Python package |
 
 There is one copy of the algorithm. The browser runs the desktop's own `src/features/**`, packed
 into `purivox-src.zip` at build time; there is no second TypeScript implementation.
