@@ -316,6 +316,14 @@ jobs:
           pyside6-deploy -c pysidedeploy.spec --force
           2>&1 | tee logs/onefile-build.log
 
+      - name: Verify onefile was produced
+        run: |
+          if [[ ! -f dist/Purivox.bin ]]; then
+            echo "::error::dist/Purivox.bin was not produced by pyside6-deploy"
+            tail -n 40 logs/onefile-build.log || true
+            exit 1
+          fi
+
       - name: Show cache stats
         if: ${{ !cancelled() }}
         run: ccache --show-stats 2>&1 | tee logs/cache-stats.log
@@ -460,11 +468,8 @@ jobs:
         run: |
           # pyside6-deploy carries a single icon key and hands it to Nuitka as
           # --windows-icon-from-ico, which will not accept the SVG the Linux
-          # build uses. The yt-dlp extractors become one enormous generated C
-          # file that pushes MSVC past its heap limit, so ask Nuitka to trade
-          # compile speed for lower memory and leave LTO off for this job.
+          # build uses. The yt-dlp and LTO flags live in the shared spec.
           sed -e 's|^icon = .*|icon = deployment/purivox.ico|' \
-              -e 's|^extra_args = .*|& --low-memory --lto=no|' \
               pysidedeploy.spec > pysidedeploy-windows.spec
           tee logs/deploy-spec.log < pysidedeploy-windows.spec
 
@@ -614,6 +619,14 @@ jobs:
           uv run --locked --no-dev --group deploy
           pyside6-deploy -c pysidedeploy-macos.spec --force --keep-deployment-files
           2>&1 | tee logs/bundle-build.log
+
+      - name: Verify app bundle was produced
+        run: |
+          if [[ ! -d deployment/deployment/Purivox.app ]]; then
+            echo "::error::deployment/deployment/Purivox.app was not produced by pyside6-deploy"
+            tail -n 40 logs/bundle-build.log || true
+            exit 1
+          fi
 
       - name: Collect the app bundle
         run: |
