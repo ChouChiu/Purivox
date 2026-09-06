@@ -257,9 +257,10 @@ checks the roster against the tree.
 ## Tooling
 
 Python ≥3.11, pinned to 3.14 for development by `.python-version`; uv with `uv.lock` committed, the
-`dev` group synced by default and `deploy` opt-in. PySide6 ≥6.8 + `PySide6-Fluent-Widgets[full]`
-(vendored `qfluentwidgets`) and never a second Fluent package; Qt is mandatory even for the CLI,
-which falls back to `QAudioDecoder` for decoding. numpy ≥2, scipy, soundfile, soxr, all
+`dev` group synced by default and `deploy` opt-in. PySide6 ≥6.8 + `PySide6-Fluent-Widgets`
+(vendored `qfluentwidgets`) and never a second Fluent package — not the `[full]` extra, whose
+pillow and colorthief only feed an AcrylicLabel this app never builds; Qt is mandatory even for the
+CLI, which falls back to `QAudioDecoder` for decoding. numpy ≥2, scipy, soundfile, soxr, all
 range-pinned. ruff only (`line-length = 100`, E/F/I/UP/B/SIM/RUF), `ruff format`, no black or
 isort. Nuitka 4.1.3 via `pyside6-deploy`, onefile (`dist/Purivox.bin` / `Purivox.exe`) and a macOS
 arm64 app bundle (`dist/Purivox.app`, from a CI-derived spec).

@@ -13,7 +13,7 @@ authors = [{ name = "Purivox contributors" }]
 dependencies = [
   "numpy>=2.0,<3",
   "PySide6>=6.8,<7",
-  "PySide6-Fluent-Widgets[full]>=1.11.3,<2",
+  "PySide6-Fluent-Widgets>=1.11.3,<2",
   "scipy>=1.14,<2",
   "soundfile>=0.13,<1",
   "soxr>=0.5,<1",
