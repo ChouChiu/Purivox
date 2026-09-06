@@ -46,7 +46,8 @@ translations, paired file-for-file.
 src/entrypoints/   cli.py, gui.py — startup only
 src/app/           MainWindow, JobPresenter, JobRunner/worker, full_stage_processing
 src/features/      reference_removal, full_stage, home, settings
-src/shared/        audio/, dsp/, ui/, config, i18n, jobs, logging, processing, progress, branding
+src/shared/        audio/, download/, dsp/, ui/, config, i18n, jobs, logging, processing, progress,
+                   branding
 src/web/           bridge.py (JSON in/out), timeline.py, limits.py — sibling of app
 web/               Vite + React + Fluent UI v9, same feature layering, bun
 ```
@@ -57,7 +58,7 @@ other, `app`/`web` never import `entrypoints`. `tests/test_architecture.py` and
 is one new directory under `src/features/`. Anything two features — or the GUI and the CLI — both
 need moves down into `shared` (`BLOCK_FRAMES`, `AUDIO_EXTENSIONS`, `validate_reference_settings`,
 `log_flux_bands`, `AUDIO_FILE_FILTER`, `normalized_wav_path`, `branding.user_agent`,
-`OutputTracks`, `subtract_into`, `export_audio`).
+`OutputTracks`, `subtract_into`, `export_audio`, `download/`, `DownloadDialog`).
 
 | Path | What lives there |
 |---|---|
@@ -67,8 +68,9 @@ need moves down into `shared` (`BLOCK_FRAMES`, `AUDIO_EXTENSIONS`, `validate_ref
 | `src/features/home/`, `settings/` | Brand and entry cards; language/theme/log level, `updates.py` (GitHub release query + version compare) and `dialog.py`. The app never installs an update — the dialog opens the release page |
 | `src/shared/` (root) | `config.py` (the `cfg` `QConfig`), `i18n.py` (`tr()`, `install_language()`, `SUPPORTED_LANGUAGES`), `jobs.py` (the reference-settings contract behind `ReferenceJob`, `FullStageJob` and the CLI: `SIGMA_CHOICES`, `STRENGTH_RANGE`, `validate_reference_settings`, `OutputTracks`, `planned_outputs`), `logging.py`, `processing.py` (`CancellationToken`, `ProgressEvent`, `ProcessingResult`), `progress.py`, `branding.py` |
 | `src/shared/audio/` | `io.py`: mapped I/O, soxr resample, atomic WAV write, `BLOCK_FRAMES` (262 144), `AUDIO_EXTENSIONS`, `release_mapped_pages()`; `analysis.py`: `AudioStats`, peak/RMS, block-wise `copy_audio`/`subtract_into`, `export_audio` |
+| `src/shared/download/` | `media.py`: the yt-dlp wrapper — `search()` (`ytsearch`, flat), `fetch()` (best audio, `noplaylist` — a watch URL carrying a radio `list` is hundreds of entries — WAV through ffmpeg when it is there, the container as it arrived when it is not, cancellable in extraction through `match_filter` as well as in transfer through the progress hook), `looks_like_url`, `ffmpeg_available`; `cache.py`: the `downloads.json` index under AppLocalData, so a link is fetched once — matched by video id as well as by URL, because the link pasted is rarely the canonical one recorded; `runner.py`: the `QThread` behind one search or download. YouTube Music is link-only — its search answers with channels, not songs |
 | `src/shared/dsp/` | `spectral.py`: librosa-compatible `stft`/`istft` (`n_fft=2048`, `hop=512`) and `log_flux_bands()`, shared by full-stage matching and coarse alignment |
-| `src/shared/ui/` | `responsive.py` (`LayoutMode`/`LayoutMetrics`, `ResponsiveColumns`, `FoldingRow`, `allow_shrinking`, `HeightForWidth`, `ElidedLabel`), `cards.py` (`FormCard`, `PageScrollArea`), `widgets.py` (`SmoothComboBox`, file filters, `normalized_wav_path`) |
+| `src/shared/ui/` | `responsive.py` (`LayoutMode`/`LayoutMetrics`, `ResponsiveColumns`, `FoldingRow`, `allow_shrinking`, `HeightForWidth`, `ElidedLabel`), `cards.py` (`FormCard`, `PageScrollArea`), `widgets.py` (`SmoothComboBox`, file filters, `normalized_wav_path`), `download_dialog.py` (the fetch dialog both reference pages open, imported in the slot rather than at module scope — yt-dlp is a tenth of a second of startup) |
 | `src/resources/` | `i18n/{zh_cn,en_us,ja_jp,ko_kr}.{ts,qm}`, `purivox.svg`, `resource_path` |
 | `web/scripts/` | `build-python-archive.mjs` (packs `src/` for Pyodide), `build-i18n.mjs`, `build-assets.mjs`, `check-architecture.mjs`. Never a second implementation of the DSP |
 | `tests/`, `docs/` | Tests mirror `src/` path-for-path, `benchmarks/` behind `--runslow`; Chinese docs with one translation per file in `docs/en/` |
@@ -97,6 +99,8 @@ uv sync --locked
 
 uv run --locked purivox                            # GUI
 uv run --locked purivox mr <song> <acc> <out.wav> --strength 75 --sigma 8 --align --lang zh_cn
+uv run --locked purivox fetch <link>                # or: <keywords> [--limit N] [--pick N]
+uv run --locked purivox fetch --list                # what has been downloaded
 uv run --locked purivox --selftest                 # pipeline smoke, offscreen-safe
 
 # DSP A/B across a change
@@ -260,8 +264,8 @@ Python ≥3.11, pinned to 3.14 for development by `.python-version`; uv with `uv
 `dev` group synced by default and `deploy` opt-in. PySide6 ≥6.8 + `PySide6-Fluent-Widgets`
 (vendored `qfluentwidgets`) and never a second Fluent package — not the `[full]` extra, whose
 pillow and colorthief only feed an AcrylicLabel this app never builds; Qt is mandatory even for the
-CLI, which falls back to `QAudioDecoder` for decoding. numpy ≥2, scipy, soundfile, soxr, all
-range-pinned. ruff only (`line-length = 100`, E/F/I/UP/B/SIM/RUF), `ruff format`, no black or
+CLI, which falls back to `QAudioDecoder` for decoding. numpy ≥2, scipy, soundfile, soxr, yt-dlp,
+all range-pinned; yt-dlp needs updating whenever a site changes under it. ruff only (`line-length = 100`, E/F/I/UP/B/SIM/RUF), `ruff format`, no black or
 isort. Nuitka 4.1.3 via `pyside6-deploy`, onefile (`dist/Purivox.bin` / `Purivox.exe`) and a macOS
 arm64 app bundle (`dist/Purivox.app`, from a CI-derived spec).
 

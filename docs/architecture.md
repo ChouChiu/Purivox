@@ -20,7 +20,7 @@ src/features/                    各功能自包含的页面、模型与处理�
 ├── full_stage/                  完整舞台分析与时间线模型
 ├── home/                        首页
 └── settings/                    设置页与版本检查
-src/shared/                      音频、频谱、任务参数校验、配置、日志、任务协议和通用控件
+src/shared/                      音频、频谱、任务参数校验、配置、日志、任务协议、链接下载和通用控件
 src/web/                         浏览器外壳，Pyodide 里的作业入口与内存预算
 src/resources/                   翻译等只读资源
 ```
@@ -58,6 +58,11 @@ Pyodide 作业，两者都可以自由使用 `features` 和 `shared`，都不得
 单曲与完整舞台任务共用 `shared.jobs.validate_reference_settings()` 校验强度与统计窗口；
 两者的起音特征共用 `shared.dsp.log_flux_bands()`；文件对话框过滤器与自动查找的扩展名共用
 `shared.audio.AUDIO_EXTENSIONS`。
+
+从链接获取音源同样按这条规则安置：图形界面和命令行都要下载，所以 yt-dlp 封装、下载缓存索引和
+后台线程都在 `shared/download`；获取对话框两个功能页都要用，因此是 `shared/ui/download_dialog.py`，
+而不是在其中一个功能包里安家再被另一个导入。浏览器版没有这条路——Pyodide 里没有套接字，站点也
+不会给跨域头——所以 `web` 从不导入它，`tests/web/test_headless_imports.py` 守住这条边界。
 
 ## 任务执行模型
 

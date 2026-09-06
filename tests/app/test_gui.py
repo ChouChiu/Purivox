@@ -689,3 +689,43 @@ def test_export_choice_is_disabled_while_a_job_runs(qtbot):
     assert not page.tracks.isEnabled()
     page.set_running(False)
     assert page.tracks.isEnabled()
+
+
+def test_a_fetched_file_lands_in_the_field_that_asked_for_it(qtbot, tmp_path: Path, monkeypatch):
+    """Pages ask; the window opens the dialog and routes what came back."""
+    window = MainWindow()
+    qtbot.addWidget(window)
+    fetched = [tmp_path / "one.wav", tmp_path / "two.wav"]
+    asked: list[bool] = []
+
+    def fetch_audio(multiple: bool) -> list[Path]:
+        asked.append(multiple)
+        return fetched if multiple else fetched[:1]
+
+    monkeypatch.setattr(window, "_fetch_audio", fetch_audio)
+
+    window.mr.song_download.click()
+    assert window.mr.song_edit.text() == str(fetched[0])
+    assert Path(window.mr.output_edit.text()).name == "one_vocals.wav"
+
+    window.mr.acc_download.click()
+    assert window.mr.acc_edit.text() == str(fetched[0])
+
+    window.full_stage.stage_download.click()
+    assert window.full_stage.stage_edit.text() == str(fetched[0])
+
+    window.full_stage.download_sources.click()
+    assert [path.name for path in window.full_stage.source_paths()] == ["one.wav", "two.wav"]
+    assert asked == [False, False, False, True], "only the source list takes more than one file"
+
+
+def test_a_cancelled_fetch_leaves_every_field_alone(qtbot, monkeypatch):
+    window = MainWindow()
+    qtbot.addWidget(window)
+    monkeypatch.setattr(window, "_fetch_audio", lambda multiple: [])
+
+    window.mr.song_download.click()
+    window.full_stage.download_sources.click()
+
+    assert window.mr.song_edit.text() == ""
+    assert window.full_stage.source_paths() == ()

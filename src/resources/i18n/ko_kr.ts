@@ -631,5 +631,113 @@
         <source>crash_no_log</source>
         <translation>(이번 실행에는 로그 파일이 없습니다)</translation>
     </message>
+    <message>
+        <source>download_title</source>
+        <translation>링크에서 오디오 가져오기</translation>
+    </message>
+    <message>
+        <source>download_hint</source>
+        <translation>YouTube 또는 YouTube Music 링크를 붙여넣거나 키워드를 입력해 YouTube를 검색합니다. 사용할 권리가 있는 자료만 내려받으세요.</translation>
+    </message>
+    <message>
+        <source>download_no_ffmpeg</source>
+        <translation>ffmpeg를 찾을 수 없어 내려받은 형식을 그대로 유지합니다.</translation>
+    </message>
+    <message>
+        <source>download_input_hint</source>
+        <translation>링크 또는 검색 키워드</translation>
+    </message>
+    <message>
+        <source>download_fetch</source>
+        <translation>가져오기</translation>
+    </message>
+    <message>
+        <source>download_search</source>
+        <translation>검색</translation>
+    </message>
+    <message>
+        <source>download_tab_results</source>
+        <translation>검색 결과</translation>
+    </message>
+    <message>
+        <source>download_tab_cache</source>
+        <translation>내려받음</translation>
+    </message>
+    <message>
+        <source>download_remove</source>
+        <translation>삭제</translation>
+    </message>
+    <message>
+        <source>download_open_folder</source>
+        <translation>폴더 열기</translation>
+    </message>
+    <message>
+        <source>download_use</source>
+        <translation>선택 항목 사용</translation>
+    </message>
+    <message>
+        <source>close</source>
+        <translation>닫기</translation>
+    </message>
+    <message>
+        <source>download_ready</source>
+        <translation>링크를 붙여넣거나 키워드를 입력하세요</translation>
+    </message>
+    <message>
+        <source>download_need_input</source>
+        <translation>먼저 링크나 키워드를 입력하세요</translation>
+    </message>
+    <message>
+        <source>download_busy</source>
+        <translation>이미 가져오는 중입니다</translation>
+    </message>
+    <message>
+        <source>download_searching</source>
+        <translation>검색 중...</translation>
+    </message>
+    <message>
+        <source>download_already</source>
+        <translation>이 링크는 이미 내려받았습니다</translation>
+    </message>
+    <message>
+        <source>download_need_selection</source>
+        <translation>먼저 항목을 선택하세요</translation>
+    </message>
+    <message>
+        <source>download_no_results</source>
+        <translation>검색 결과가 없습니다</translation>
+    </message>
+    <message>
+        <source>download_results_found</source>
+        <translation>{count}개를 찾았습니다. 두 번 클릭하면 내려받습니다</translation>
+    </message>
+    <message>
+        <source>download_failed</source>
+        <translation>가져오기 실패: {msg}</translation>
+    </message>
+    <message>
+        <source>download_cancelled</source>
+        <translation>취소했습니다</translation>
+    </message>
+    <message>
+        <source>download_removed</source>
+        <translation>{count}개를 삭제했습니다</translation>
+    </message>
+    <message>
+        <source>download_resolving</source>
+        <translation>링크를 읽는 중...</translation>
+    </message>
+    <message>
+        <source>download_progress</source>
+        <translation>{name} 내려받는 중</translation>
+    </message>
+    <message>
+        <source>download_saved</source>
+        <translation>{name}을(를) 저장했습니다</translation>
+    </message>
+    <message>
+        <source>download_stopping</source>
+        <translation>중지하는 중...</translation>
+    </message>
 </context>
 </TS>

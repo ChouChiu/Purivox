@@ -631,5 +631,113 @@
         <source>crash_no_log</source>
         <translation>（本次运行没有日志文件）</translation>
     </message>
+    <message>
+        <source>download_title</source>
+        <translation>从链接获取音频</translation>
+    </message>
+    <message>
+        <source>download_hint</source>
+        <translation>粘贴 YouTube 或 YouTube Music 链接直接下载，或输入关键词搜索 YouTube。请只下载你有权使用的内容。</translation>
+    </message>
+    <message>
+        <source>download_no_ffmpeg</source>
+        <translation>未找到 ffmpeg，将保留下载时的原始音频格式。</translation>
+    </message>
+    <message>
+        <source>download_input_hint</source>
+        <translation>链接，或搜索关键词</translation>
+    </message>
+    <message>
+        <source>download_fetch</source>
+        <translation>获取</translation>
+    </message>
+    <message>
+        <source>download_search</source>
+        <translation>搜索</translation>
+    </message>
+    <message>
+        <source>download_tab_results</source>
+        <translation>搜索结果</translation>
+    </message>
+    <message>
+        <source>download_tab_cache</source>
+        <translation>已下载</translation>
+    </message>
+    <message>
+        <source>download_remove</source>
+        <translation>删除</translation>
+    </message>
+    <message>
+        <source>download_open_folder</source>
+        <translation>打开文件夹</translation>
+    </message>
+    <message>
+        <source>download_use</source>
+        <translation>使用所选</translation>
+    </message>
+    <message>
+        <source>close</source>
+        <translation>关闭</translation>
+    </message>
+    <message>
+        <source>download_ready</source>
+        <translation>粘贴链接或输入关键词开始</translation>
+    </message>
+    <message>
+        <source>download_need_input</source>
+        <translation>请先填入链接或关键词</translation>
+    </message>
+    <message>
+        <source>download_busy</source>
+        <translation>正在获取，请稍候</translation>
+    </message>
+    <message>
+        <source>download_searching</source>
+        <translation>正在搜索...</translation>
+    </message>
+    <message>
+        <source>download_already</source>
+        <translation>这个链接已经下载过了</translation>
+    </message>
+    <message>
+        <source>download_need_selection</source>
+        <translation>请先选择一项</translation>
+    </message>
+    <message>
+        <source>download_no_results</source>
+        <translation>没有找到结果</translation>
+    </message>
+    <message>
+        <source>download_results_found</source>
+        <translation>找到 {count} 个结果，双击下载</translation>
+    </message>
+    <message>
+        <source>download_failed</source>
+        <translation>获取失败：{msg}</translation>
+    </message>
+    <message>
+        <source>download_cancelled</source>
+        <translation>已取消</translation>
+    </message>
+    <message>
+        <source>download_removed</source>
+        <translation>已删除 {count} 项</translation>
+    </message>
+    <message>
+        <source>download_resolving</source>
+        <translation>正在解析链接...</translation>
+    </message>
+    <message>
+        <source>download_progress</source>
+        <translation>正在下载 {name}</translation>
+    </message>
+    <message>
+        <source>download_saved</source>
+        <translation>已保存 {name}</translation>
+    </message>
+    <message>
+        <source>download_stopping</source>
+        <translation>正在停止...</translation>
+    </message>
 </context>
 </TS>

@@ -48,6 +48,8 @@ class FullStagePage(PageScrollArea):
     analyze_requested = Signal()
     start_requested = Signal()
     cancel_requested = Signal()
+    download_requested = Signal(str)
+    """Which field a fetched file should land in: `stage` or `sources`."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -63,13 +65,18 @@ class FullStagePage(PageScrollArea):
             PushButton(),
         )
         self.stage_edit.setReadOnly(True)
+        self.stage_download = PushButton(FluentIcon.CLOUD_DOWNLOAD, "")
+        allow_shrinking(self.stage_edit)
         self.output_label, self.output_edit, self.output_button = (
             BodyLabel(),
             LineEdit(),
             PushButton(),
         )
-        self.files.add_row(self.stage_label, self.stage_edit, self.stage_button)
+        self.files.add_row(
+            self.stage_label, self.stage_edit, self.stage_button, self.stage_download
+        )
         self.files.add_row(self.output_label, self.output_edit, self.output_button)
+        allow_shrinking(self.output_edit)
         self._output_user_edited = False
         self.add_card(self.files)
 
@@ -82,8 +89,9 @@ class FullStagePage(PageScrollArea):
         self.sources_card.layout.addWidget(self.sources)
         source_actions = QHBoxLayout()
         self.add_sources = PushButton(FluentIcon.ADD, "")
+        self.download_sources = PushButton(FluentIcon.CLOUD_DOWNLOAD, "")
         self.remove_source = PushButton(FluentIcon.DELETE, "")
-        for button in (self.add_sources, self.remove_source):
+        for button in (self.add_sources, self.download_sources, self.remove_source):
             source_actions.addWidget(button)
         source_actions.addStretch()
         self.sources_card.layout.addLayout(source_actions)
@@ -152,6 +160,8 @@ class FullStagePage(PageScrollArea):
         self.output_edit.textEdited.connect(self._output_edited)
         self.tracks.currentIndexChanged.connect(self._tracks_changed)
         self.add_sources.clicked.connect(self._add_sources)
+        self.download_sources.clicked.connect(lambda: self.download_requested.emit("sources"))
+        self.stage_download.clicked.connect(lambda: self.download_requested.emit("stage"))
         self.remove_source.clicked.connect(self._remove_source)
         self.analyze_button.clicked.connect(self.analyze_requested)
         self.start_button.clicked.connect(self.start_requested)
@@ -182,6 +192,8 @@ class FullStagePage(PageScrollArea):
         self.output_edit.setPlaceholderText(tr("stage_output_hint"))
         self.stage_button.setText(tr("browse"))
         self.output_button.setText(tr("browse"))
+        for button in (self.stage_download, self.download_sources):
+            button.setText(tr("download_fetch"))
         self.sources_card.title_label.setText(tr("stage_sources"))
         self.sources_hint.setText(tr("stage_sources_hint"))
         self.add_sources.setText(tr("stage_add_sources"))
@@ -267,6 +279,8 @@ class FullStagePage(PageScrollArea):
             self.output_button,
             self.output_edit,
             self.add_sources,
+            self.download_sources,
+            self.stage_download,
             self.remove_source,
             self.sources,
             self.tracks,

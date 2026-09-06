@@ -25,7 +25,7 @@ plugins =
 [nuitka]
 macos.permissions = 
 mode = onefile
-extra_args = --quiet --assume-yes-for-downloads --noinclude-qt-translations --include-package=app --include-package=entrypoints --include-package=features --include-package=resources --include-package-data=resources --include-package=shared --include-package=web --include-package=qfluentwidgets --include-package=scipy._external.array_api_compat.numpy --python-flag=no_asserts,no_docstrings --noinclude-dlls=*imageformats*pdf* --noinclude-dlls=*Qt6Pdf* --noinclude-dlls=*imageformats*tiff* --noinclude-dlls=*imageformats*webp* --noinclude-dlls=*imageformats*tga* --noinclude-dlls=*imageformats*wbmp* --noinclude-dlls=*imageformats*icns* --noinclude-dlls=*imageformats*gif*
+extra_args = --quiet --assume-yes-for-downloads --noinclude-qt-translations --include-package=app --include-package=entrypoints --include-package=features --include-package=resources --include-package-data=resources --include-package=shared --include-package=web --include-package=qfluentwidgets --include-package=yt_dlp --include-package=scipy._external.array_api_compat.numpy --python-flag=no_asserts,no_docstrings --noinclude-dlls=*imageformats*pdf* --noinclude-dlls=*Qt6Pdf* --noinclude-dlls=*imageformats*tiff* --noinclude-dlls=*imageformats*webp* --noinclude-dlls=*imageformats*tga* --noinclude-dlls=*imageformats*wbmp* --noinclude-dlls=*imageformats*icns* --noinclude-dlls=*imageformats*gif*
 
 [buildozer]
 mode = debug

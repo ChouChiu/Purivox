@@ -631,5 +631,113 @@
         <source>crash_no_log</source>
         <translation>（今回の実行にログファイルはありません）</translation>
     </message>
+    <message>
+        <source>download_title</source>
+        <translation>リンクから音声を取得</translation>
+    </message>
+    <message>
+        <source>download_hint</source>
+        <translation>YouTube または YouTube Music のリンクを貼り付けるか、キーワードを入力して YouTube を検索します。使用する権利があるものだけをダウンロードしてください。</translation>
+    </message>
+    <message>
+        <source>download_no_ffmpeg</source>
+        <translation>ffmpeg が見つからないため、ダウンロードした形式のまま保存します。</translation>
+    </message>
+    <message>
+        <source>download_input_hint</source>
+        <translation>リンク、または検索キーワード</translation>
+    </message>
+    <message>
+        <source>download_fetch</source>
+        <translation>取得</translation>
+    </message>
+    <message>
+        <source>download_search</source>
+        <translation>検索</translation>
+    </message>
+    <message>
+        <source>download_tab_results</source>
+        <translation>検索結果</translation>
+    </message>
+    <message>
+        <source>download_tab_cache</source>
+        <translation>ダウンロード済み</translation>
+    </message>
+    <message>
+        <source>download_remove</source>
+        <translation>削除</translation>
+    </message>
+    <message>
+        <source>download_open_folder</source>
+        <translation>フォルダーを開く</translation>
+    </message>
+    <message>
+        <source>download_use</source>
+        <translation>選択を使用</translation>
+    </message>
+    <message>
+        <source>close</source>
+        <translation>閉じる</translation>
+    </message>
+    <message>
+        <source>download_ready</source>
+        <translation>リンクを貼り付けるかキーワードを入力してください</translation>
+    </message>
+    <message>
+        <source>download_need_input</source>
+        <translation>先にリンクかキーワードを入力してください</translation>
+    </message>
+    <message>
+        <source>download_busy</source>
+        <translation>取得中です。お待ちください</translation>
+    </message>
+    <message>
+        <source>download_searching</source>
+        <translation>検索中...</translation>
+    </message>
+    <message>
+        <source>download_already</source>
+        <translation>このリンクはダウンロード済みです</translation>
+    </message>
+    <message>
+        <source>download_need_selection</source>
+        <translation>先に選択してください</translation>
+    </message>
+    <message>
+        <source>download_no_results</source>
+        <translation>見つかりませんでした</translation>
+    </message>
+    <message>
+        <source>download_results_found</source>
+        <translation>{count} 件見つかりました。ダブルクリックでダウンロードします</translation>
+    </message>
+    <message>
+        <source>download_failed</source>
+        <translation>取得に失敗しました: {msg}</translation>
+    </message>
+    <message>
+        <source>download_cancelled</source>
+        <translation>キャンセルしました</translation>
+    </message>
+    <message>
+        <source>download_removed</source>
+        <translation>{count} 件を削除しました</translation>
+    </message>
+    <message>
+        <source>download_resolving</source>
+        <translation>リンクを解析中...</translation>
+    </message>
+    <message>
+        <source>download_progress</source>
+        <translation>{name} をダウンロード中</translation>
+    </message>
+    <message>
+        <source>download_saved</source>
+        <translation>{name} を保存しました</translation>
+    </message>
+    <message>
+        <source>download_stopping</source>
+        <translation>停止しています...</translation>
+    </message>
 </context>
 </TS>

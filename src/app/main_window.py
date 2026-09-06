@@ -143,6 +143,8 @@ class MainWindow(FluentWindow):
         self.full_stage.start_requested.connect(self.start_full_stage)
         self.full_stage.cancel_requested.connect(self.cancel)
         self.mr.song_changed.connect(self._auto_find)
+        self.mr.download_requested.connect(self._download_for_mr)
+        self.full_stage.download_requested.connect(self._download_for_full_stage)
         cfg.language.valueChanged.connect(self._language_changed)
         cfg.theme.valueChanged.connect(lambda value: self._apply_theme(str(value)))
         cfg.log_level.valueChanged.connect(lambda value: set_log_level(str(value)))
@@ -271,6 +273,46 @@ class MainWindow(FluentWindow):
             position=InfoBarPosition.TOP_RIGHT,
             parent=self,
         )
+
+    def _fetch_audio(self, multiple: bool) -> list[Path]:
+        """Fetch audio from a link, returning the files the user picked.
+
+        The dialog is imported here rather than at module scope: it pulls in
+        yt-dlp, a tenth of a second of startup nothing pays for until a download
+        is actually asked for.
+        """
+        from shared.ui.download_dialog import DownloadDialog
+
+        dialog = DownloadDialog(self, multiple=multiple)
+        accepted = dialog.exec()
+        chosen = dialog.selected_paths() if accepted else []
+        # The dialog is a child of the window and filters its events, so a
+        # closed one has to be dropped rather than left behind for the session.
+        dialog.deleteLater()
+        return chosen
+
+    def _download_for_mr(self, target: str) -> None:
+        if self.jobs.running:
+            return
+        chosen = self._fetch_audio(multiple=False)
+        if not chosen:
+            return
+        if target == "song":
+            self.mr.set_song(str(chosen[0]))
+        else:
+            self.mr.set_accompaniment(str(chosen[0]))
+
+    def _download_for_full_stage(self, target: str) -> None:
+        if self.jobs.running:
+            return
+        sources = target == "sources"
+        chosen = self._fetch_audio(multiple=sources)
+        if not chosen:
+            return
+        if sources:
+            self.full_stage.add_source_paths([str(path) for path in chosen])
+        else:
+            self.full_stage.set_stage(str(chosen[0]))
 
     def _auto_find(self, song: str) -> None:
         if not self.mr.auto_find.isChecked():

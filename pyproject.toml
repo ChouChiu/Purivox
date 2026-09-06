@@ -17,6 +17,7 @@ dependencies = [
   "scipy>=1.14,<2",
   "soundfile>=0.13,<1",
   "soxr>=0.5,<1",
+  "yt-dlp>=2025.1,<2027",
 ]
 
 [dependency-groups]
@@ -124,6 +125,10 @@ files = [
   "src/shared/audio/io.py",
   "src/shared/branding.py",
   "src/shared/config.py",
+  "src/shared/download/__init__.py",
+  "src/shared/download/cache.py",
+  "src/shared/download/media.py",
+  "src/shared/download/runner.py",
   "src/shared/dsp/__init__.py",
   "src/shared/dsp/spectral.py",
   "src/shared/i18n.py",
@@ -133,6 +138,7 @@ files = [
   "src/shared/progress.py",
   "src/shared/ui/__init__.py",
   "src/shared/ui/cards.py",
+  "src/shared/ui/download_dialog.py",
   "src/shared/ui/responsive.py",
   "src/shared/ui/widgets.py",
   "src/web/__init__.py",

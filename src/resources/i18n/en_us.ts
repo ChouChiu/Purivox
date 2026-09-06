@@ -631,5 +631,113 @@
         <source>crash_no_log</source>
         <translation>(this run has no log file)</translation>
     </message>
+    <message>
+        <source>download_title</source>
+        <translation>Fetch audio from a link</translation>
+    </message>
+    <message>
+        <source>download_hint</source>
+        <translation>Paste a YouTube or YouTube Music link to download it, or type keywords to search YouTube. Only download material you have the right to use.</translation>
+    </message>
+    <message>
+        <source>download_no_ffmpeg</source>
+        <translation>ffmpeg was not found, so the downloaded container is kept as it is.</translation>
+    </message>
+    <message>
+        <source>download_input_hint</source>
+        <translation>A link, or keywords to search for</translation>
+    </message>
+    <message>
+        <source>download_fetch</source>
+        <translation>Fetch</translation>
+    </message>
+    <message>
+        <source>download_search</source>
+        <translation>Search</translation>
+    </message>
+    <message>
+        <source>download_tab_results</source>
+        <translation>Results</translation>
+    </message>
+    <message>
+        <source>download_tab_cache</source>
+        <translation>Downloaded</translation>
+    </message>
+    <message>
+        <source>download_remove</source>
+        <translation>Delete</translation>
+    </message>
+    <message>
+        <source>download_open_folder</source>
+        <translation>Open folder</translation>
+    </message>
+    <message>
+        <source>download_use</source>
+        <translation>Use selected</translation>
+    </message>
+    <message>
+        <source>close</source>
+        <translation>Close</translation>
+    </message>
+    <message>
+        <source>download_ready</source>
+        <translation>Paste a link or type keywords to start</translation>
+    </message>
+    <message>
+        <source>download_need_input</source>
+        <translation>Enter a link or keywords first</translation>
+    </message>
+    <message>
+        <source>download_busy</source>
+        <translation>A download is already running</translation>
+    </message>
+    <message>
+        <source>download_searching</source>
+        <translation>Searching...</translation>
+    </message>
+    <message>
+        <source>download_already</source>
+        <translation>This link has already been downloaded</translation>
+    </message>
+    <message>
+        <source>download_need_selection</source>
+        <translation>Select something first</translation>
+    </message>
+    <message>
+        <source>download_no_results</source>
+        <translation>Nothing was found</translation>
+    </message>
+    <message>
+        <source>download_results_found</source>
+        <translation>Found {count} — double-click one to download it</translation>
+    </message>
+    <message>
+        <source>download_failed</source>
+        <translation>Fetch failed: {msg}</translation>
+    </message>
+    <message>
+        <source>download_cancelled</source>
+        <translation>Cancelled</translation>
+    </message>
+    <message>
+        <source>download_removed</source>
+        <translation>Deleted {count} item(s)</translation>
+    </message>
+    <message>
+        <source>download_resolving</source>
+        <translation>Reading the link...</translation>
+    </message>
+    <message>
+        <source>download_progress</source>
+        <translation>Downloading {name}</translation>
+    </message>
+    <message>
+        <source>download_saved</source>
+        <translation>Saved {name}</translation>
+    </message>
+    <message>
+        <source>download_stopping</source>
+        <translation>Stopping...</translation>
+    </message>
 </context>
 </TS>

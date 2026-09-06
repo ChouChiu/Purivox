@@ -23,7 +23,7 @@ src/features/                    Self-contained pages, models, and processing lo
 ├── home/                        Home page
 └── settings/                    Settings page and the release check
 src/shared/                      Audio, spectra, job validation, configuration, logging,
-                                 task protocol, and widgets
+                                 task protocol, link downloads, and widgets
 src/web/                         Browser shell: the job entry points and memory budget under Pyodide
 src/resources/                   Read-only resources such as the translations
 ```
@@ -67,6 +67,13 @@ full-stage jobs validate strength and the statistics window through
 `shared.jobs.validate_reference_settings()`; both derive onset features from
 `shared.dsp.log_flux_bands()`; the file-dialog filters and the automatic accompaniment finder share
 `shared.audio.AUDIO_EXTENSIONS`.
+
+Fetching a source from a link is placed by that same rule: the GUI and the CLI both download, so
+the yt-dlp wrapper, the download index and the background thread live in `shared/download`; the
+fetch dialog is wanted by both feature pages, so it is `shared/ui/download_dialog.py` rather than
+homed in one feature and imported by the other. The browser build has no such path — Pyodide has
+no sockets and the sites answer with no cross-origin headers — so `web` never imports it, and
+`tests/web/test_headless_imports.py` holds that boundary.
 
 ## Task Execution Model
 

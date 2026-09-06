@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
 from qfluentwidgets import (
     BodyLabel,
     CaptionLabel,
+    FluentIcon,
     LineEdit,
     PrimaryPushButton,
     PushButton,
@@ -55,6 +56,8 @@ class MrPage(PageScrollArea):
     start_requested = Signal()
     cancel_requested = Signal()
     song_changed = Signal(str)
+    download_requested = Signal(str)
+    """Which field a fetched file should land in: `song` or `acc`."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -77,14 +80,22 @@ class MrPage(PageScrollArea):
             LineEdit(),
             PushButton(),
         )
+        self.song_download = PushButton(FluentIcon.CLOUD_DOWNLOAD, "")
+        self.acc_download = PushButton(FluentIcon.CLOUD_DOWNLOAD, "")
         for edit in (self.song_edit, self.acc_edit):
             edit.setReadOnly(True)
+        # A path field beside both a browse and a fetch button is wider than a
+        # phone-narrow row can hold: the field gives way, never the page.
+        for edit in (self.song_edit, self.acc_edit, self.output_edit):
+            allow_shrinking(edit)
         self.output_edit.setClearButtonEnabled(True)
         self._output_user_edited = False
         self.auto_find = SwitchButton()
         self.auto_find.setChecked(bool(cfg.auto_find.value))
-        self.files.add_row(self.song_label, self.song_edit, self.song_button)
-        self.files.add_row(self.acc_label, self.acc_edit, self.acc_button, self.auto_find)
+        self.files.add_row(self.song_label, self.song_edit, self.song_button, self.song_download)
+        self.files.add_row(
+            self.acc_label, self.acc_edit, self.acc_button, self.acc_download, self.auto_find
+        )
         self.files.add_row(self.output_label, self.output_edit, self.output_button)
         self.add_card(self.files)
 
@@ -187,6 +198,8 @@ class MrPage(PageScrollArea):
 
         self.song_button.clicked.connect(self._select_song)
         self.acc_button.clicked.connect(self._select_acc)
+        self.song_download.clicked.connect(lambda: self.download_requested.emit("song"))
+        self.acc_download.clicked.connect(lambda: self.download_requested.emit("acc"))
         self.output_button.clicked.connect(self._select_output)
         self.output_edit.textEdited.connect(self._output_edited)
         self.output_edit.editingFinished.connect(self.normalized_output_path)
@@ -242,6 +255,8 @@ class MrPage(PageScrollArea):
         self._retranslate_tracks()
         for button in (self.song_button, self.acc_button, self.output_button):
             button.setText(tr("browse"))
+        for button in (self.song_download, self.acc_download):
+            button.setText(tr("download_fetch"))
         self.auto_find.setOnText(tr("auto_find_on"))
         self.auto_find.setOffText(tr("auto_find_off"))
         self.cancel_button.setText(tr("cancel"))
@@ -263,6 +278,8 @@ class MrPage(PageScrollArea):
         for control in (
             self.song_button,
             self.acc_button,
+            self.song_download,
+            self.acc_download,
             self.output_button,
             self.output_edit,
             self.tracks,

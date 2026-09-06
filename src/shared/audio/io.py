@@ -27,7 +27,7 @@ DEFAULT_BIT_DEPTH = 24
 BLOCK_FRAMES = 262_144
 # Container suffixes offered by the file dialogs and accepted by the automatic
 # accompaniment finder.
-AUDIO_EXTENSIONS = (".wav", ".flac", ".mp3", ".m4a", ".ogg", ".opus")
+AUDIO_EXTENSIONS = (".wav", ".flac", ".mp3", ".m4a", ".ogg", ".opus", ".webm")
 # A temporary mapping is how a long recording stays off the heap - where there
 # is a disk under it.  Emscripten's filesystem holds a file's bytes in the same
 # tab's memory, in an array its `mmap` cannot alias into the wasm heap, so a

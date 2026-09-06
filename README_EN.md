@@ -41,6 +41,8 @@ reference cancellation.
   that day's log and offers the issue form
 - The common actions have shortcuts: `Ctrl+O` to choose an input, `Ctrl+Return` to
   start, `F5` to identify songs, `Esc` to cancel, `Ctrl+P` to play/pause the preview
+- Song sources can be fetched straight from a YouTube / YouTube Music link, and what was
+  downloaded is remembered so it can be picked again
 - GUI and CLI reuse the same MR Remove task pipelines
 
 ## Installation
@@ -108,6 +110,28 @@ Unidentified ranges retain their original content and duration. Inter-song speec
 interaction, advertisements, and empty-stage audio are not removed automatically. Full-stage
 processing is currently available only in the graphical interface.
 
+### Fetching a Source from a Link
+
+Both file rows on the Single page, and the stage audio and source list on the Full Stage page,
+carry a **Fetch** button:
+
+1. Paste a YouTube or YouTube Music link to download it directly, or type keywords to search
+   YouTube and double-click a result. YouTube Music is link-only: its search does not answer
+   with downloadable songs.
+2. What has been downloaded is listed under **Downloaded**, and stays available for later jobs.
+   A track is never fetched twice: a link in another shape — the `&list=…` YouTube adds on its
+   own, say — is still recognised as the same track.
+3. A link carrying a playlist yields the one track it points at, not the whole list.
+4. Select an entry and press **Use selected** to put the file in the field that asked for it.
+   The full-stage source list accepts more than one at a time.
+
+With ffmpeg installed the download is converted to WAV; without it the original container is
+kept — usually WebM/Opus — and Qt Multimedia decodes it, so the pipelines read either one.
+Files live under `downloads` in the application data directory; the dialog can **Open folder**
+to show them or **Delete** to remove an entry together with its file.
+
+Only download material you have the right to use.
+
 ## Command-Line Usage
 
 Display the version and help:
@@ -141,6 +165,24 @@ Common reference-cancellation options:
 | `--tracks` | `vocal`, `backing`, `both` | Which stems to export; default: `vocal` |
 | `--lang` | `zh_cn`, `en_us`, `ja_jp`, `ko_kr` | Language used for progress messages |
 
+Fetch a source from a link:
+
+```bash
+uv run --locked purivox fetch "https://www.youtube.com/watch?v=..."   # download it
+uv run --locked purivox fetch "some keywords" --limit 5               # list search results only
+uv run --locked purivox fetch "some keywords" --pick 2                # download the 2nd result
+uv run --locked purivox fetch --list                                  # list what was downloaded
+```
+
+| Option | Value | Description |
+|---|---:|---|
+| `--out` | directory | Where to save; defaults to `downloads` in the application data directory |
+| `--limit` | integer | How many search results to list; default: `10` |
+| `--pick` | integer | Download this result, counting from 1; without it the results are only listed |
+| `--list` | flag | List what has been downloaded |
+
+On success the file path is printed to standard output, ready to hand to `purivox mr`.
+
 ## Input, Output, and Important Notes
 
 - libsndfile natively supports formats including WAV, FLAC, and OGG. Other formats supported by
@@ -152,6 +194,8 @@ Common reference-cancellation options:
   Upsampling cannot create spectral detail absent from the input and only enlarges the file, so
   the pipelines do not do it.
 - An output path cannot overwrite an input file. Press `Ctrl+C` to cancel a CLI task.
+- Downloading is yt-dlp's job. When a site changes, update the dependency before investigating;
+  a link is fetched once, and asking again returns the file that is already there.
 - Synthetic tests only indicate that the implementation has no obvious regression. Judge final
   quality by listening to the same excerpt before and after processing.
 
