@@ -41,9 +41,12 @@ def analyze_audio(
     for start in range(0, audio.frames, BLOCK_FRAMES):
         token.raise_if_cancelled()
         end = min(start + BLOCK_FRAMES, audio.frames)
-        values = np.asarray(audio.samples[:, start:end], dtype=np.float64)
+        values = np.asarray(audio.samples[:, start:end], dtype=np.float32)
         peak = max(peak, float(np.max(np.abs(values), initial=0.0)))
-        square_sum += float(np.sum(values * values))
+        # A float32 sum of squares per block, accumulated in float64 across the
+        # file: widening every sample to float64 first measured three times
+        # slower for a statistic that is displayed to a tenth of a decibel.
+        square_sum += float(np.einsum("ij,ij->", values, values))
         sample_count += values.size
     rms = math.sqrt(square_sum / max(sample_count, 1))
     return AudioStats(
