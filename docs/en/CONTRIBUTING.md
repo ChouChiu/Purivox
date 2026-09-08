@@ -244,10 +244,7 @@ Nuitka's own cache root (`~/.cache/Nuitka`, `~/Library/Caches/Nuitka`,
 `%LOCALAPPDATA%\Nuitka\Nuitka\Cache`) — Nuitka points `CCACHE_DIR` inside it, and the
 system-wide `~/.cache/ccache` stays empty. The cache key follows `uv.lock` and
 `pysidedeploy.spec` only: adding the source hash writes a fresh ~400 MB entry on every push, and
-the 10 GB quota then evicts the entry the next run needed. Windows builds with `--mingw64` for
-the same reason: Nuitka caches a gcc build through ccache and an MSVC one through its inline
-clcache, which runs in NODIRECT mode and re-preprocesses every source before it can look
-anything up.
+the 10 GB quota then evicts the entry the next run needed.
 
 ## Commits
 

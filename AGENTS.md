@@ -264,9 +264,7 @@ CI's compiler cache must name Nuitka's own cache root — `~/.cache/Nuitka`,
 inside it, so the system-wide `~/.cache/ccache` a Linux job would reach for stays empty and
 every build is a cold one. The cache key follows `uv.lock` and `pysidedeploy.spec` only: adding
 the source hash writes a fresh ~400 MB entry on every push, and the 10 GB quota then evicts the
-entry the next run needed. Windows builds with `--mingw64` for the same reason: Nuitka caches a
-gcc build through ccache and an MSVC one through its inline clcache, which runs in NODIRECT mode
-and re-preprocesses every source before it can look anything up.
+entry the next run needed.
 
 ## Tooling
 
