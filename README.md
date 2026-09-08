@@ -138,7 +138,7 @@ uv run --locked purivox mr "现场录音.wav" "歌曲音源.wav" "现场人声.w
 | `--sigma` | `1`、`3`、`8`、`16` | 统计窗口秒数（进阶参数），默认 `3`；图形界面固定使用 `3` |
 | `--align` / `--no-align` | 开 / 关 | 是否自动对齐，默认开启 |
 | `--tracks` | `vocal`、`backing`、`both` | 导出内容，默认 `vocal`（仅消音结果）|
-| `--lang` | `zh_cn`、`en_us`、`ja_jp`、`ko_kr` | 进度信息语言 |
+| `--lang` | `zh_cn`、`zh_tw`、`en_us`、`ja_jp`、`ko_kr` | 进度信息语言 |
 
 从链接获取音源：
 

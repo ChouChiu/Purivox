@@ -115,6 +115,16 @@ def test_japanese_and_korean_mr_terms_are_unambiguous():
     assert tr("stage_confidence") == "매칭 신뢰도"
 
 
+def test_traditional_chinese_uses_taiwanese_terminology():
+    """A character-by-character conversion of zh_cn passes every other test."""
+    install_language("zh_tw")
+    assert tr("output_file") == "儲存至:"
+    assert tr("audio_sample_rate") == "取樣率"
+    assert tr("audio_file_size") == "檔案大小"
+    assert tr("stage_analyze") == "辨識歌曲"
+    assert tr("theme_label") == "佈景主題:"
+
+
 def _literal_keys() -> set[str]:
     """Collect every translation key written as a literal in the sources.
 

@@ -12,7 +12,7 @@ except ImportError:
     # anything that actually needs a catalogue still fails loudly below.
     QByteArray = QCoreApplication = QTranslator = None  # type: ignore[assignment]
 
-SUPPORTED_LANGUAGES = ("zh_cn", "en_us", "ja_jp", "ko_kr")
+SUPPORTED_LANGUAGES = ("zh_cn", "zh_tw", "en_us", "ja_jp", "ko_kr")
 DEFAULT_LANGUAGE = SUPPORTED_LANGUAGES[0]
 # Every UI string lives in one Qt Linguist context keyed by short identifiers
 # rather than by source text, so a message can be reworded in every locale

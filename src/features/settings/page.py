@@ -25,7 +25,10 @@ class SettingsPage(PageScrollArea):
         self.title = TitleLabel()
         self.layout.addWidget(self.title)
         self.language_card = OptionsSettingCard(
-            cfg.language, FluentIcon.LANGUAGE, "", texts=["中文", "English", "日本語", "한국어"]
+            cfg.language,
+            FluentIcon.LANGUAGE,
+            "",
+            texts=["简体中文", "正體中文", "English", "日本語", "한국어"],
         )
         self.theme_card = OptionsSettingCard(
             cfg.theme, FluentIcon.BRUSH, "", texts=["Light", "Dark", "Auto"]

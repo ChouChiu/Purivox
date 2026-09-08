@@ -71,7 +71,7 @@ need moves down into `shared` (`BLOCK_FRAMES`, `AUDIO_EXTENSIONS`, `validate_ref
 | `src/shared/download/` | `media.py`: the yt-dlp wrapper — `search()` (`ytsearch`, flat), `fetch()` (best audio, `noplaylist` — a watch URL carrying a radio `list` is hundreds of entries — WAV through ffmpeg when it is there, the container as it arrived when it is not, cancellable in extraction through `match_filter` as well as in transfer through the progress hook), `looks_like_url`, `ffmpeg_available`; `cache.py`: the `downloads.json` index under AppLocalData, so a link is fetched once — matched by video id as well as by URL, because the link pasted is rarely the canonical one recorded; `runner.py`: the `QThread` behind one search or download. YouTube Music is link-only — its search answers with channels, not songs |
 | `src/shared/dsp/` | `spectral.py`: librosa-compatible `stft`/`istft` (`n_fft=2048`, `hop=512`) and `log_flux_bands()`, shared by full-stage matching and coarse alignment |
 | `src/shared/ui/` | `responsive.py` (`LayoutMode`/`LayoutMetrics`, `ResponsiveColumns`, `FoldingRow`, `allow_shrinking`, `HeightForWidth`, `ElidedLabel`), `cards.py` (`FormCard`, `PageScrollArea`), `widgets.py` (`SmoothComboBox`, file filters, `normalized_wav_path`), `download_dialog.py` (the fetch dialog both reference pages open, imported in the slot rather than at module scope — yt-dlp is a tenth of a second of startup) |
-| `src/resources/` | `i18n/{zh_cn,en_us,ja_jp,ko_kr}.{ts,qm}`, `purivox.svg`, `resource_path` |
+| `src/resources/` | `i18n/{zh_cn,zh_tw,en_us,ja_jp,ko_kr}.{ts,qm}`, `purivox.svg`, `resource_path` |
 | `web/scripts/` | `build-python-archive.mjs` (packs `src/` for Pyodide), `build-i18n.mjs`, `build-assets.mjs`, `check-architecture.mjs`. Never a second implementation of the DSP |
 | `tests/`, `docs/` | Tests mirror `src/` path-for-path, `benchmarks/` behind `--runslow`; Chinese docs with one translation per file in `docs/en/` |
 | `deployment/`, `tools/` | Nuitka entry shim + `.deb`/`.rpm` packaging; `eval_cancellation.py` (DSP A/B) |
@@ -127,7 +127,7 @@ uv sync --locked --group deploy
 uv run --locked --group deploy pyside6-deploy -c pysidedeploy.spec
 ```
 
-Language keys: `zh_cn`, `en_us`, `ja_jp`, `ko_kr`.
+Language keys: `zh_cn`, `zh_tw`, `en_us`, `ja_jp`, `ko_kr`.
 
 ## Commits & Releases
 
@@ -171,12 +171,13 @@ Most of what follows is here because it cost someone time.
 - Language is application state, not a job or page parameter: `tr(key, **values)` reads whatever
   `install_language()` installed. Switching it reinstalls the translator, calls each page's
   `retranslate()` and rebuilds the combo boxes.
-- An unknown key returns itself — never rely on that. A new or removed key means all four `.ts`
+- An unknown key returns itself — never rely on that. A new or removed key means all five `.ts`
   files plus a `pyside6-lrelease` recompile, committed together; parity, freshness and literal-key
-  use are all tested.
+  use are all tested. `zh_tw` is Taiwanese usage, not a character conversion of `zh_cn`
+  (檔案/取樣率/辨識, not 文件/采样率/识别); a test pins a few of those terms.
 - Search the catalogues before inventing a string: the desktop already named most states
   (`warn_no_song`, `stage_need_sources`, `preview_empty`, the whole `home_*` set), and reuse keeps
-  four locales correct for free.
+  five locales correct for free.
 - Progress carries its key and values alongside the translated text (`shared/progress.py`), because
   the browser build runs the same pipelines without Qt and translates on the page.
 

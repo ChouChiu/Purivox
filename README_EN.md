@@ -163,7 +163,7 @@ Common reference-cancellation options:
 | `--sigma` | `1`, `3`, `8`, `16` | Statistical window in seconds (advanced option); default: `3`; the GUI always uses `3` |
 | `--align` / `--no-align` | on / off | Automatic alignment; enabled by default |
 | `--tracks` | `vocal`, `backing`, `both` | Which stems to export; default: `vocal` |
-| `--lang` | `zh_cn`, `en_us`, `ja_jp`, `ko_kr` | Language used for progress messages |
+| `--lang` | `zh_cn`, `zh_tw`, `en_us`, `ja_jp`, `ko_kr` | Language used for progress messages |
 
 Fetch a source from a link:
 

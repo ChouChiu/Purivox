@@ -110,31 +110,36 @@ by `QTranslator`:
 
 ```text
 src/resources/i18n/zh_cn.ts   src/resources/i18n/zh_cn.qm
+src/resources/i18n/zh_tw.ts   src/resources/i18n/zh_tw.qm
 src/resources/i18n/en_us.ts   src/resources/i18n/en_us.qm
 src/resources/i18n/ja_jp.ts   src/resources/i18n/ja_jp.qm
 src/resources/i18n/ko_kr.ts   src/resources/i18n/ko_kr.qm
 ```
 
 The `.ts` files are indexed by key rather than by source text: `<source>` is a short identifier
-like `nav_mr`, `<translation>` is the text for that language, and all four files share the single
+like `nav_mr`, `<translation>` is the text for that language, and all five files share the single
 `Purivox` context. Changing the Chinese wording therefore does not disturb the other languages,
 `pyside6-lupdate` does not apply (it extracts literals from source code), and the entries are
 maintained by hand.
 
-Search the four catalogues before inventing a string: the desktop has already named most states
+Search the five catalogues before inventing a string: the desktop has already named most states
 (`warn_no_song`, `stage_need_sources`, `preview_empty`, the whole `home_*` set), and reusing an
-existing key gets four locales right at once.
+existing key gets five locales right at once.
+
+`zh_tw` is Taiwanese usage, not a character-by-character conversion of `zh_cn`: 檔案, 取樣率,
+辨識, 快取 rather than 文件, 采样率, 识别, 缓存. A test pins a few of those terms so a
+conversion tool cannot quietly overwrite the catalogue.
 
 Any `.ts` change must be recompiled, and the `.ts` and `.qm` committed together:
 
 ```bash
-for locale in zh_cn en_us ja_jp ko_kr; do
+for locale in zh_cn zh_tw en_us ja_jp ko_kr; do
   uv run --locked pyside6-lrelease "src/resources/i18n/$locale.ts" \
     -qm "src/resources/i18n/$locale.qm"
 done
 ```
 
-Adding, removing, or renaming a translation key means editing all four `.ts` files. The tests check
+Adding, removing, or renaming a translation key means editing all five `.ts` files. The tests check
 that the key sets match exactly, that no `.qm` is stale against its `.ts`, and that every literal
 key appearing in the source exists in every language. Calls to `tr(key, **values)` must not rely on
 the "unknown key returns the key" fallback.

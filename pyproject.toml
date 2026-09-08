@@ -116,6 +116,7 @@ files = [
   "src/features/settings/updates.py",
   "src/resources/__init__.py",
   "src/resources/i18n/zh_cn.ts",
+  "src/resources/i18n/zh_tw.ts",
   "src/resources/i18n/en_us.ts",
   "src/resources/i18n/ja_jp.ts",
   "src/resources/i18n/ko_kr.ts",

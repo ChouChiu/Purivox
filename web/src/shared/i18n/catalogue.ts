@@ -1,9 +1,10 @@
-export const LANGUAGES = ["zh_cn", "en_us", "ja_jp", "ko_kr"] as const;
+export const LANGUAGES = ["zh_cn", "zh_tw", "en_us", "ja_jp", "ko_kr"] as const;
 export type Language = (typeof LANGUAGES)[number];
 export const DEFAULT_LANGUAGE: Language = "zh_cn";
 
 export const LANGUAGE_NAMES: Record<Language, string> = {
 	zh_cn: "简体中文",
+	zh_tw: "正體中文",
 	en_us: "English",
 	ja_jp: "日本語",
 	ko_kr: "한국어",
@@ -60,7 +61,11 @@ export function preferredLanguage(stored: string | null): Language {
 	const tags = navigator.languages ?? [navigator.language];
 	for (const tag of tags) {
 		const lower = tag.toLowerCase();
-		if (lower.startsWith("zh")) return "zh_cn";
+		// Traditional Chinese reaches us either as a script subtag or as a
+		// region: zh-Hant carries no region, zh-TW carries no script.
+		if (lower.startsWith("zh")) {
+			return /(?:^|-)(?:hant|tw|hk|mo)(?:-|$)/.test(lower) ? "zh_tw" : "zh_cn";
+		}
 		if (lower.startsWith("ja")) return "ja_jp";
 		if (lower.startsWith("ko")) return "ko_kr";
 		if (lower.startsWith("en")) return "en_us";

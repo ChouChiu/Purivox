@@ -91,28 +91,32 @@ DSP 改动按测量接受，不按论证接受：先过自动化检查，再对�
 
 ```text
 src/resources/i18n/zh_cn.ts   src/resources/i18n/zh_cn.qm
+src/resources/i18n/zh_tw.ts   src/resources/i18n/zh_tw.qm
 src/resources/i18n/en_us.ts   src/resources/i18n/en_us.qm
 src/resources/i18n/ja_jp.ts   src/resources/i18n/ja_jp.qm
 src/resources/i18n/ko_kr.ts   src/resources/i18n/ko_kr.qm
 ```
 
 `.ts` 按键索引而非按原文索引：`<source>` 是 `nav_mr` 这样的短标识，`<translation>` 是各语言文本，
-四个文件同属 `Purivox` 这一个 context。因此改中文不会牵动其他语言的条目，`pyside6-lupdate`
+五个文件同属 `Purivox` 这一个 context。因此改中文不会牵动其他语言的条目，`pyside6-lupdate`
 也不适用（它按源码中的字面量提取），翻译条目由人工维护。
 
-动手前先在四个 `.ts` 里搜一遍：桌面端已经给大多数状态起过名字（`warn_no_song`、
-`stage_need_sources`、`preview_empty`、整套 `home_*`），复用现成的键能让四种语言一次就对。
+动手前先在五个 `.ts` 里搜一遍：桌面端已经给大多数状态起过名字（`warn_no_song`、
+`stage_need_sources`、`preview_empty`、整套 `home_*`），复用现成的键能让五种语言一次就对。
+
+`zh_tw` 是正体中文（台湾）用语，不是 `zh_cn` 的逐字转换：檔案、取樣率、辨識、快取，
+而不是文件、采样率、识别、缓存。测试会钉住其中几个词，防止有人用简繁转换工具覆盖它。
 
 改过任一 `.ts` 都要重新编译，并把 `.ts` 与 `.qm` 一起提交：
 
 ```bash
-for locale in zh_cn en_us ja_jp ko_kr; do
+for locale in zh_cn zh_tw en_us ja_jp ko_kr; do
   uv run --locked pyside6-lrelease "src/resources/i18n/$locale.ts" \
     -qm "src/resources/i18n/$locale.qm"
 done
 ```
 
-增加、删除或重命名翻译键时必须同步修改四个 `.ts`。测试会检查键集合完全一致、`.qm` 与 `.ts`
+增加、删除或重命名翻译键时必须同步修改五个 `.ts`。测试会检查键集合完全一致、`.qm` 与 `.ts`
 未过期，并且源码中出现的每个字面量键都存在于所有语言。调用 `tr(key, **values)` 时不得依赖
 “未知键返回键名”的回退行为。
 
