@@ -22,6 +22,7 @@ from shared.audio import (
     resample_audio,
     subtract_into,
 )
+from shared.dsp import time_stretch
 from shared.jobs import OutputTracks, planned_outputs
 from shared.processing import CancellationToken, ProgressCallback
 from shared.progress import report_progress
@@ -139,6 +140,15 @@ def run_full_stage_job(
                     continue
                 aligned_audio = create_pcm_audio(reference.channels, length, stage.sample_rate)
                 source_values = reference.samples[:, source_start:source_end]
+                if abs(clip.speed - 1.0) > 1e-9:
+                    # The analysis found this source at a different tempo, so the
+                    # slice comes out short or long by exactly that factor; the
+                    # clip records the ratio, not a stretched file, because the
+                    # timeline stays in the source's own clock.
+                    logger.info("stretching %s by %.4f", clip.source.name, clip.speed)
+                    source_values = time_stretch(
+                        source_values, stage.sample_rate, clip.speed, token
+                    )
                 if job.auto_align:
                     aligned = align_audio(
                         stage.samples[:, stage_start:stage_end],
@@ -146,6 +156,7 @@ def run_full_stage_job(
                         stage.sample_rate,
                         token,
                         aligned_audio.samples,
+                        detect_speed=False,
                     )
                     raw_quality = _alignment_quality(
                         stage.samples[:, stage_start:stage_end],

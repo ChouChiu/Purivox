@@ -56,7 +56,8 @@ Pyodide 作业，两者都可以自由使用 `features` 和 `shared`，都不得
 
 同一条规则适用于代码：被多个功能重复实现的取值和算法统一放到 `shared`，而不是在功能之间互相导入。
 单曲与完整舞台任务共用 `shared.jobs.validate_reference_settings()` 校验强度与统计窗口；
-两者的起音特征共用 `shared.dsp.log_flux_bands()`；文件对话框过滤器与自动查找的扩展名共用
+两者的起音特征共用 `shared.dsp.log_flux_bands()`；整体倍速的估计与保音高拉伸共用
+`shared.dsp.rate`、`shared.dsp.stretch`；文件对话框过滤器与自动查找的扩展名共用
 `shared.audio.AUDIO_EXTENSIONS`。
 
 从链接获取音源同样按这条规则安置：图形界面和命令行都要下载，所以 yt-dlp 封装、下载缓存索引和

@@ -70,14 +70,16 @@ def reference_peak_bytes(
 
     It holds the song, the reference resampled onto the song's timeline and one
     more full-length buffer at once - the alignment scratch first, then the
-    processed output - on top of the block working set.  The backing track is
-    formed in that same output buffer, so exporting both stems costs no extra
-    buffer, only the first stem's file staying on the filesystem.
+    processed output - on top of the block working set.  A tempo-corrected
+    reference is stretched into a second full-length buffer before the
+    alignment reads it.  The backing track is formed in that same output
+    buffer, so exporting both stems costs no extra buffer, only the first
+    stem's file staying on the filesystem.
     """
     song = buffer_bytes(sample_rate, song_seconds)
     reference = buffer_bytes(sample_rate, accompaniment_seconds)
     written = written_bytes(sample_rate, song_seconds) if both_tracks else 0
-    peak = file_bytes + song + reference + max(song, reference) + written
+    peak = file_bytes + song + 2 * reference + max(song, reference) + written
     return MemoryEstimate(peak + DSP_WORKING_SET_BYTES)
 
 
@@ -91,12 +93,13 @@ def full_stage_peak_bytes(
     """Estimate the peak for `run_full_stage_job`.
 
     The render keeps the stage recording and a full-length copy of the output
-    for its whole duration, and adds one decoded source plus two clip-length
-    buffers while it works through a clip.  A clip is never longer than the
-    source it came from, so the longest source bounds all three.
+    for its whole duration, and adds one decoded source plus three clip-length
+    buffers while it works through a clip - the stretched slice, the aligned
+    reference and the processed block.  A clip is never longer than the source
+    it came from, so the longest source bounds all of them.
     """
     stage = buffer_bytes(sample_rate, stage_seconds)
     source = buffer_bytes(sample_rate, longest_source_seconds)
     written = written_bytes(sample_rate, stage_seconds) if both_tracks else 0
-    peak = file_bytes + 2 * stage + 3 * source + written
+    peak = file_bytes + 2 * stage + 4 * source + written
     return MemoryEstimate(peak + DSP_WORKING_SET_BYTES)

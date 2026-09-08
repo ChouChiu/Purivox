@@ -412,6 +412,10 @@
         <translation>音源范围</translation>
     </message>
     <message>
+        <source>stage_clip_speed</source>
+        <translation>倍速</translation>
+    </message>
+    <message>
         <source>stage_confidence</source>
         <translation>匹配度</translation>
     </message>

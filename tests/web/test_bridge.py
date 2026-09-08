@@ -30,6 +30,7 @@ def _clip(**overrides) -> dict:
         "confidence": 0.0,
         "enabled": False,
         "manual": False,
+        "speed": 1.0,
     }
     return clip | overrides
 
@@ -141,6 +142,32 @@ def test_timeline_edits_round_trip_through_json():
         bridge.remove_timeline_clip(json.dumps({"analysis": added["analysis"], "index": index}))
     )
     assert all(entry["kind"] != "song" for entry in removed["analysis"]["clips"])
+
+
+def test_a_tempo_survives_json_and_an_older_timeline_still_loads():
+    analysis = {"duration_seconds": 10.0, "clips": [], "missing_sources": []}
+    clip = _clip(
+        kind="song",
+        stage_start=0.0,
+        stage_end=4.0,
+        source="/work/song.wav",
+        source_index=0,
+        source_end=4.0,
+        enabled=True,
+        speed=1.04,
+    )
+
+    added = json.loads(bridge.add_timeline_clip(json.dumps({"analysis": analysis, "clip": clip})))
+
+    assert added["analysis"]["clips"][0]["speed"] == pytest.approx(1.04)
+    assert bridge.analysis_from_dict(added["analysis"]).clips[0].speed == pytest.approx(1.04)
+    # A timeline saved before tempo correction existed carries no speed at all.
+    legacy = dict(added["analysis"]["clips"][0])
+    legacy.pop("speed")
+    reloaded = bridge.analysis_from_dict(
+        {"duration_seconds": 10.0, "clips": [legacy], "missing_sources": []}
+    )
+    assert reloaded.clips[0].speed == 1.0
 
 
 def test_editing_a_stage_range_past_the_recording_is_rejected():

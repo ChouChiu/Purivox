@@ -11,36 +11,38 @@ from features.full_stage.timeline_model import (
     KIND,
     SOURCE,
     SOURCE_RANGE,
+    SPEED,
     STAGE_RANGE,
     TimelineModel,
 )
 from shared.i18n import install_language, tr
 
 
-def _analysis(source: Path) -> FullStageAnalysis:
+def _analysis(source: Path, speed: float = 1.0) -> FullStageAnalysis:
     return FullStageAnalysis(
         30.0,
         (
             TimelineClip(ClipKind.UNMATCHED, 0.0, 5.0),
-            TimelineClip(ClipKind.SONG, 5.0, 25.0, source, 0, 0.0, 20.0, 0.9),
+            TimelineClip(ClipKind.SONG, 5.0, 25.0, source, 0, 0.0, 20.0, 0.9, speed=speed),
         ),
     )
 
 
-def _model(tmp_path: Path) -> TimelineModel:
+def _model(tmp_path: Path, speed: float = 1.0) -> TimelineModel:
     model = TimelineModel()
-    model.set_analysis(_analysis((tmp_path / "song.wav").resolve()))
+    model.set_analysis(_analysis((tmp_path / "song.wav").resolve(), speed))
     return model
 
 
 def test_model_shape_matches_the_analysis(tmp_path: Path):
     model = _model(tmp_path)
     assert model.rowCount() == 2
-    assert model.columnCount() == 6
+    assert model.columnCount() == 7
     assert model.data(model.index(1, KIND), Qt.ItemDataRole.DisplayRole) == tr("stage_type_song")
     assert model.data(model.index(1, STAGE_RANGE), Qt.ItemDataRole.DisplayRole) == (
         "00:05.000 - 00:25.000"
     )
+    assert model.data(model.index(1, SPEED), Qt.ItemDataRole.DisplayRole) == "—"
     assert model.data(model.index(1, CONFIDENCE), Qt.ItemDataRole.DisplayRole) == "90%"
     assert model.data(model.index(1, SOURCE), Qt.ItemDataRole.DisplayRole) == "song.wav"
 
@@ -52,6 +54,16 @@ def test_unmatched_rows_are_neither_checkable_nor_source_editable(tmp_path: Path
     assert not model.flags(model.index(0, SOURCE_RANGE)) & Qt.ItemFlag.ItemIsEditable
     assert model.flags(model.index(0, STAGE_RANGE)) & Qt.ItemFlag.ItemIsEditable
     assert model.flags(model.index(1, SOURCE_RANGE)) & Qt.ItemFlag.ItemIsEditable
+
+
+def test_a_stretched_clip_reports_its_tempo_and_stays_read_only(tmp_path: Path):
+    model = _model(tmp_path, speed=1.04)
+    shown = model.data(model.index(1, SPEED), Qt.ItemDataRole.DisplayRole)
+    assert shown == "1.040×"  # noqa: RUF001 (a factor, not a letter x)
+    assert model.data(model.index(0, SPEED), Qt.ItemDataRole.DisplayRole) == "—"
+    assert not model.flags(model.index(1, SPEED)) & Qt.ItemFlag.ItemIsEditable
+    assert not model.setData(model.index(1, SPEED), "1.5", Qt.ItemDataRole.EditRole)
+    assert model.analysis.clips[1].speed == 1.04
 
 
 def test_editing_a_range_updates_the_analysis(qtbot, tmp_path: Path):

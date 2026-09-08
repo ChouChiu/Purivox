@@ -64,7 +64,8 @@ flowchart LR
     mix["Recording to process"] --> read["Read and convert to stereo"]
     ref["Song source"] --> read
     read --> rate["Match sample rates"]
-    rate --> enabled{"Automatic alignment?"}
+    rate --> tempo["Global tempo estimate<br/>pitch-preserving WSOLA stretch"]
+    tempo --> enabled{"Automatic alignment?"}
     enabled -->|yes| coarse["Spectral flux / GCC-PHAT<br/>coarse alignment"]
     coarse --> drift["Local drift tracking"]
     drift --> warp["Lanczos time warp"]
@@ -75,6 +76,40 @@ flowchart LR
 ```
 
 ## Time Alignment
+
+### Global Tempo
+
+A stage recording may have been re-uploaded with its tempo shifted as a whole: the pitch stays put and
+the speed moves by a few percent. Local drift tracking corrects at most 2 ms every 0.1 s, which is
+20 ms a second, so it never catches up with a 3% error and the coarse search below finds no peak at all.
+
+The implementation first runs a global scale search on 4 kHz mono proxies: the source's onset features
+are linearly interpolated along time at each trial ratio and normalized-correlated against the whole
+stage proxy with the same spectral-flux features the coarse alignment uses, taking the peak over every
+lag. Interpolating features rather than resampling audio and transforming it again costs a tenth as
+much - one source's search fell from 2.4 s to 0.23 s - and the two agree on the peak to within one
+grid step on real material. Trials scan 0.88 to 1.15 in 0.004 steps, then refine around the peak in
+0.0005 steps. An estimate is accepted only when its peak scores at least 0.25, beats the best ratio
+outside its own neighbourhood by 10%, beats the ratio-one score by 0.04, and moves the tempo by at
+least 0.2%. The last condition is the one that matters: material that is
+already aligned keeps its existing path, so one accidental peak from a long correlation cannot drag it
+off. When the source is longer than the stage, every trial is trimmed to the stage's length first,
+because the unchanged hypothesis is otherwise not measurable at all.
+
+An accepted ratio is applied as a pitch-preserving stretch built on waveform-similarity overlap-add
+(WSOLA): each output frame searches within 7.5 ms of its nominal position for the input segment that
+continues the previous waveform most smoothly, windows 64 ms of it with a Hann taper at 50% overlap, and
+uses one shared offset across channels so the stereo image survives. A resample cannot stand in: it would
+turn a 3% tempo shift into a 51-cent pitch shift, and the per-bin complex transfer would no longer line
+up. A plain phase vocoder cannot either: measured end to end on one real broadcast, cancellation depth
+was -0.05 dB with no stretch, -1.46 dB with a phase vocoder and -2.99 dB with WSOLA, level with ffmpeg's
+`atempo` at -3.15 dB. What a phase vocoder smears is exactly the transients that carry the coherent
+energy.
+
+The stretched reference then enters the coarse alignment and local drift tracking below, which now have
+only a small residual drift left to follow. `shared/dsp/rate.py` and `shared/dsp/stretch.py` use numpy
+and scipy alone, because the browser build runs the same pipeline under Pyodide, where an external
+binary is not an option.
 
 ### Coarse Alignment
 
@@ -300,7 +335,8 @@ range when necessary. The result is written as PCM WAV at the song's own sample 
 depth: cancellation neither changes the time base nor creates new spectrum, so raising the export
 to a fixed floor would only enlarge the file.
 
-Algorithm tests cover time offsets, local drift, inverted polarity, frequency-dependent room
+Algorithm tests cover time offsets, local drift, a tempo-shifted reference (including the refusal of an
+unchanged one), inverted polarity, frequency-dependent room
 transfer, unrelated sources, rejection of source-only replacement lyrics, matrix crosstalk,
 normal-equation orientation on a phase-correlated stereo reference, a live source that never stops
 (which guards the leakage regression's intercept), and block seams. Synthetic

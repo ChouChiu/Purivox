@@ -17,6 +17,8 @@ from features.full_stage.models import (
 )
 from shared.audio import AudioData, read_audio
 from shared.dsp import log_flux_bands
+from shared.dsp.rate import estimate_rate
+from shared.dsp.stretch import time_stretch
 from shared.processing import CancellationToken, ProgressCallback
 from shared.progress import report_progress
 
@@ -80,6 +82,32 @@ def _features(proxy: np.ndarray) -> np.ndarray:
     if bands is None:
         raise ValueError("audio is too short for full-stage matching")
     return bands
+
+
+def _match_speed(
+    stage_proxy: np.ndarray,
+    source_proxy: np.ndarray,
+    name: str,
+    token: CancellationToken,
+) -> float:
+    """Recover a source's tempo relative to the stage, or 1.0 when unsure.
+
+    Every anchor search below slides a query of one fixed width, so a source
+    that was uploaded at a different tempo simply does not line up anywhere.
+    The ratio is estimated once per source and the proxy is stretched by it,
+    which leaves the rest of the matcher exactly as it was.
+    """
+    estimate = estimate_rate(stage_proxy, source_proxy, _FEATURE_RATE, token)
+    if estimate is None or not estimate.reliable:
+        return 1.0
+    logger.info(
+        "source %s needs a %.4f stretch to match the stage tempo (score %.3f, improvement %.3f)",
+        name,
+        estimate.ratio,
+        estimate.score,
+        estimate.improvement,
+    )
+    return estimate.ratio
 
 
 @dataclass(frozen=True, slots=True)
@@ -309,6 +337,7 @@ def _is_credible(candidate: _Candidate) -> bool:
 def _choose_songs(
     candidates: list[list[_Candidate]],
     source_paths: tuple[Path, ...],
+    speeds: tuple[float, ...],
     duration: float,
 ) -> tuple[list[TimelineClip], list[Path]]:
     ranked = sorted(
@@ -334,7 +363,11 @@ def _choose_songs(
         end = min(duration, selected.timeline_start + selected.source_duration)
         if any(min(end, clip.stage_end) - max(start, clip.stage_start) > 2.0 for clip in clips):
             continue
-        source_start = max(0.0, -selected.timeline_start)
+        speed = speeds[source_index]
+        # Positions found on the stretched proxy are stage-clock seconds; the
+        # clip records where the source itself starts, and the render stretches
+        # the slice it reads from there.
+        source_start = max(0.0, -selected.timeline_start) / speed
         clips.append(
             TimelineClip(
                 ClipKind.SONG,
@@ -343,8 +376,9 @@ def _choose_songs(
                 source,
                 source_index,
                 source_start,
-                source_start + end - start,
+                source_start + (end - start) / speed,
                 selected.confidence,
+                speed=speed,
             )
         )
         selected_sources.add(source_index)
@@ -359,6 +393,7 @@ def _overlaps(left: TimelineClip, start: float, end: float) -> bool:
 def _find_fragments(
     all_candidates: list[list[_Candidate]],
     source_paths: tuple[Path, ...],
+    speeds: tuple[float, ...],
     songs: list[TimelineClip],
     duration: float,
 ) -> list[TimelineClip]:
@@ -390,6 +425,7 @@ def _find_fragments(
             continue
         if any(_overlaps(fragment, start, end) for fragment in fragments):
             continue
+        speed = speeds[source_index]
         fragments.append(
             TimelineClip(
                 ClipKind.FRAGMENT,
@@ -397,9 +433,10 @@ def _find_fragments(
                 end,
                 source,
                 source_index,
-                source_start,
-                source_start + end - start,
+                source_start / speed,
+                source_start / speed + (end - start) / speed,
                 candidate.confidence,
+                speed=speed,
             )
         )
     return fragments
@@ -487,6 +524,7 @@ def analyze_full_stage(
         source_paths = tuple(source.expanduser().resolve() for source in job.sources)
         candidate_groups: list[list[_Candidate]] = []
         fragment_candidate_groups: list[list[_Candidate]] = []
+        speeds: list[float] = []
         for index, source in enumerate(source_paths):
             token.raise_if_cancelled()
             value = 12 + round(70 * index / max(len(source_paths), 1))
@@ -502,23 +540,31 @@ def analyze_full_stage(
             try:
                 source_duration = source_audio.frames / source_audio.sample_rate
                 source_proxy = _proxy(source_audio, token)
-                source_features = _features(source_proxy)
             finally:
                 source_audio.cleanup()
+            speed = _match_speed(stage_proxy, source_proxy, source.name, token)
+            match_proxy = source_proxy
+            if speed != 1.0:
+                match_proxy = time_stretch(source_proxy[None, :], _FEATURE_RATE, speed, token)[0]
+            source_features = _features(match_proxy)
+            # The candidates below describe positions on the stretched proxy,
+            # which is the stage's own clock; `speeds` converts them back.
+            match_duration = source_duration * speed
+            speeds.append(speed)
             candidate_groups.append(
-                _source_candidates(stage_features, source_features, source_duration, token)
+                _source_candidates(stage_features, source_features, match_duration, token)
             )
             fragment_candidate_groups.append(
                 _verify_boundary_candidates(
                     stage_proxy,
-                    source_proxy,
+                    match_proxy,
                     _boundary_fragment_candidates(
-                        stage_features, source_features, source_duration, token
+                        stage_features, source_features, match_duration, token
                     ),
                 )
             )
 
-        songs, missing = _choose_songs(candidate_groups, source_paths, duration)
+        songs, missing = _choose_songs(candidate_groups, source_paths, tuple(speeds), duration)
         fragments = _find_fragments(
             [
                 full_candidates + boundary_candidates
@@ -527,6 +573,7 @@ def analyze_full_stage(
                 )
             ],
             source_paths,
+            tuple(speeds),
             songs,
             duration,
         )

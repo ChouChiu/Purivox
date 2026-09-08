@@ -9,12 +9,13 @@ from features.full_stage.matching import add_manual_clip, remove_manual_clip
 from features.full_stage.models import ClipKind, FullStageAnalysis, TimelineClip
 from shared.i18n import tr
 
-ENABLED, KIND, STAGE_RANGE, SOURCE_RANGE, CONFIDENCE, SOURCE = range(6)
+ENABLED, KIND, STAGE_RANGE, SOURCE_RANGE, SPEED, CONFIDENCE, SOURCE = range(7)
 _HEADER_KEYS = (
     "stage_clip_enabled",
     "stage_clip_type",
     "stage_clip_time",
     "stage_source_time",
+    "stage_clip_speed",
     "stage_confidence",
     "stage_clip_source",
 )
@@ -23,7 +24,7 @@ _KIND_KEYS = {
     ClipKind.FRAGMENT: "stage_type_fragment",
     ClipKind.UNMATCHED: "stage_type_unmatched",
 }
-_CENTERED = {KIND, STAGE_RANGE, SOURCE_RANGE, CONFIDENCE}
+_CENTERED = {KIND, STAGE_RANGE, SOURCE_RANGE, SPEED, CONFIDENCE}
 _RANGE_SEPARATOR = re.compile(r"\s+-\s+")
 # Qt always passes a parent index; the shared invalid one keeps the override
 # signature identical to the C++ virtual it replaces.
@@ -126,6 +127,10 @@ class TimelineModel(QAbstractTableModel):
             if clip.kind == ClipKind.UNMATCHED:
                 return "—"
             return f"{clock(clip.source_start)} - {clock(clip.source_end)}"
+        if column == SPEED:
+            if clip.kind == ClipKind.UNMATCHED or abs(clip.speed - 1.0) < 1e-9:
+                return "—"
+            return f"{clip.speed:.3f}×"  # noqa: RUF001 (a factor, not a letter x)
         if column == CONFIDENCE:
             if clip.manual:
                 return tr("stage_manual_label")

@@ -25,6 +25,7 @@ def clip_to_dict(clip: TimelineClip) -> dict[str, Any]:
         "confidence": clip.confidence,
         "enabled": clip.enabled,
         "manual": clip.manual,
+        "speed": clip.speed,
     }
 
 
@@ -41,6 +42,7 @@ def clip_from_dict(data: dict[str, Any]) -> TimelineClip:
         confidence=float(data.get("confidence", 0.0)),
         enabled=bool(data.get("enabled", True)),
         manual=bool(data.get("manual", False)),
+        speed=float(data.get("speed", 1.0)),
     )
 
 

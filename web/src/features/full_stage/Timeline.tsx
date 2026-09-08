@@ -23,7 +23,7 @@ import type {
 } from "../../shared/runtime/types";
 import { formatRange, parseRange } from "./clock";
 
-/** The same six columns the desktop table model exposes, in the same order. */
+/** The same seven columns the desktop table model exposes, in the same order. */
 const KIND_KEYS: Record<ClipKind, string> = {
 	song: "stage_type_song",
 	fragment: "stage_type_fragment",
@@ -118,6 +118,7 @@ export function Timeline({
 							<TableHeaderCell>{t("stage_clip_type")}</TableHeaderCell>
 							<TableHeaderCell>{t("stage_clip_time")}</TableHeaderCell>
 							<TableHeaderCell>{t("stage_source_time")}</TableHeaderCell>
+							<TableHeaderCell>{t("stage_clip_speed")}</TableHeaderCell>
 							<TableHeaderCell>{t("stage_confidence")}</TableHeaderCell>
 							<TableHeaderCell>{t("stage_clip_source")}</TableHeaderCell>
 						</TableRow>
@@ -160,6 +161,11 @@ export function Timeline({
 												onEdit(index, { source_start: start, source_end: end })
 											}
 										/>
+									</TableCell>
+									<TableCell>
+										{unmatched || Math.abs(clip.speed - 1) < 1e-9
+											? "—"
+											: `${clip.speed.toFixed(3)}×`}
 									</TableCell>
 									<TableCell>
 										{clip.manual

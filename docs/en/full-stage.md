@@ -18,7 +18,9 @@ recording.
 ```mermaid
 flowchart TB
     stage["Full Stage recording"] --> feature["Extract multi-band onset features"]
-    sources["Song sources"] --> feature
+    sources["Song sources"] --> speed["Per-source tempo estimate"]
+    speed --> stretch["Pitch-preserving WSOLA stretch"]
+    stretch --> feature
     feature --> match["Normalized cross-correlation<br/>and candidate clustering"]
     match --> song["Full songs"]
     match --> fragment["Repeated short fragments"]
@@ -29,12 +31,34 @@ flowchart TB
     manual["Hand-entered segments"] --> timeline
     timeline --> review["Manual review and correction"]
     review --> render{"Entry enabled and matched?"}
-    render -->|yes| cancel["Local alignment<br/>and reference cancellation"]
+    render -->|yes| rescale["Stretch the source slice<br/>by the entry's tempo"]
+    rescale --> cancel["Local alignment<br/>and reference cancellation"]
     render -->|no| original["Preserve original recording"]
     cancel --> blend["Boundary fade up to 50 ms"]
     original --> output["Assemble Full Stage output"]
     blend --> output
 ```
+
+## Global Tempo
+
+A full recording may have been re-uploaded with its tempo shifted as a whole: the pitch stays put and
+the speed moves by a few percent. The anchor search slides a fixed-width window, so a source at a
+different tempo lines up nowhere - measured on real material, two songs were matched to each other's
+positions. Every source therefore gets one global scale search before matching: its onset features
+are linearly interpolated along time at each trial ratio and normalized-correlated against the whole
+stage proxy with the same spectral-flux features, taking the peak over every lag, scanning 0.88 to
+1.15 in 0.004 steps and refining around the peak in 0.0005 steps.
+
+An estimate is accepted only when its peak scores at least 0.25, beats the best ratio outside its own
+neighbourhood by 10%, beats the ratio-one score by 0.04, and moves the tempo by at least 0.2%. The
+last condition keeps material that is already aligned on its existing path. The estimator and the
+stretch both live in `shared/dsp/rate.py` and `shared/dsp/stretch.py`, shared by Full Stage and
+single-song MR.
+
+An accepted ratio stretches the source proxy with WSOLA before the existing anchor search runs, so
+the matcher itself is unchanged. The ratio travels with the timeline entry, and rendering stretches
+the source slice by it - the source range in the timeline always stays on the source file's own
+clock.
 
 ## Feature Extraction
 
@@ -95,9 +119,15 @@ Timeline entries have these kinds:
 | Unmatched | A gap without reliable source coverage | Preserve original audio |
 | Manual | A segment the user entered; the confidence column reads "Manual" | Treated as a full song |
 
-Each matched entry records the stage start/end times, source file, source start/end times,
+Each matched entry records the stage start/end times, source file, source start/end times, tempo,
 confidence, and enabled state. The model rejects negative times, zero-length ranges, matched
 entries without a source, and out-of-range confidence.
+
+The tempo column shows the factor the entry's source is stretched by (stage duration divided by
+source duration), and reads "-" when no correction was applied. It is read-only: the analysis
+measured it, and editing it would have to recompute the source range too, so a wrong estimate is
+skipped by unchecking the entry instead. Manual entries are fixed at 1; process a spliced backing
+track through single-song mode to correct its speed first.
 
 After detected occupied ranges are merged, any gap of at least 0.25 seconds produces an unmatched
 entry. Sources that were not detected are listed separately for manual review.
@@ -142,12 +172,13 @@ optional short fragment:
 
 1. Read the source and resample it to the Full Stage sample rate.
 2. Slice the stage and source ranges specified by the timeline.
-3. Optionally perform local drift alignment.
-4. Measure how well both the original timeline position and drift-aligned result explain the stage
+3. Stretch the source slice by the entry's tempo when it is not 1, preserving pitch.
+4. Optionally perform local drift alignment.
+5. Measure how well both the original timeline position and drift-aligned result explain the stage
    audio; use drift alignment only when the new result is no worse.
-5. Process the segment with reference cancellation. Reconstruction uses only the original
+6. Process the segment with reference cancellation. Reconstruction uses only the original
    stage mix and never mixes the source waveform into the result.
-6. Blend the result into the full-recording copy with fades of up to 50 ms at both boundaries.
+7. Blend the result into the full-recording copy with fades of up to 50 ms at both boundaries.
 
 After all segments are complete, the Full Stage result is written atomically as PCM WAV at the
 stage recording's own sample rate and bit depth. Unmatched ranges are already a bit-exact copy of
@@ -170,6 +201,8 @@ being damaged by an unreliable local-delay trajectory.
 
 - Rendering is rejected when there are no usable matches, rather than producing an input-identical
   file that appears successful.
+- An unreliable tempo estimate, too small an improvement, or a change below 0.2% is treated as 1:1,
+  exactly as before the feature existed.
 - The output cannot overwrite the full recording or any source, and the full recording cannot also
   be used as a song source.
 - Temporary audio for each segment is cleaned immediately after processing; mapped storage keeps

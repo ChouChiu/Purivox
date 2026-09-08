@@ -272,6 +272,7 @@ export function FullStagePage({ client, ready, active, onBind }: Props) {
 			confidence: 0,
 			enabled: true,
 			manual: true,
+			speed: 1,
 		};
 		void mutate("add_timeline_clip", { analysis, clip });
 	}, [analysis, mutate, sources, t]);

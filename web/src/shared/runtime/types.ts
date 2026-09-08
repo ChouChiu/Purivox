@@ -41,6 +41,7 @@ export interface TimelineClip {
 	confidence: number;
 	enabled: boolean;
 	manual: boolean;
+	speed: number;
 }
 
 export interface Analysis {

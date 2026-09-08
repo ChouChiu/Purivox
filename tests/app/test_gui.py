@@ -134,7 +134,8 @@ def test_full_stage_page_orders_sources_and_renders_analysis(qtbot, tmp_path: Pa
     assert page.timeline.model() is model
     assert _check_state(model, 1) == Qt.CheckState.Checked
     assert _text(model, 1, 1) == "完整歌曲"
-    assert _text(model, 1, 4) == "90%"
+    assert _text(model, 1, 4) == "—", "an unchanged tempo reads as no correction"
+    assert _text(model, 1, 5) == "90%"
     assert page.start_button.isEnabled()
 
     assert model.setData(model.index(1, 0), Qt.CheckState.Unchecked, Qt.ItemDataRole.CheckStateRole)
@@ -174,7 +175,7 @@ def test_full_stage_page_adds_and_removes_a_manual_clip(qtbot, tmp_path: Path):
     assert len(manual_rows) == 1
     row = manual_rows[0]
     model = page.timeline_model
-    assert _text(model, row, 4) == "手动"
+    assert _text(model, row, 5) == "手动"
     assert _text(model, row, 1) == "完整歌曲"
     # The new row lands in the gap and its ranges stay editable for correction.
     assert page.analysis.clips[row].stage_start == 20.0

@@ -125,3 +125,31 @@ def test_manual_clip_rejects_a_range_past_the_stage(tmp_path: Path):
             analysis,
             TimelineClip(ClipKind.SONG, 5.0, 20.0, source, 0, 0.0, 15.0, manual=True),
         )
+
+
+def test_a_source_played_at_a_different_tempo_is_matched_and_stretched(tmp_path: Path):
+    """The stage plays the song 4% slower; the clip has to say so."""
+    from shared.dsp import time_stretch
+
+    sample_rate = 8_000
+    source = _source(sample_rate, 12, 5)
+    stage_song = time_stretch(source.T.astype(np.float32), sample_rate, 1.04).T
+    stage = np.random.default_rng(9).normal(0, 0.01, (20 * sample_rate, 2)).astype(np.float32)
+    stage[3 * sample_rate : 3 * sample_rate + stage_song.shape[0]] = stage_song
+    stage_path = tmp_path / "stage.wav"
+    source_path = tmp_path / "source.wav"
+    sf.write(stage_path, stage, sample_rate)
+    sf.write(source_path, source, sample_rate)
+
+    analysis = analyze_full_stage(
+        FullStageJob(stage_path, (source_path,), tmp_path / "output.wav"),
+        CancellationToken(),
+    )
+
+    assert not analysis.missing_sources
+    (clip,) = analysis.song_clips
+    assert clip.stage_start == pytest.approx(3.0, abs=0.2)
+    assert clip.speed == pytest.approx(1.04, abs=0.004)
+    assert clip.source_start == pytest.approx(0.0, abs=0.05)
+    assert clip.source_end == pytest.approx(12.0, abs=0.2)
+    assert clip.duration == pytest.approx(12.0 * clip.speed, abs=0.2)

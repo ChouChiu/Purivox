@@ -26,6 +26,8 @@ class TimelineClip:
     confidence: float = 0.0
     enabled: bool = True
     manual: bool = False
+    speed: float = 1.0
+    """Stage seconds per source second: the factor this clip's source is stretched by."""
 
     def __post_init__(self) -> None:
         if self.stage_start < 0 or self.stage_end <= self.stage_start:
@@ -34,6 +36,7 @@ class TimelineClip:
             if self.source is not None or self.source_index is not None:
                 raise ValueError("unmatched clips must not reference a source")
             object.__setattr__(self, "enabled", False)
+            object.__setattr__(self, "speed", 1.0)
         elif self.source is None or self.source_index is None:
             raise ValueError("matched clips require a source")
         elif self.source_start < 0 or self.source_end <= self.source_start:
@@ -42,6 +45,8 @@ class TimelineClip:
             raise ValueError("confidence must be in [0, 1]")
         if self.manual and self.kind == ClipKind.UNMATCHED:
             raise ValueError("unmatched clips cannot be manual")
+        if not 0.25 <= self.speed <= 4.0:
+            raise ValueError("speed must be within [0.25, 4]")
 
     @property
     def duration(self) -> float:

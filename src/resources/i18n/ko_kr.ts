@@ -412,6 +412,10 @@
         <translation>음원 범위</translation>
     </message>
     <message>
+        <source>stage_clip_speed</source>
+        <translation>배속</translation>
+    </message>
+    <message>
         <source>stage_confidence</source>
         <translation>매칭 신뢰도</translation>
     </message>

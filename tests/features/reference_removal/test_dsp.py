@@ -562,3 +562,36 @@ def test_residual_mask_keeps_a_live_source_that_never_stops():
     )
     assert gain > 0.78
     assert depth > 21.0
+
+
+def _attack_music(sample_rate: int, seconds: float, seed: int) -> np.ndarray:
+    """Envelope-modulated tones: enough attacks for a tempo search to bite."""
+    random = np.random.default_rng(seed)
+    frames = round(seconds * sample_rate)
+    time = np.arange(frames) / sample_rate
+    signal = np.zeros(frames)
+    for frequency in (97.0, 211.0, 389.0, 733.0):
+        envelope = np.repeat(random.uniform(0.1, 1.0, round(seconds * 8)), sample_rate // 8)
+        signal += envelope[:frames] * np.sin(
+            2 * np.pi * frequency * time + random.uniform(0, 2 * np.pi)
+        )
+    return signal / 4
+
+
+def test_alignment_recovers_a_tempo_shifted_reference():
+    """A stage played 4% slower is invisible to drift tracking alone."""
+    from shared.dsp import time_stretch
+
+    sample_rate = 8_000
+    reference = _attack_music(sample_rate, 12.0, 7).astype(np.float32)
+    stage_instrumental = time_stretch(reference[None, :], sample_rate, 1.04)[0]
+    time = np.arange(stage_instrumental.size) / sample_rate
+    live = (0.2 * np.sin(2 * np.pi * 441 * time)).astype(np.float32)
+    mixture = stage_instrumental + live
+
+    detected = align_audio(mixture[None, :], reference[None, :], sample_rate, detect_speed=True)
+    undetected = align_audio(mixture[None, :], reference[None, :], sample_rate, detect_speed=False)
+
+    window = slice(sample_rate, sample_rate * 6)
+    assert corr(detected[0, window], stage_instrumental[window]) > 0.8
+    assert corr(undetected[0, window], stage_instrumental[window]) < 0.5

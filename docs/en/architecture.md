@@ -65,7 +65,8 @@ The same rule applies to code: values and algorithms that more than one feature 
 reimplement move down into `shared` rather than being imported across features. Single-track and
 full-stage jobs validate strength and the statistics window through
 `shared.jobs.validate_reference_settings()`; both derive onset features from
-`shared.dsp.log_flux_bands()`; the file-dialog filters and the automatic accompaniment finder share
+`shared.dsp.log_flux_bands()` and both correct a shifted tempo through `shared.dsp.rate` and
+`shared.dsp.stretch`; the file-dialog filters and the automatic accompaniment finder share
 `shared.audio.AUDIO_EXTENSIONS`.
 
 Fetching a source from a link is placed by that same rule: the GUI and the CLI both download, so

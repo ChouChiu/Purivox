@@ -11,6 +11,8 @@ from scipy.signal import correlate, correlation_lags, resample_poly
 
 from shared.audio import BLOCK_FRAMES
 from shared.dsp import log_flux_bands
+from shared.dsp.rate import estimate_rate
+from shared.dsp.stretch import time_stretch
 from shared.processing import CancellationToken
 
 logger = logging.getLogger(__name__)
@@ -23,6 +25,10 @@ logger = logging.getLogger(__name__)
 # correlation did not offset that: the same sweep improved monotonically even
 # with a loud broadband live source present only in the stage mix.
 _PROXY_RATE = 16000
+# The rate search works on a coarser proxy than the lag track: its grid is the
+# feature hop, not the sample, and 4 kHz measured both cheaper and no less
+# accurate than 16 kHz across the ratios it has to cover.
+_RATE_PROXY_RATE = 4000
 _LANCZOS_RADIUS = 3
 # 8192 fractional phases keep the table's quantisation error near -80 dBFS,
 # far below the residual that reference cancellation can reach in practice.
@@ -285,12 +291,46 @@ def _warp(
     return result
 
 
+def _rate_corrected(
+    mix: np.ndarray,
+    accompaniment: np.ndarray,
+    sample_rate: int,
+    token: CancellationToken,
+) -> np.ndarray:
+    """Stretch the reference onto the song's tempo when it was uploaded shifted.
+
+    A stage recording whose playback speed was changed carries the same music at
+    a different tempo and an unchanged pitch, which the local drift tracker
+    cannot follow: its step limit is 2% of elapsed time, so a 3% shift leaves it
+    behind for the whole take.  Recovering the ratio once and stretching the
+    reference removes the part that is a constant before the tracker sees it.
+    """
+    common = min(mix.shape[1], accompaniment.shape[1])
+    rate_proxy = min(_RATE_PROXY_RATE, sample_rate)
+    estimate = estimate_rate(
+        _proxy(mix, common, sample_rate, rate_proxy),
+        _proxy(accompaniment, common, sample_rate, rate_proxy),
+        rate_proxy,
+        token,
+    )
+    if estimate is None or not estimate.reliable:
+        return accompaniment
+    logger.info(
+        "stretching the reference by %.4f to match the song's tempo (score %.3f, improvement %.3f)",
+        estimate.ratio,
+        estimate.score,
+        estimate.improvement,
+    )
+    return time_stretch(accompaniment, sample_rate, estimate.ratio, token)
+
+
 def align_audio(
     song: np.ndarray,
     reference: np.ndarray,
     sample_rate: int,
     token: CancellationToken | None = None,
     output: np.ndarray | None = None,
+    detect_speed: bool = True,
 ) -> np.ndarray:
     cancel = token or CancellationToken()
     mix = np.asarray(song, dtype=np.float32)
@@ -301,6 +341,11 @@ def align_audio(
     common = min(mix.shape[1], accompaniment.shape[1])
     if common < 64:
         return accompaniment
+    if detect_speed:
+        accompaniment = _rate_corrected(mix, accompaniment, sample_rate, cancel)
+        common = min(mix.shape[1], accompaniment.shape[1])
+        if common < 64:
+            return accompaniment
     proxy_rate = min(_PROXY_RATE, sample_rate)
     mix_proxy = _proxy(mix, common, sample_rate, proxy_rate)
     ref_proxy = _proxy(accompaniment, common, sample_rate, proxy_rate)

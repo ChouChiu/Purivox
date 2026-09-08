@@ -412,6 +412,10 @@
         <translation>Source range</translation>
     </message>
     <message>
+        <source>stage_clip_speed</source>
+        <translation>Speed</translation>
+    </message>
+    <message>
         <source>stage_confidence</source>
         <translation>Match quality</translation>
     </message>
