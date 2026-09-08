@@ -595,3 +595,159 @@ def test_alignment_recovers_a_tempo_shifted_reference():
     window = slice(sample_rate, sample_rate * 6)
     assert corr(detected[0, window], stage_instrumental[window]) > 0.8
     assert corr(undetected[0, window], stage_instrumental[window]) < 0.5
+
+
+def test_lanczos_interior_path_matches_the_boundary_formulation():
+    """The interior fast path is an optimisation, not a second interpolation.
+
+    A block inside the recording skips the mask/clip/gather reduction the first
+    and last block still take.  The two have to agree, or every block seam would
+    carry a step: the boundary blocks are pinned to the masked formulation
+    exactly, and the interior to it within the precision it accumulates in.
+    """
+    from features.reference_removal.dsp.alignment import (
+        _LANCZOS_PHASES,
+        _LANCZOS_RADIUS,
+        _lanczos,
+        _lanczos_table,
+    )
+
+    def masked(values: np.ndarray, source: np.ndarray, radius: int = _LANCZOS_RADIUS):
+        table, _sums = _lanczos_table(radius, _LANCZOS_PHASES)
+        base = np.floor(source)
+        phase = np.minimum(
+            ((source - base) * _LANCZOS_PHASES).astype(np.int64),
+            _LANCZOS_PHASES - 1,
+        )
+        weights = table[phase]
+        indices = base.astype(np.int64)[:, None] + np.arange(-radius + 1, radius + 1)
+        weights = weights * ((indices >= 0) & (indices < values.size))
+        safe = np.clip(indices, 0, max(values.size - 1, 0))
+        denominator = np.sum(weights, axis=1)
+        return np.divide(
+            np.sum(values[safe] * weights, axis=1),
+            denominator,
+            out=np.zeros(source.size, dtype=np.float64),
+            where=np.abs(denominator) > 1e-12,
+        )
+
+    random = np.random.default_rng(7)
+    values = random.normal(size=65_536).astype(np.float32)
+    for start in (0, 20_000, 45_536):
+        source = np.arange(start, start + 20_000, dtype=np.float64)
+        source += random.uniform(-0.5, 0.5, source.size)
+        produced = _lanczos(values, source)
+        expected = masked(values, source)
+        if start == 20_000:  # every tap lands inside the recording
+            assert np.allclose(produced, expected, rtol=0.0, atol=1e-6)
+        else:
+            assert np.array_equal(produced, expected)
+
+
+def test_complex_smoothing_matches_the_real_and_imaginary_views():
+    """One pass over a trailing axis of two must equal two strided passes."""
+    from features.reference_removal.dsp import transfer
+
+    random = np.random.default_rng(9)
+    values = (random.normal(size=(64, 32)) + 1j * random.normal(size=(64, 32))).astype(np.complex64)
+
+    fused = transfer.spectral_smooth(values, 3.0)
+    expected = np.empty_like(values)
+    transfer.spectral_smooth(values.real, 3.0, 1.0, expected.real)
+    transfer.spectral_smooth(values.imag, 3.0, 1.0, expected.imag)
+
+    assert np.array_equal(fused, expected)
+
+
+def test_prediction_does_not_depend_on_measuring_coherence():
+    """The first robust-weighting pass skips the coherence it throws away."""
+    from features.reference_removal.dsp import transfer
+    from shared.dsp import stft
+
+    sample_rate = 8_000
+    time = np.arange(sample_rate * 3) / sample_rate
+    accompaniment = 0.3 * np.sin(2 * np.pi * 110 * time)
+    live = 0.25 * np.sin(2 * np.pi * 431 * time)
+    song_spectra = [
+        stft(channel, n_fft=512, hop=128)
+        for channel in (accompaniment + live, 0.95 * accompaniment + live)
+    ]
+    reference_spectra = [
+        stft(channel, n_fft=512, hop=128) for channel in (accompaniment, 0.95 * accompaniment)
+    ]
+
+    measured, explained = transfer.predict_reference_spectra(
+        song_spectra, reference_spectra, 40.0, CancellationToken()
+    )
+    skipped, none = transfer.predict_reference_spectra(
+        song_spectra, reference_spectra, 40.0, CancellationToken(), coherence=False
+    )
+
+    assert explained and none == []
+    for measured_channel, skipped_channel in zip(measured, skipped, strict=True):
+        assert np.array_equal(measured_channel, skipped_channel)
+
+
+def test_factorised_solver_solves_the_normal_equations():
+    """R is channel independent, so it is factorised once and substituted per channel."""
+    from features.reference_removal.dsp import transfer
+
+    random = np.random.default_rng(88)
+    order = 2
+    shape = (2, 3)
+    reference = [
+        (random.normal(size=shape) + 1j * random.normal(size=shape)).astype(np.complex64)
+        for _ in range(order)
+    ]
+    mixture = (random.normal(size=shape) + 1j * random.normal(size=shape)).astype(np.complex64)
+    covariance = [[None] * order for _ in range(order)]
+    for row in range(order):
+        for column in range(row + 1):
+            covariance[row][column] = reference[column] * np.conj(reference[row])
+    # One observation per cell makes the raw covariance rank one, which is
+    # what the relative loading in `predict_reference_spectra` exists for.
+    loading = 1e-2 * sum(np.abs(band) ** 2 for band in reference).real + 1e-6
+    for index in range(order):
+        covariance[index][index] = covariance[index][index] + loading
+    cross = [mixture * np.conj(band) for band in reference]
+
+    lower, inverse_pivot = transfer._factorize_hermitian(covariance)
+    solved = transfer._solve_hermitian(lower, inverse_pivot, cross)
+
+    for row in range(order):
+        residual = cross[row].copy()
+        for column in range(order):
+            entry = covariance[row][column] if column <= row else np.conj(covariance[column][row])
+            residual -= entry * solved[column]
+        assert float(np.max(np.abs(residual))) < 1e-4
+
+
+def test_consuming_the_cross_terms_solves_the_same_system():
+    """The first pass hands its cross terms over; the measuring pass keeps them."""
+    from features.reference_removal.dsp import transfer
+
+    random = np.random.default_rng(91)
+    order = 2
+    shape = (3, 4)
+    reference = [
+        (random.normal(size=shape) + 1j * random.normal(size=shape)).astype(np.complex64)
+        for _ in range(order)
+    ]
+    covariance = [[None] * order for _ in range(order)]
+    for row in range(order):
+        for column in range(row + 1):
+            covariance[row][column] = reference[column] * np.conj(reference[row])
+    loading = 1e-2 * sum(np.abs(band) ** 2 for band in reference).real + 1e-6
+    for index in range(order):
+        covariance[index][index] = covariance[index][index] + loading
+    lower, inverse_pivot = transfer._factorize_hermitian(covariance)
+    mixture = (random.normal(size=shape) + 1j * random.normal(size=shape)).astype(np.complex64)
+    cross = [mixture * np.conj(band) for band in reference]
+
+    copied = transfer._solve_hermitian(lower, inverse_pivot, [band.copy() for band in cross])
+    consumed = transfer._solve_hermitian(
+        lower, inverse_pivot, [band.copy() for band in cross], consume=True
+    )
+
+    for copied_row, consumed_row in zip(copied, consumed, strict=True):
+        assert np.array_equal(copied_row, consumed_row)

@@ -163,11 +163,14 @@ def _reference_cancel(
     power = np.empty(song_spectra[0].shape, dtype=song_spectra[0].real.dtype)
     spectrum = np.empty(song_spectra[0].shape, dtype=song_spectra[0].dtype)
 
-    predicted, _explained = predict_reference_spectra(
+    # The robust weights need the prediction, not how much the reference
+    # explains, so the first pass does not pay for a coherence it discards.
+    predicted, _ = predict_reference_spectra(
         song_spectra,
         reference_spectra,
         sigma_frames,
         token,
+        coherence=False,
     )
     residual_power = np.zeros(song_spectra[0].shape, dtype=np.float32)
     for mixture_channel, predicted_channel in zip(song_spectra, predicted, strict=True):
@@ -241,10 +244,13 @@ def _reference_cancel(
     residual_spectra: list[np.ndarray] = []
     for mixture_channel, predicted_channel in zip(song_spectra, predicted, strict=True):
         removed = np.multiply(step, predicted_channel, out=spectrum)
-        residual_spectra.append(mixture_channel - removed)
         np.abs(removed, out=power)
         np.square(power, out=power)
         removable_power += power
+        # The prediction is spent once it has been scaled, so the residual takes
+        # its buffer instead of a third full-length complex spectrum.
+        np.subtract(mixture_channel, removed, out=predicted_channel)
+        residual_spectra.append(predicted_channel)
     del predicted, step, alignment
     token.raise_if_cancelled()
 

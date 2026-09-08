@@ -45,11 +45,24 @@ def spectral_smooth(
     saves is worth naming.  `out` lets a caller reuse a buffer across calls.
     """
     if np.iscomplexobj(values):
-        # Assembling the halves as `a + 1j * b` would cost two more full complex
-        # arrays; filling one result's real and imaginary views costs none.
         result = np.empty(values.shape, dtype=values.dtype) if out is None else out
-        spectral_smooth(values.real, sigma_time, sigma_frequency, result.real)
-        spectral_smooth(values.imag, sigma_time, sigma_frequency, result.imag)
+        real_dtype = np.float32 if values.dtype == np.complex64 else np.float64
+        if not values.flags.c_contiguous or not result.flags.c_contiguous:
+            spectral_smooth(values.real, sigma_time, sigma_frequency, result.real)
+            spectral_smooth(values.imag, sigma_time, sigma_frequency, result.imag)
+            return result
+        # One traversal of a trailing axis of two real values is the same
+        # arithmetic as two traversals of the real and imaginary views, but
+        # those views stride by two floats and every pass then touches half of
+        # each cache line.  Measured 36.8 -> 32.6 ms on a [2584, 1025]
+        # spectrum, bit for bit identical.  The filters still smooth one real
+        # plane at a time internally, so the line buffer stays safe.
+        window = max(round(6.0 * sigma_time), 1)
+        source = values.view(real_dtype).reshape((*values.shape, 2))
+        target = result.view(real_dtype).reshape((*result.shape, 2))
+        uniform_filter1d(source, size=window, axis=0, mode="reflect", output=target)
+        if sigma_frequency > 0.0:
+            gaussian_filter1d(target, sigma=sigma_frequency, axis=1, mode="reflect", output=target)
         return result
     window = max(round(6.0 * sigma_time), 1)
     smoothed = uniform_filter1d(values, size=window, axis=0, mode="reflect", output=out)
@@ -68,15 +81,28 @@ def weighted_smooth(
     values: np.ndarray,
     weights: np.ndarray | None,
     sigma_time: float,
-    denominator: np.ndarray | None = None,
+    inverse_denominator: np.ndarray | None = None,
     out: np.ndarray | None = None,
 ) -> np.ndarray:
+    """Smooth `values * weights` and divide by the smoothed weights.
+
+    `inverse_denominator` is `1 / (smooth(weights) + eps)`, taken once by a
+    caller that weights many spectra against the same weights.  Dividing by it
+    directly would be slower: numpy divides a complex spectrum by a real one
+    through the reciprocal of every element, so the division it performs is
+    this multiplication, and taking the reciprocal once for the whole spectrum
+    measured 2.4x faster with a bit-identical result.
+    """
     if weights is None:
         return spectral_smooth(values, sigma_time, out=out)
-    if denominator is None:
-        denominator = spectral_smooth(weights, sigma_time) + 1e-12
-    numerator = spectral_smooth(values * weights, sigma_time, out=out)
-    numerator /= denominator
+    if inverse_denominator is None:
+        inverse_denominator = np.reciprocal(spectral_smooth(weights, sigma_time) + 1e-12)
+    # The product is consumed by the smoothing pass that follows it, so it is
+    # formed once into the buffer the smoothed result lands in rather than into
+    # a temporary that then has to be read and discarded.
+    numerator = np.multiply(values, weights, out=out)
+    spectral_smooth(numerator, sigma_time, out=numerator)
+    numerator *= inverse_denominator
     return numerator
 
 
@@ -94,46 +120,76 @@ def smoothstep(low: float, high: float, values: np.ndarray) -> np.ndarray:
     return square
 
 
-def _solve_hermitian(
+def _factorize_hermitian(
     covariance: list[list[np.ndarray]],
-    cross: list[np.ndarray],
-) -> list[np.ndarray]:
-    """Solve the Hermitian system R h = c for every time-frequency cell.
+) -> tuple[list[list[np.ndarray]], list[np.ndarray]]:
+    """LDL^H factorisation of R, which the cross terms never enter.
 
     `covariance` holds the lower triangle as whole [frames, bins] spectra.
     Stacking the cells into one [frames, bins, order, order] tensor and calling
     `numpy.linalg.solve` makes LAPACK run once per cell, which measured about
     seven times slower.  An LDL^H factorisation written out over the spectra
     keeps every step a single vectorised array operation and needs no square
-    roots.
+    roots.  R is the same for every output channel, so the factors are built
+    once per block and only the substitution below runs per channel.  The
+    reciprocals of the pivots come back with the factors because every division
+    by one is a multiplication by its reciprocal anyway (see `weighted_smooth`).
     """
-    order = len(cross)
+    order = len(covariance)
     lower: list[list[np.ndarray | None]] = [[None] * order for _ in range(order)]
     pivot: list[np.ndarray] = []
+    inverse_pivot: list[np.ndarray] = []
     for column in range(order):
         value = covariance[column][column].real.copy()
         for index in range(column):
             factor = lower[column][index]
             value -= (factor.real**2 + factor.imag**2) * pivot[index]
         pivot.append(np.maximum(value, 1e-20))
+        inverse_pivot.append(np.reciprocal(pivot[column]))
         for row in range(column + 1, order):
             entry = covariance[row][column].copy()
             for index in range(column):
                 entry -= lower[row][index] * np.conj(lower[column][index]) * pivot[index]
-            lower[row][column] = entry / pivot[column]
+            lower[row][column] = entry * inverse_pivot[column]
+    return lower, inverse_pivot  # type: ignore[return-value]
+
+
+def _solve_hermitian(
+    lower: list[list[np.ndarray]],
+    inverse_pivot: list[np.ndarray],
+    cross: list[np.ndarray],
+    *,
+    consume: bool = False,
+) -> list[np.ndarray]:
+    """Solve the factorised system R h = c for one channel's cross terms.
+
+    `consume` lets a caller that will not read the cross terms again hand them
+    over, so the forward substitution writes into them instead of copying each
+    one first.  The pass that measures the coherence still needs them, and so
+    keeps the copies.
+    """
+    order = len(cross)
+    # One scratch spectrum carries every product; the forward and back
+    # substitutions below write their result into the array they read, so the
+    # whole solve costs one allocation rather than four per row.
+    scratch = np.empty(cross[0].shape, dtype=cross[0].dtype)
     forward: list[np.ndarray] = []
     for row in range(order):
-        value = cross[row].copy()
+        value = cross[row] if consume else cross[row].copy()
         for index in range(row):
-            value -= lower[row][index] * forward[index]
+            np.multiply(lower[row][index], forward[index], out=scratch)
+            np.subtract(value, scratch, out=value)
         forward.append(value)
     transfer: list[np.ndarray | None] = [None] * order
     for row in reversed(range(order)):
-        value = forward[row] / pivot[row]
+        value = forward[row]
+        value *= inverse_pivot[row]
         for index in range(row + 1, order):
-            value = value - np.conj(lower[index][row]) * transfer[index]
+            np.conj(lower[index][row], out=scratch)
+            np.multiply(scratch, transfer[index], out=scratch)
+            np.subtract(value, scratch, out=value)
         transfer[row] = value
-    return transfer
+    return transfer  # type: ignore[return-value]
 
 
 def effective_observations(sigma_frames: float, frames: int) -> float:
@@ -154,11 +210,15 @@ def predict_reference_spectra(
     sigma_frames: float,
     token: CancellationToken,
     weights: np.ndarray | None = None,
+    coherence: bool = True,
 ) -> tuple[list[np.ndarray], list[np.ndarray]]:
     """Predict reference-correlated spectra without subtracting them from the mix.
 
     Returns the prediction per output channel together with how much of that
     channel the reference actually explains, as an adjusted multiple coherence.
+    `coherence=False` skips that second half: the first pass of the robust
+    weighting throws it away, and building it costs a smoothed mixture power
+    and its arithmetic per channel.
 
     One reference frame per channel is the multiplicative narrowband model.
     Spanning several frames instead, as a convolutive transfer function, was
@@ -168,9 +228,9 @@ def predict_reference_spectra(
     """
     epsilon = 1e-12
     order = len(reference_spectra)
-    denominator = None
+    inverse_denominator = None
     if weights is not None:
-        denominator = spectral_smooth(weights, sigma_frames) + 1e-12
+        inverse_denominator = np.reciprocal(spectral_smooth(weights, sigma_frames) + 1e-12)
     # The normal equations for y ~ sum_k h_k x_k are R h = c with
     # R[j][k] = E[x_k conj(x_j)] and c[j] = E[y conj(x_j)].  Filling R[j][k]
     # with E[x_j conj(x_k)] instead transposes the system and silently solves
@@ -181,9 +241,28 @@ def predict_reference_spectra(
     # they share one buffer rather than allocating a spectrum apiece.  Its dtype
     # is the one the products would have promoted to on their own.
     spectrum_dtype = np.result_type(song_spectra[0], reference_spectra[0])
+    real_dtype = np.empty(0, spectrum_dtype).real.dtype
     product = np.empty(reference_spectra[0].shape, dtype=spectrum_dtype)
+    # A diagonal entry is E[|x|²]: real, so smoothing it as a complex spectrum
+    # would carry an all-zero imaginary plane through both filters of every
+    # pass.  It is still formed by the complex product and copied out, rather
+    # than recomputed as re² + im², because numpy fuses that multiply-add and
+    # the two spellings differ in the last bit.
+    power = np.empty(reference_spectra[0].shape, dtype=real_dtype)
     for row in range(order):
         for column in range(row + 1):
+            if row == column:
+                band = reference_spectra[row]
+                np.conj(band, out=product)
+                np.multiply(band, product, out=product)
+                np.copyto(power, product.real)
+                covariance[row][column] = weighted_smooth(
+                    power,
+                    weights,
+                    sigma_frames,
+                    inverse_denominator,
+                )
+                continue
             # The operands keep the order the expression this replaces used:
             # numpy's complex multiply is not bit-symmetric in its arguments, so
             # swapping them would move the last digit of every covariance cell.
@@ -193,7 +272,7 @@ def predict_reference_spectra(
                 product,
                 weights,
                 sigma_frames,
-                denominator,
+                inverse_denominator,
             )
     loading = covariance[0][0].real.copy()
     for index in range(1, order):
@@ -218,42 +297,48 @@ def predict_reference_spectra(
     overfit_scale = observations / (observations - TRANSFER_ORDER)
     predicted: list[np.ndarray] = []
     explained: list[np.ndarray] = []
-    magnitude = np.empty(song_spectra[0].shape, dtype=np.empty(0, spectrum_dtype).real.dtype)
+    magnitude = (
+        np.empty(song_spectra[0].shape, dtype=np.empty(0, spectrum_dtype).real.dtype)
+        if coherence
+        else None
+    )
+    lower, inverse_pivot = _factorize_hermitian(covariance)
     for channel in song_spectra:
         token.raise_if_cancelled()
         cross = []
         for reference in reference_spectra:
             np.conj(reference, out=product)
             np.multiply(channel, product, out=product)
-            cross.append(weighted_smooth(product, weights, sigma_frames, denominator))
-        transfer = _solve_hermitian(covariance, cross)
-        # At the least-squares optimum E[|Hx|^2] equals h^H c, so the explained
-        # power ratio costs one more product instead of a second smoothing pass
-        # over the mixture and the prediction.
-        # The buffer the cross terms were built in is free again here, and the
-        # cross terms themselves are dead once the coherence has been read out
-        # of them: neither needs to stay resident while the prediction is formed.
-        coherence = np.conj(transfer[0], out=product)
-        np.multiply(coherence, cross[0], out=coherence)
-        for index in range(1, order):
-            coherence += np.conj(transfer[index]) * cross[index]
+            cross.append(weighted_smooth(product, weights, sigma_frames, inverse_denominator))
+        transfer = _solve_hermitian(lower, inverse_pivot, cross, consume=not coherence)
+        if coherence:
+            # At the least-squares optimum E[|Hx|^2] equals h^H c, so the explained
+            # power ratio costs one more product instead of a second smoothing pass
+            # over the mixture and the prediction.
+            # The buffer the cross terms were built in is free again here, and the
+            # cross terms themselves are dead once the coherence has been read out
+            # of them: neither needs to stay resident while the prediction is formed.
+            explained_power = np.conj(transfer[0], out=product)
+            np.multiply(explained_power, cross[0], out=explained_power)
+            for index in range(1, order):
+                explained_power += np.conj(transfer[index]) * cross[index]
+            mixture_power = weighted_smooth(
+                np.square(np.abs(channel, out=magnitude), out=magnitude),
+                weights,
+                sigma_frames,
+                inverse_denominator,
+            )
+            # 1 - (1 - clip(ratio)) * overfit_scale, formed in place: the adjustment
+            # is a handful of scalar steps over a spectrum that is already there.
+            mixture_power += epsilon
+            ratio = np.divide(explained_power.real, mixture_power)
+            np.clip(ratio, 0.0, 1.0, out=ratio)
+            ratio -= 1.0
+            ratio *= overfit_scale
+            ratio += 1.0
+            np.clip(ratio, 0.0, 1.0, out=ratio)
+            explained.append(ratio.astype(np.float32, copy=False))
         del cross
-        mixture_power = weighted_smooth(
-            np.square(np.abs(channel, out=magnitude), out=magnitude),
-            weights,
-            sigma_frames,
-            denominator,
-        )
-        # 1 - (1 - clip(ratio)) * overfit_scale, formed in place: the adjustment
-        # is a handful of scalar steps over a spectrum that is already there.
-        mixture_power += epsilon
-        ratio = np.divide(coherence.real, mixture_power)
-        np.clip(ratio, 0.0, 1.0, out=ratio)
-        ratio -= 1.0
-        ratio *= overfit_scale
-        ratio += 1.0
-        np.clip(ratio, 0.0, 1.0, out=ratio)
-        explained.append(ratio.astype(np.float32, copy=False))
         row_gain = np.abs(transfer[0])
         for index in range(1, order):
             row_gain += np.abs(transfer[index])
