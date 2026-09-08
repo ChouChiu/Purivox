@@ -259,6 +259,13 @@ A new source directory must be registered in three places or it silently ships n
 `deployment/main.py`), and `include-package` in `pysidedeploy.spec`. `tests/test_packaging.py`
 checks the roster against the tree.
 
+CI's compiler cache must name Nuitka's own cache root — `~/.cache/Nuitka`,
+`~/Library/Caches/Nuitka`, `%LOCALAPPDATA%\Nuitka\Nuitka\Cache`. Nuitka points `CCACHE_DIR`
+inside it, so the system-wide `~/.cache/ccache` a Linux job would reach for stays empty and
+every build is a cold one. The cache key follows `uv.lock` and `pysidedeploy.spec` only: adding
+the source hash writes a fresh ~400 MB entry on every push, and the 10 GB quota then evicts the
+entry the next run needed.
+
 ## Tooling
 
 Python ≥3.11, pinned to 3.14 for development by `.python-version`; uv with `uv.lock` committed, the

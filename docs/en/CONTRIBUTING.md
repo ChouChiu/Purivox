@@ -238,6 +238,14 @@ Windows, and both macOS architectures built in parallel. The quality checks run 
 the Windows and macOS jobs only produce binaries. Artifacts are kept for 14 days, and a new
 commit on the same branch cancels the older run.
 
+What a compile job costs is decided almost entirely by whether Nuitka's compiler cache hits: 5
+to 12 minutes when it does, upwards of 55 when it does not. The cached directory has to be
+Nuitka's own cache root (`~/.cache/Nuitka`, `~/Library/Caches/Nuitka`,
+`%LOCALAPPDATA%\Nuitka\Nuitka\Cache`) — Nuitka points `CCACHE_DIR` inside it, and the
+system-wide `~/.cache/ccache` stays empty. The cache key follows `uv.lock` and
+`pysidedeploy.spec` only: adding the source hash writes a fresh ~400 MB entry on every push, and
+the 10 GB quota then evicts the entry the next run needed.
+
 ## Commits
 
 - The **subject** is `type(scope): what changed` — imperative, lower case, no trailing period. The

@@ -203,6 +203,13 @@ Pull Request 和 `main` 上的提交由 `.github/workflows/build.yml` 触发，�
 Linux、Windows 与两个架构的 macOS 产物。质量检查只在 Ubuntu 上跑一遍，Windows 与 macOS 任务
 只产出二进制。工件保留 14 天，同一分支有新提交时旧任务会被取消。
 
+编译任务的耗时几乎全看 Nuitka 的编译缓存命中与否：命中 5 到 12 分钟，落空 55 分钟以上。
+缓存目录必须写 Nuitka 自己的缓存根（`~/.cache/Nuitka`、`~/Library/Caches/Nuitka`、
+`%LOCALAPPDATA%\Nuitka\Nuitka\Cache`）——它把 `CCACHE_DIR` 指到那里面，系统的
+`~/.cache/ccache` 一直是空的。缓存 key 只跟 `uv.lock` 和 `pysidedeploy.spec` 走：
+把源码 hash 也放进去，每次推送都会存一份约 400 MB 的新条目，10 GB 配额很快就把
+下一次要用的那条挤掉了。
+
 ## 提交
 
 - **主题**写成 `type(scope): 改了什么`，祈使句、小写、不加句号。在用的类型有 `feat`、`fix`、

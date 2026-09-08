@@ -290,15 +290,24 @@ jobs:
         id: compiler-cache
         uses: actions/cache@v6
         with:
-          path: ~/.cache/ccache
+          # Nuitka does not compile into the system-wide ~/.cache/ccache: its
+          # SconsCaching points CCACHE_DIR at getCacheDir("ccache"), under the
+          # Nuitka cache root.  Caching that root carries the module cache, the
+          # adapted headers and the onefile compression cache along with it,
+          # which is what the macOS and Windows jobs have been doing all along.
+          path: ~/.cache/Nuitka
           key: >-
-            nuitka-${{ runner.os }}-py3.14-${{ hashFiles('uv.lock', 'pysidedeploy.spec',
-            'src/**/*.py', 'deployment/**/*.py') }}
+            nuitka-v2-${{ runner.os }}-py3.14-${{ hashFiles('uv.lock', 'pysidedeploy.spec') }}
           restore-keys: |
-            nuitka-${{ runner.os }}-py3.14-
+            nuitka-v2-${{ runner.os }}-py3.14-
 
       - name: Configure compiler cache
         run: |
+          # The limit and the statistics have to name the directory Nuitka
+          # actually fills, or they describe an empty cache nobody writes to.
+          # On the first run of a new cache key there is nothing to name yet.
+          export CCACHE_DIR="$HOME/.cache/Nuitka/ccache"
+          mkdir -p "$CCACHE_DIR"
           ccache --max-size=2G 2>&1 | tee logs/cache-config.log
           ccache --zero-stats 2>&1 | tee -a logs/cache-config.log
 
@@ -326,7 +335,9 @@ jobs:
 
       - name: Show cache stats
         if: ${{ !cancelled() }}
-        run: ccache --show-stats 2>&1 | tee logs/cache-stats.log
+        run: >-
+          CCACHE_DIR="$HOME/.cache/Nuitka/ccache" ccache --show-stats
+          2>&1 | tee logs/cache-stats.log
 
       - name: Archive onefile
         run: |
@@ -456,10 +467,9 @@ jobs:
         with:
           path: ~/AppData/Local/Nuitka/Nuitka/Cache
           key: >-
-            nuitka-${{ runner.os }}-py3.14-${{ hashFiles('uv.lock', 'pysidedeploy.spec',
-            'src/**/*.py', 'deployment/**/*.py') }}
+            nuitka-v2-${{ runner.os }}-py3.14-${{ hashFiles('uv.lock', 'pysidedeploy.spec') }}
           restore-keys: |
-            nuitka-${{ runner.os }}-py3.14-
+            nuitka-v2-${{ runner.os }}-py3.14-
 
       - name: Sync dependencies
         run: uv sync --locked --no-dev --group deploy 2>&1 | tee logs/sync.log
@@ -490,6 +500,16 @@ jobs:
             tail -n 40 logs/onefile-build.log || true
             exit 1
           fi
+
+      - name: Show cache stats
+        if: ${{ !cancelled() }}
+        run: |
+          # MSVC is cached through Nuitka's inline clcache, which writes its
+          # statistics into the build directory pyside6-deploy then removes.
+          # What survives is the cache itself, so report its size: a clcache
+          # that stays this small from run to run is one that is not being hit.
+          du -sh ~/AppData/Local/Nuitka/Nuitka/Cache/* 2>/dev/null \
+            | tee logs/cache-stats.log || true
 
       - name: Generate checksums
         run: |
@@ -588,10 +608,10 @@ jobs:
           # keeps both the binary and the compilation cache in here.
           path: ~/Library/Caches/Nuitka
           key: >-
-            nuitka-${{ runner.os }}-${{ matrix.arch }}-py3.14-${{ hashFiles('uv.lock',
-            'pysidedeploy.spec', 'src/**/*.py', 'deployment/**/*.py') }}
+            nuitka-v2-${{ runner.os }}-${{ matrix.arch }}-py3.14-${{ hashFiles('uv.lock',
+            'pysidedeploy.spec') }}
           restore-keys: |
-            nuitka-${{ runner.os }}-${{ matrix.arch }}-py3.14-
+            nuitka-v2-${{ runner.os }}-${{ matrix.arch }}-py3.14-
 
       - name: Sync dependencies
         run: uv sync --locked --no-dev --group deploy 2>&1 | tee logs/sync.log
