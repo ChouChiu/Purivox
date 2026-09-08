@@ -211,6 +211,7 @@ def predict_reference_spectra(
     token: CancellationToken,
     weights: np.ndarray | None = None,
     coherence: bool = True,
+    diagonal: bool = False,
 ) -> tuple[list[np.ndarray], list[np.ndarray]]:
     """Predict reference-correlated spectra without subtracting them from the mix.
 
@@ -219,6 +220,10 @@ def predict_reference_spectra(
     `coherence=False` skips that second half: the first pass of the robust
     weighting throws it away, and building it costs a smoothed mixture power
     and its arithmetic per channel.
+
+    `diagonal=True` treats R as diagonal, fitting each reference channel on its
+    own.  That skips the cross-channel covariance and the factorisation, which
+    is enough when the caller only needs a rough prediction.
 
     One reference frame per channel is the multiplicative narrowband model.
     Spanning several frames instead, as a convolutive transfer function, was
@@ -251,6 +256,8 @@ def predict_reference_spectra(
     power = np.empty(reference_spectra[0].shape, dtype=real_dtype)
     for row in range(order):
         for column in range(row + 1):
+            if diagonal and row != column:
+                continue
             if row == column:
                 band = reference_spectra[row]
                 np.conj(band, out=product)
@@ -302,7 +309,9 @@ def predict_reference_spectra(
         if coherence
         else None
     )
-    lower, inverse_pivot = _factorize_hermitian(covariance)
+    lower = inverse_pivot = None
+    if not diagonal:
+        lower, inverse_pivot = _factorize_hermitian(covariance)
     for channel in song_spectra:
         token.raise_if_cancelled()
         cross = []
@@ -310,7 +319,14 @@ def predict_reference_spectra(
             np.conj(reference, out=product)
             np.multiply(channel, product, out=product)
             cross.append(weighted_smooth(product, weights, sigma_frames, inverse_denominator))
-        transfer = _solve_hermitian(lower, inverse_pivot, cross, consume=not coherence)
+        if diagonal:
+            # R is diagonal, so the system decouples into one division per
+            # reference channel and no substitution is needed.
+            transfer = [
+                band * np.reciprocal(covariance[index][index]) for index, band in enumerate(cross)
+            ]
+        else:
+            transfer = _solve_hermitian(lower, inverse_pivot, cross, consume=not coherence)
         if coherence:
             # At the least-squares optimum E[|Hx|^2] equals h^H c, so the explained
             # power ratio costs one more product instead of a second smoothing pass

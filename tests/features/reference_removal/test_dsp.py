@@ -751,3 +751,30 @@ def test_consuming_the_cross_terms_solves_the_same_system():
 
     for copied_row, consumed_row in zip(copied, consumed, strict=True):
         assert np.array_equal(copied_row, consumed_row)
+
+
+def test_diagonal_fit_matches_the_full_fit_for_one_reference_channel():
+    """With a single reference the two fits are the same 1x1 system."""
+    from features.reference_removal.dsp import transfer
+    from shared.dsp import stft
+
+    sample_rate = 8_000
+    time = np.arange(sample_rate * 2) / sample_rate
+    accompaniment = 0.3 * np.sin(2 * np.pi * 110 * time)
+    live = 0.25 * np.sin(2 * np.pi * 431 * time)
+    song_spectra = [stft(accompaniment + live, n_fft=512, hop=128)]
+    reference_spectra = [stft(accompaniment, n_fft=512, hop=128)]
+
+    full, _ = transfer.predict_reference_spectra(
+        song_spectra, reference_spectra, 40.0, CancellationToken(), coherence=False
+    )
+    diagonal, _ = transfer.predict_reference_spectra(
+        song_spectra,
+        reference_spectra,
+        40.0,
+        CancellationToken(),
+        coherence=False,
+        diagonal=True,
+    )
+
+    assert np.array_equal(full[0], diagonal[0])

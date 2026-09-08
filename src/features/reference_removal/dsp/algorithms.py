@@ -163,14 +163,18 @@ def _reference_cancel(
     power = np.empty(song_spectra[0].shape, dtype=song_spectra[0].real.dtype)
     spectrum = np.empty(song_spectra[0].shape, dtype=song_spectra[0].dtype)
 
-    # The robust weights need the prediction, not how much the reference
-    # explains, so the first pass does not pay for a coherence it discards.
+    # The robust weights need a prediction, not the best prediction: they only
+    # weigh how the residual power fluctuates against its own local mean, so a
+    # diagonal fit - each reference channel on its own - is enough here.  The
+    # pass that actually subtracts still fits the full two-channel system, and
+    # the coherence is not measured in either pass of the first one.
     predicted, _ = predict_reference_spectra(
         song_spectra,
         reference_spectra,
         sigma_frames,
         token,
         coherence=False,
+        diagonal=True,
     )
     residual_power = np.zeros(song_spectra[0].shape, dtype=np.float32)
     for mixture_channel, predicted_channel in zip(song_spectra, predicted, strict=True):
