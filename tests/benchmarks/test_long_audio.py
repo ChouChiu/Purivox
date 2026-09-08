@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import resource
+from time import perf_counter
 
 import numpy as np
 import pytest
@@ -31,6 +32,7 @@ def test_fifteen_minute_stereo_rss_length_and_seams():
         song.release_pages()
         reference.release_pages()
 
+        started = perf_counter()
         result = process_audio(
             song.samples,
             reference.samples,
@@ -40,6 +42,7 @@ def test_fifteen_minute_stereo_rss_length_and_seams():
             CancellationToken(),
             output.samples,
         )
+        elapsed = perf_counter() - started
         assert result is output.samples
         assert result.shape == (2, frames)
         assert np.isfinite(result[:, ::sample_rate]).all()
@@ -52,7 +55,13 @@ def test_fifteen_minute_stereo_rss_length_and_seams():
         jumps = np.abs(result[0, seams] - result[0, seams - 1])
         assert float(np.max(jumps, initial=0.0)) < 0.05
         peak_rss_kib = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
-        print(f"15-minute benchmark peak RSS: {peak_rss_kib / 1024:.1f} MiB")
+        # Printed, never asserted: wall clock depends on the machine and the
+        # number of cores `_processing_layout` picks, so a threshold here would
+        # be a flaky gate rather than a measurement.
+        print(
+            f"15-minute benchmark: {elapsed:.1f} s "
+            f"({15 * 60 / elapsed:.1f}x realtime), peak RSS {peak_rss_kib / 1024:.1f} MiB"
+        )
         assert peak_rss_kib <= 2 * 1024 * 1024
     finally:
         output.cleanup()
