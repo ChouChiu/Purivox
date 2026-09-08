@@ -84,9 +84,11 @@ the speed moves by a few percent. Local drift tracking corrects at most 2 ms eve
 20 ms a second, so it never catches up with a 3% error and the coarse search below finds no peak at all.
 
 The implementation first runs a global scale search on 4 kHz mono proxies: the source's onset features
-are linearly interpolated along time at each trial ratio and normalized-correlated against the whole
-stage proxy with the same spectral-flux features the coarse alignment uses, taking the peak over every
-lag. Interpolating features rather than resampling audio and transforming it again costs a tenth as
+are linearly interpolated along time at each trial ratio and normalized-correlated against up to the
+first two minutes of the stage proxy with the same spectral-flux features the coarse alignment uses,
+taking the peak over every lag. The ratio is one constant per source, and a longer take measured the
+same ratio: past two minutes the extra material only lengthens the resample and the correlation.
+Interpolating features rather than resampling audio and transforming it again costs a tenth as
 much - one source's search fell from 2.4 s to 0.23 s - and the two agree on the peak to within one
 grid step on real material. Trials scan 0.88 to 1.15 in 0.004 steps, then refine around the peak in
 0.0005 steps. An estimate is accepted only when its peak scores at least 0.25, beats the best ratio
@@ -236,6 +238,12 @@ value that bin would receive at its own median level.
 Nor can the scale used to judge outliers be one the outliers themselves can raise. A smoothed
 arithmetic mean is dragged up by the very live transients it is meant to suppress, whereas a
 geometric mean is not; it is the same O(N) smoother, read in the log domain.
+
+The prediction that scale is read from is fitted per reference channel rather than as the full
+two-channel system. The scale only has to know where the residual fluctuates, and the diagonal fit
+measured both 13% cheaper end to end and marginally deeper on the phase-correlated stereo scene
+(+0.04 dB of cancellation depth, +0.0002 of fidelity); the subtraction itself still fits the full
+system, and the scene that exists to punish a wrong cross-channel orientation is unchanged.
 
 ### Estimating the Leakage
 

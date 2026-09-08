@@ -74,7 +74,7 @@ need moves down into `shared` (`BLOCK_FRAMES`, `AUDIO_EXTENSIONS`, `validate_ref
 | `src/resources/` | `i18n/{zh_cn,zh_tw,en_us,ja_jp,ko_kr}.{ts,qm}`, `purivox.svg`, `resource_path` |
 | `web/scripts/` | `build-python-archive.mjs` (packs `src/` for Pyodide), `build-i18n.mjs`, `build-assets.mjs`, `check-architecture.mjs`. Never a second implementation of the DSP |
 | `tests/`, `docs/` | Tests mirror `src/` path-for-path, `benchmarks/` behind `--runslow`; Chinese docs with one translation per file in `docs/en/` |
-| `deployment/`, `tools/` | Nuitka entry shim + `.deb`/`.rpm` packaging; `eval_cancellation.py` (DSP A/B) |
+| `deployment/`, `tools/` | Nuitka entry shim + `.deb`/`.rpm` packaging; `eval_cancellation.py` (DSP A/B), `bench_pipeline.py` (per-phase wall time and peak RSS) |
 
 ## Pipelines
 
@@ -106,6 +106,10 @@ uv run --locked purivox --selftest                 # pipeline smoke, offscreen-s
 # DSP A/B across a change
 uv run --locked python tools/eval_cancellation.py --save baseline.json
 uv run --locked python tools/eval_cancellation.py --compare baseline.json
+
+# what one job costs, phase by phase, with peak RSS
+uv run --locked python tools/bench_pipeline.py --save bench-baseline.json
+uv run --locked python tools/bench_pipeline.py --compare bench-baseline.json
 
 # checks (Qt needs the offscreen platform)
 uv run --locked ruff check src tests
@@ -214,6 +218,11 @@ Most of what follows is here because it cost someone time.
   minimum; paths belong in `ElidedLabel` (one line, full text in `text()` and the tooltip); wrapping
   text needs `HeightForWidth` on every container up to the page, because Qt asks the widget, never
   the layout inside it, whether height follows from width.
+- The status card's clock belongs to the presenter, not the page: `start_clock()`/`stop_clock()`
+  bracket the job, so a page that never ran one shows nothing and a finished job keeps its total.
+  It shares the status line and is reserved the width of `00:00.000`, so it cannot re-elide the
+  text beside it as the tenths tick; `format_clock(seconds, millis=True)` is the one formatter,
+  and the preview readout keeps the whole-second form of it.
 - Files arrive through `QFileDialog` only, funnelled into one method per page (`set_song`,
   `set_stage`, `add_source_paths`) that also does the follow-up — a default output name, an
   invalidated analysis. The AI page watches the model directories with `QFileSystemWatcher`.
@@ -292,6 +301,7 @@ app bundles for arm64 and x86_64 (`dist/Purivox.app`, from a CI-derived spec).
 - No test reaches a real host — the update tests repoint `updates.RELEASES_API` at a localhost
   server.
 - DSP changes are accepted on measurement, not argument: run `purivox --selftest` and
-  `tools/eval_cancellation.py --compare` before committing. Synthetic metrics are regression
+  `tools/eval_cancellation.py --compare` before committing, and `tools/bench_pipeline.py
+  --compare` to show what the change bought. Synthetic metrics are regression
   evidence only and claim nothing about real music. `docs/reference-removal.md` documents the
   algorithm as it stands — no before/after, no trade-off tables.
