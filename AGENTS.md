@@ -266,8 +266,8 @@ Python ≥3.11, pinned to 3.14 for development by `.python-version`; uv with `uv
 pillow and colorthief only feed an AcrylicLabel this app never builds; Qt is mandatory even for the
 CLI, which falls back to `QAudioDecoder` for decoding. numpy ≥2, scipy, soundfile, soxr, yt-dlp,
 all range-pinned; yt-dlp needs updating whenever a site changes under it. ruff only (`line-length = 100`, E/F/I/UP/B/SIM/RUF), `ruff format`, no black or
-isort. Nuitka 4.1.3 via `pyside6-deploy`, onefile (`dist/Purivox.bin` / `Purivox.exe`) and a macOS
-arm64 app bundle (`dist/Purivox.app`, from a CI-derived spec).
+isort. Nuitka 4.1.3 via `pyside6-deploy`, onefile (`dist/Purivox.bin` / `Purivox.exe`) and macOS
+app bundles for arm64 and x86_64 (`dist/Purivox.app`, from a CI-derived spec).
 
 ## Testing
 

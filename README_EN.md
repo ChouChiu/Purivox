@@ -55,8 +55,8 @@ stage recording is refused there because a browser tab has a memory ceiling. See
 The desktop application can be downloaded from the
 [latest release](https://github.com/ChouChiu/Purivox/releases/latest): `Purivox.exe` on Windows,
 a `.deb`, an `.rpm` or the self-contained `purivox-linux-x86_64.tar.gz` on Linux, and
-`purivox-macos-arm64.tar.gz` on Apple Silicon macOS. Every release ships a `SHA256SUMS` alongside
-them.
+`purivox-macos-arm64.tar.gz` (Apple Silicon) or `purivox-macos-x86_64.tar.gz` (Intel) on macOS.
+Every release ships a `SHA256SUMS` alongside them.
 
 The macOS archive unpacks to `Purivox.app`, which belongs in Applications. It is signed ad-hoc
 rather than with an Apple developer identity, so the first launch has to go through Finder's

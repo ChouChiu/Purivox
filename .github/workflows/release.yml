@@ -60,10 +60,13 @@ jobs:
           name: windows-onefile-${{ github.run_id }}
           path: release
 
-      - name: Download macOS bundle
+      - name: Download macOS bundles
+        # One artifact per architecture, flattened into the same directory the
+        # other jobs' assets land in.
         uses: actions/download-artifact@v7
         with:
-          name: macos-bundle-${{ github.run_id }}
+          pattern: macos-bundle-*-${{ github.run_id }}
+          merge-multiple: true
           path: release
 
       - name: Collect checksums
@@ -73,7 +76,7 @@ jobs:
           # page holds one flat list of assets, so one flat SHA256SUMS replaces
           # the per-job files rather than shipping paths that no longer resolve.
           cd release
-          rm -f SHA256SUMS-python SHA256SUMS-linux SHA256SUMS-windows SHA256SUMS-macos
+          rm -f SHA256SUMS-*
           sha256sum -- * > ../SHA256SUMS
           mv ../SHA256SUMS .
           cat SHA256SUMS

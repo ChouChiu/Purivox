@@ -229,9 +229,9 @@ server.
 
 Pull requests and commits on `main` trigger `.github/workflows/build.yml`, a thin shell that calls
 `.github/workflows/common.yml` for the full pipeline: the quality checks above, then Linux,
-Windows, and macOS artifacts built in parallel. The quality checks run once, on Ubuntu; the Windows
-and macOS jobs only produce binaries. Artifacts are kept for 14 days, and a new commit on the same
-branch cancels the older run.
+Windows, and both macOS architectures built in parallel. The quality checks run once, on Ubuntu;
+the Windows and macOS jobs only produce binaries. Artifacts are kept for 14 days, and a new
+commit on the same branch cancels the older run.
 
 ## Commits
 
@@ -264,10 +264,11 @@ Ordinary contributions do not run anything in this section.
 `uv build` writes the wheel and sdist to `dist/`. The version has one source, `src/app/version.py`,
 which Hatch reads at build time. The standalone builds go through `pyside6-deploy` wrapping
 Nuitka (`uv sync --locked --group deploy`): Linux and Windows get the onefile `dist/Purivox.bin` /
-`Purivox.exe`, macOS gets the `dist/Purivox.app` bundle and is built for arm64 only, because the
-job that builds it runs on the Apple Silicon `macos-15` runner. All three bundle Python and Qt. CI
-builds them; before a release, actually launch one and confirm the resources under the unpacked
-path can still be found.
+`Purivox.exe`, macOS gets the `dist/Purivox.app` bundle, built once for arm64 and once for
+x86_64. Both are native builds, on the `macos-15` and `macos-15-intel` runners: numpy, scipy, soxr
+and soundfile ship one wheel per architecture, so there is nothing to cross-compile from. They all
+bundle Python and Qt. CI builds them; before a release, actually launch one and confirm the
+resources under the unpacked path can still be found.
 
 Releases are tag-driven, with no manual step beyond the tag:
 

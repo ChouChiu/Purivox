@@ -540,10 +540,24 @@ jobs:
           MARKDOWN
 
   build-macos:
-    name: Build macOS arm64 bundle
+    name: Build macOS ${{ matrix.arch }} bundle
     needs: quality
-    runs-on: macos-15
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 90
+    strategy:
+      # The two architectures are separate downloads on the release page, so
+      # one runner failing must not cancel the other and cost the release the
+      # bundle that would have built.
+      fail-fast: false
+      matrix:
+        include:
+          - arch: arm64
+            runner: macos-15
+          - arch: x86_64
+            # Intel macOS is a native build, not a cross-compile: the Nuitka
+            # bundle pulls in numpy, scipy, soxr and soundfile, which ship one
+            # wheel per architecture rather than a universal2 one.
+            runner: macos-15-intel
 
     steps:
       - name: Checkout code
@@ -574,10 +588,10 @@ jobs:
           # keeps both the binary and the compilation cache in here.
           path: ~/Library/Caches/Nuitka
           key: >-
-            nuitka-${{ runner.os }}-py3.14-${{ hashFiles('uv.lock', 'pysidedeploy.spec',
-            'src/**/*.py', 'deployment/**/*.py') }}
+            nuitka-${{ runner.os }}-${{ matrix.arch }}-py3.14-${{ hashFiles('uv.lock',
+            'pysidedeploy.spec', 'src/**/*.py', 'deployment/**/*.py') }}
           restore-keys: |
-            nuitka-${{ runner.os }}-py3.14-
+            nuitka-${{ runner.os }}-${{ matrix.arch }}-py3.14-
 
       - name: Sync dependencies
         run: uv sync --locked --no-dev --group deploy 2>&1 | tee logs/sync.log
@@ -642,23 +656,24 @@ jobs:
           # bits and the framework symlinks a bare artifact upload flattens.
           # COPYFILE_DISABLE stops bsdtar writing an AppleDouble ._ entry
           # beside every file it packs.
-          COPYFILE_DISABLE=1 tar -C dist -czf dist/purivox-macos-arm64.tar.gz Purivox.app \
+          COPYFILE_DISABLE=1 \
+            tar -C dist -czf "dist/purivox-macos-${{ matrix.arch }}.tar.gz" Purivox.app \
             2>&1 | tee logs/archive.log
 
       - name: Generate checksums
         run: |
           # macOS ships shasum, not the coreutils sha256sum the other jobs use.
-          shasum -a 256 dist/purivox-macos-arm64.tar.gz \
-            | tee dist/SHA256SUMS-macos | tee logs/checksums.log
+          shasum -a 256 "dist/purivox-macos-${{ matrix.arch }}.tar.gz" \
+            | tee "dist/SHA256SUMS-macos-${{ matrix.arch }}" | tee logs/checksums.log
 
       - name: Upload bundle
         id: bundle-artifact
         uses: actions/upload-artifact@v7
         with:
-          name: macos-bundle-${{ github.run_id }}
+          name: macos-bundle-${{ matrix.arch }}-${{ github.run_id }}
           path: |
-            dist/purivox-macos-arm64.tar.gz
-            dist/SHA256SUMS-macos
+            dist/purivox-macos-${{ matrix.arch }}.tar.gz
+            dist/SHA256SUMS-macos-${{ matrix.arch }}
           if-no-files-found: error
           retention-days: 14
           compression-level: 0
@@ -668,7 +683,7 @@ jobs:
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v7
         with:
-          name: build-macos-logs-${{ github.run_id }}
+          name: build-macos-${{ matrix.arch }}-logs-${{ github.run_id }}
           path: logs/*.log
           if-no-files-found: ignore
           retention-days: 14
@@ -677,7 +692,7 @@ jobs:
         if: ${{ always() }}
         run: |
           cat >> "$GITHUB_STEP_SUMMARY" <<'MARKDOWN'
-          ## macOS build summary
+          ## macOS ${{ matrix.arch }} build summary
 
           | Item | Result |
           |---|---|

@@ -196,8 +196,8 @@ Pytest 用 `importlib` 导入模式，允许不同目录使用与源码对应的
 
 Pull Request 和 `main` 上的提交由 `.github/workflows/build.yml` 触发，它只是一层薄壳，
 调用 `.github/workflows/common.yml` 跑完整流水线：先过上面那套质量检查，再并行构建
-Linux、Windows 与 macOS 产物。质量检查只在 Ubuntu 上跑一遍，Windows 与 macOS 任务只产出二进制。
-工件保留 14 天，同一分支有新提交时旧任务会被取消。
+Linux、Windows 与两个架构的 macOS 产物。质量检查只在 Ubuntu 上跑一遍，Windows 与 macOS 任务
+只产出二进制。工件保留 14 天，同一分支有新提交时旧任务会被取消。
 
 ## 提交
 
@@ -226,8 +226,9 @@ refactor(dsp): run the pipelines where there is no Qt and no threads
 `uv build` 把 wheel 与 sdist 写到 `dist/`，版本号以 `src/app/version.py` 为唯一来源，
 由 Hatch 在构建时读取。独立程序由 `pyside6-deploy`
 封装 Nuitka 构建（`uv sync --locked --group deploy`），Linux 与 Windows 是 onefile 的
-`dist/Purivox.bin` / `Purivox.exe`，macOS 是应用包 `dist/Purivox.app`，只构建 arm64——
-构建它的 CI 任务跑在 Apple Silicon 的 `macos-15` runner 上。三者都内含 Python 与 Qt。产物由 CI
+`dist/Purivox.bin` / `Purivox.exe`，macOS 是应用包 `dist/Purivox.app`，arm64 与 x86_64 各构建
+一份，都是原生构建，分别跑在 `macos-15` 与 `macos-15-intel` runner 上——numpy、scipy、soxr 与
+soundfile 每个架构一个 wheel，没有可以交叉编译的东西。它们都内含 Python 与 Qt。产物由 CI
 构建，发布前应实际启动一次，确认解包路径下的资源文件仍能被找到。
 
 发布由标签驱动，除打标签外没有手动步骤：
