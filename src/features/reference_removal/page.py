@@ -43,6 +43,7 @@ from shared.ui import (
     PageScrollArea,
     SmoothComboBox,
     allow_shrinking,
+    format_clock,
     normalized_wav_path,
 )
 
@@ -379,10 +380,7 @@ class MrPage(PageScrollArea):
 
     @staticmethod
     def _clock(milliseconds: int) -> str:
-        total_seconds = max(0, int(milliseconds) // 1000)
-        minutes, seconds = divmod(total_seconds, 60)
-        hours, minutes = divmod(minutes, 60)
-        return f"{hours:d}:{minutes:02d}:{seconds:02d}" if hours else f"{minutes:02d}:{seconds:02d}"
+        return format_clock(milliseconds / 1000)
 
     def set_result(self, path: Path, stats: AudioStats | None = None) -> None:
         result = path.expanduser().resolve()

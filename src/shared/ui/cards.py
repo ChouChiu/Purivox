@@ -1,9 +1,11 @@
 from __future__ import annotations
 
-from PySide6.QtCore import Qt
+import time
+
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QResizeEvent
-from PySide6.QtWidgets import QVBoxLayout, QWidget
-from qfluentwidgets import CardWidget, ProgressBar, ScrollArea, StrongBodyLabel
+from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
+from qfluentwidgets import BodyLabel, CardWidget, ProgressBar, ScrollArea, StrongBodyLabel
 
 from shared.i18n import tr
 from shared.ui.responsive import (
@@ -19,6 +21,26 @@ from shared.ui.responsive import (
 )
 
 LABEL_COLUMN_WIDTH = 110
+# The widest the status clock reads before it is showing hours, so the status
+# line does not re-elide itself every time the tenth of a second rolls over.
+CLOCK_SAMPLE = "00:00.000"
+
+
+def format_clock(seconds: float, *, millis: bool = False) -> str:
+    """Minutes and seconds, or hours once a take runs that long.
+
+    One formatter for every readout in the interface: the status card's clock
+    takes `millis` because the difference between two runs is a few hundred of
+    them, and the preview's position and duration stay whole seconds.
+    """
+    total_millis = max(0, round(seconds * 1000))
+    total_seconds, remainder = divmod(total_millis, 1000)
+    hours, rest = divmod(total_seconds, 3600)
+    minutes, secs = divmod(rest, 60)
+    stamp = f"{minutes:02d}:{secs:02d}"
+    if millis:
+        stamp = f"{stamp}.{remainder:03d}"
+    return f"{hours}:{stamp}" if hours else stamp
 
 
 class FormCard(Responsive, HeightForWidth, CardWidget):
@@ -73,18 +95,51 @@ class PageScrollArea(ScrollArea):
         self.metrics = layout_metrics(self.viewport().size())
 
     def add_status_card(self) -> None:
-        """Add the status line and progress bar every processing page ends with.
+        """Add the status line, its clock and the progress bar every page ends with.
 
         All three pages report the same way — one elided line of text over one
         bar, in the secondary lane — and they read the widgets back by name, so
-        the card is built here rather than three times over.
+        the card is built here rather than three times over.  The clock shares
+        the status line, at its right edge, and is held to the width of an hour
+        so a running job never re-elides the text beside it.
         """
         self.status_card = FormCard()
         self.status = ElidedLabel()
+        self.elapsed = BodyLabel()
+        self.elapsed.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.elapsed.setMinimumWidth(self.elapsed.fontMetrics().horizontalAdvance(CLOCK_SAMPLE))
+        status_row = QHBoxLayout()
+        status_row.setContentsMargins(0, 0, 0, 0)
+        status_row.setSpacing(12)
+        status_row.addWidget(self.status, 1)
+        status_row.addWidget(self.elapsed)
         self.progress = ProgressBar()
-        self.status_card.layout.addWidget(self.status)
+        self.status_card.layout.addLayout(status_row)
         self.status_card.layout.addWidget(self.progress)
         self.add_card(self.status_card, Lane.SECONDARY)
+        self._elapsed_started: float | None = None
+        self._elapsed_timer = QTimer(self)
+        self._elapsed_timer.setInterval(100)
+        self._elapsed_timer.timeout.connect(self._tick_elapsed)
+
+    def start_clock(self) -> None:
+        """Restart the clock for a job that is starting, from zero."""
+        self._elapsed_started = time.monotonic()
+        self.elapsed.setText(format_clock(0.0, millis=True))
+        self._elapsed_timer.start()
+
+    def stop_clock(self) -> None:
+        """Freeze the clock on the total the job took."""
+        self._elapsed_timer.stop()
+        if self._elapsed_started is not None:
+            elapsed = time.monotonic() - self._elapsed_started
+            self.elapsed.setText(format_clock(elapsed, millis=True))
+            self._elapsed_started = None
+
+    def _tick_elapsed(self) -> None:
+        if self._elapsed_started is not None:
+            elapsed = time.monotonic() - self._elapsed_started
+            self.elapsed.setText(format_clock(elapsed, millis=True))
 
     def retranslate_status_card(self) -> None:
         self.status_card.title_label.setText(tr("status_group"))

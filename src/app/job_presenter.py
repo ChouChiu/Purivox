@@ -41,6 +41,7 @@ class JobPresenter(QObject):
         self._active_page = page
         page.progress.setValue(0)
         page.set_running(True)
+        page.start_clock()
         self._state_tip = StateToolTip(tr("processing"), tr("loading_song"), self._parent)
         self._state_tip.move(self._state_tip.getSuitablePos())
         self._state_tip.show()
@@ -48,6 +49,7 @@ class JobPresenter(QObject):
             self._runner.start(operation)
         except BaseException:
             page.set_running(False)
+            page.stop_clock()
             self._active_page = None
             self._discard_state_tip()
             raise
@@ -119,5 +121,6 @@ class JobPresenter(QObject):
     def _job_finished(self) -> None:
         if self._active_page is not None:
             self._active_page.set_running(False)
+            self._active_page.stop_clock()
         self._active_page = None
         self.finished.emit()

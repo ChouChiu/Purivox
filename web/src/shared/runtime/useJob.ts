@@ -1,10 +1,16 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { type PurivoxClient, PurivoxError } from "./PurivoxClient";
 import type { ProgressPayload } from "./protocol";
 
 export interface JobState {
 	running: boolean;
 	progress: number;
+	/**
+	 * Milliseconds the job has taken: live while it runs, the total once it
+	 * settles.  The pipeline's own progress events can be a minute apart and
+	 * carry no timing, so this is measured rather than derived from them.
+	 */
+	elapsedMs: number;
 	/** The untranslated progress key and its values, for the page to render. */
 	message: ProgressPayload | null;
 	failure: { message: string; kind: PurivoxError["kind"] } | null;
@@ -13,6 +19,7 @@ export interface JobState {
 const IDLE: JobState = {
 	running: false,
 	progress: 0,
+	elapsedMs: 0,
 	message: null,
 	failure: null,
 };
@@ -27,12 +34,32 @@ const IDLE: JobState = {
 export function useJob(client: PurivoxClient) {
 	const [state, setState] = useState<JobState>(IDLE);
 	const running = useRef(false);
+	const startedAt = useRef(0);
+
+	useEffect(() => {
+		if (!state.running) return;
+		const timer = setInterval(() => {
+			setState((previous) =>
+				previous.running
+					? { ...previous, elapsedMs: Date.now() - startedAt.current }
+					: previous,
+			);
+		}, 100);
+		return () => clearInterval(timer);
+	}, [state.running]);
 
 	const start = useCallback(
 		async <T>(name: string, request: unknown): Promise<T | null> => {
 			if (running.current) return null;
 			running.current = true;
-			setState({ running: true, progress: 0, message: null, failure: null });
+			startedAt.current = Date.now();
+			setState({
+				running: true,
+				progress: 0,
+				elapsedMs: 0,
+				message: null,
+				failure: null,
+			});
 			try {
 				const result = await client.run<T>(name, request, (payload) => {
 					setState((previous) => ({
@@ -45,6 +72,7 @@ export function useJob(client: PurivoxClient) {
 					...previous,
 					running: false,
 					progress: 100,
+					elapsedMs: Date.now() - startedAt.current,
 				}));
 				return result;
 			} catch (error) {
@@ -53,6 +81,7 @@ export function useJob(client: PurivoxClient) {
 				setState({
 					running: false,
 					progress: 0,
+					elapsedMs: Date.now() - startedAt.current,
 					message: null,
 					failure: { message, kind },
 				});

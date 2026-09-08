@@ -27,3 +27,6 @@ def test_job_presenter_owns_page_running_and_progress_state(qtbot, monkeypatch):
     assert page.start_button.isEnabled()
     assert page.progress.value() == 64
     assert page.status.text() == "处理中"
+    # The presenter brackets the clock around the job, so the page ends up with
+    # a total rather than the empty readout it started from.
+    assert page.elapsed.text() != ""

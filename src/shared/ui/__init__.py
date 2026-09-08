@@ -1,4 +1,4 @@
-from .cards import FormCard, PageScrollArea
+from .cards import FormCard, PageScrollArea, format_clock
 from .responsive import (
     CONTENT_MAX_WIDTH,
     UNBOUNDED_WIDTH,
@@ -38,6 +38,7 @@ __all__ = [
     "SmoothComboBox",
     "SmoothComboBoxMenu",
     "allow_shrinking",
+    "format_clock",
     "layout_metrics",
     "layout_mode",
     "normalized_wav_path",
