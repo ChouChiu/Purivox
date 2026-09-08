@@ -465,11 +465,15 @@ jobs:
         id: compiler-cache
         uses: actions/cache@v6
         with:
+          # The same root also holds the downloaded toolchain: Nuitka fetches
+          # winlibs MinGW64 and ccache into getCacheDir("downloads"), so both
+          # arrive with the cache rather than over the network every run.
           path: ~/AppData/Local/Nuitka/Nuitka/Cache
           key: >-
-            nuitka-v2-${{ runner.os }}-py3.14-${{ hashFiles('uv.lock', 'pysidedeploy.spec') }}
+            nuitka-mingw-v1-${{ runner.os }}-py3.14-${{ hashFiles('uv.lock',
+            'pysidedeploy.spec') }}
           restore-keys: |
-            nuitka-v2-${{ runner.os }}-py3.14-
+            nuitka-mingw-v1-${{ runner.os }}-py3.14-
 
       - name: Sync dependencies
         run: uv sync --locked --no-dev --group deploy 2>&1 | tee logs/sync.log
@@ -479,12 +483,24 @@ jobs:
           # pyside6-deploy carries a single icon key and hands it to Nuitka as
           # --windows-icon-from-ico, which will not accept the SVG the Linux
           # build uses. The yt-dlp and LTO flags live in the shared spec.
+          #
+          # --mingw64 is here for the compiler cache, not for the compiler:
+          # SconsCompilerSettings sends a gcc build through ccache and an MSVC
+          # one through its inline clcache, and clcache runs in NODIRECT mode,
+          # which re-preprocesses every source before it can look anything up.
           sed -e 's|^icon = .*|icon = deployment/purivox.ico|' \
+              -e 's|^extra_args = .*|& --mingw64|' \
               pysidedeploy.spec > pysidedeploy-windows.spec
           tee logs/deploy-spec.log < pysidedeploy-windows.spec
 
       - name: Build onefile
         id: onefile-build
+        env:
+          # Nuitka downloads its own ccache here, so there is no binary on PATH
+          # to configure in a step of its own; ccache reads the limit from the
+          # environment. Its 5G default plus the toolchain would make an
+          # artifact large enough to start evicting the other jobs' caches.
+          CCACHE_MAXSIZE: 2G
         run: >-
           uv run --locked --no-dev --group deploy
           pyside6-deploy -c pysidedeploy-windows.spec --force
@@ -501,13 +517,21 @@ jobs:
             exit 1
           fi
 
+      - name: Smoke-test the onefile
+        id: smoke
+        run: |
+          # MinGW64 links against a different C runtime than MSVC, so a build
+          # that finished is not evidence of an executable that starts. The
+          # self-test opens the window, which is what exercises the unpacking,
+          # Qt, and the packaged resources, then quits; a toolchain that broke
+          # any of those leaves a non-zero exit here.
+          ./dist/Purivox.exe --selftest 2>&1 | tee logs/smoke.log
+
       - name: Show cache stats
         if: ${{ !cancelled() }}
         run: |
-          # MSVC is cached through Nuitka's inline clcache, which writes its
-          # statistics into the build directory pyside6-deploy then removes.
-          # What survives is the cache itself, so report its size: a clcache
-          # that stays this small from run to run is one that is not being hit.
+          # ccache keeps its statistics inside the cache directory, so unlike
+          # clcache they survive the build tree pyside6-deploy removes.
           du -sh ~/AppData/Local/Nuitka/Nuitka/Cache/* 2>/dev/null \
             | tee logs/cache-stats.log || true
 
@@ -550,6 +574,7 @@ jobs:
           |---|---|
           | Job | `${{ job.status }}` |
           | onefile build | `${{ steps.onefile-build.outcome }}` |
+          | Self-test | `${{ steps.smoke.outcome }}` |
           | uv cache | `${{ steps.setup-uv.outputs.cache-hit }}` |
           | Compiler cache | `${{ steps.compiler-cache.outputs.cache-hit }}` |
 

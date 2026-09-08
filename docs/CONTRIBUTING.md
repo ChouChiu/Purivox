@@ -208,7 +208,9 @@ Linux、Windows 与两个架构的 macOS 产物。质量检查只在 Ubuntu 上�
 `%LOCALAPPDATA%\Nuitka\Nuitka\Cache`）——它把 `CCACHE_DIR` 指到那里面，系统的
 `~/.cache/ccache` 一直是空的。缓存 key 只跟 `uv.lock` 和 `pysidedeploy.spec` 走：
 把源码 hash 也放进去，每次推送都会存一份约 400 MB 的新条目，10 GB 配额很快就把
-下一次要用的那条挤掉了。
+下一次要用的那条挤掉了。Windows 加 `--mingw64` 也是为了缓存：Nuitka 只有 gcc 构建才走
+ccache，MSVC 构建走的是内联 clcache，而它跑在 NODIRECT 模式下，每次查缓存前都要
+重新预处理一遍源文件。
 
 ## 提交
 
