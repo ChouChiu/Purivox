@@ -1,7 +1,13 @@
-# Repository Guidelines
+# Purivox — Repository Guidelines
 
-Purivox v1.1.0 (`purivox`): vocal isolation from stage and live recordings. Python 3.11+, PySide6 +
-PySide6-Fluent-Widgets, AGPL-3.0-or-later. `CLAUDE.md` symlinks here.
+Purivox (`purivox`): reference-guided vocal isolation for stage and live recordings. Python 3.11+,
+PySide6 + PySide6-Fluent-Widgets, AGPL-3.0-or-later. `CLAUDE.md` symlinks here.
+
+This file is the operating manual for anyone changing the code. `README.md` (Chinese) is
+authoritative for users; `README_EN.md` and `docs/en/` are its translations, paired file-for-file.
+The deeper rationale lives in `docs/` — `architecture.md`, `reference-removal.md`, `full-stage.md`,
+`web.md`, `CONTRIBUTING.md` — each with an English twin. Read this before you edit: most rules below
+exist because skipping one cost someone time.
 
 ## Working Rules
 
@@ -23,22 +29,31 @@ PySide6-Fluent-Widgets, AGPL-3.0-or-later. `CLAUDE.md` symlinks here.
 
 ## The Product
 
-One pipeline, two workflows over it. The GUI, the CLI and the browser build are shells:
+One pipeline, two workflows over it. The GUI, the CLI and the browser build are shells.
 
-- **Reference cancellation** — align the song against the known accompaniment (GCC-PHAT + clock
-  drift tracking), estimate a complex transfer, subtract the prediction, soft-mask the residual.
-  The cancellation result is the output; there is no spatial post-processing. Used by **MR Remove**
-  (`purivox mr`, GUI) on one pair, and by **Full Stage** (GUI) on the clips a timeline matched
-  inside a continuous stage recording — only the enabled ones are processed.
+Four names mean one thing each, and the UI strings already use them: the **stage/live recording**
+is the file being processed, the **song source** is the released song it is cancelled against, the
+**live vocal** is what survives, and the **backing** is what was removed — the part of the recording
+the song source explains, and the second export track.
+
+Backing is not *accompaniment*. The accompaniment is a song's instrumental; the backing is
+whatever of the song source the stage playback actually carried, source vocals included. The legacy
+names are the confusing part: `ReferenceJob.song` is the stage/live recording,
+`ReferenceJob.accompaniment` is the song source, and the CLI positionals follow those fields.
+
+**Reference cancellation** aligns the stage/live recording against the song source (GCC-PHAT plus
+clock-drift tracking), estimates a complex transfer, subtracts the prediction and soft-masks the
+residual. The cancellation result *is* the output; there is no spatial post-processing.
+**MR Remove** (`purivox mr`, the single-song page) runs it on one pair. **Full Stage** runs it on
+the clips a timeline matched inside a continuous stage recording, and only on the enabled ones.
 
 Neural separation was removed in favour of dedicated tools such as UVR5: it carried onnxruntime,
-58 MB of the packaged binary, for a workflow that does not use a song source at all.
+58 MB of the packaged binary, for a workflow that does not use a song source at all. Do not bring it
+back.
 
 GUI and CLI are thin shells over `run_reference_job`; full-stage rendering is orchestrated in
-`src/app/full_stage_processing.py`. The **browser build** (`web/`) runs both workflows under
-Pyodide as a static site with no backend (<https://purivox.wwchun.top/>, `docs/web.md`).
-`README.md` (Chinese) is authoritative for users, with `README_EN.md` and `docs/en/` as
-translations, paired file-for-file.
+`src/app/full_stage_processing.py`. The **browser build** (`web/`) runs both workflows under Pyodide
+as a static site with no backend (<https://purivox.wwchun.top/>, `docs/web.md`).
 
 ## Layout
 
@@ -54,23 +69,24 @@ web/               Vite + React + Fluent UI v9, same feature layering, bun
 
 Dependencies flow downward only: `shared` imports nothing of ours, features never import each
 other, `app`/`web` never import `entrypoints`. `tests/test_architecture.py` and
-`web/scripts/check-architecture.mjs` parse the imports and fail the build otherwise. A new feature
-is one new directory under `src/features/`. Anything two features — or the GUI and the CLI — both
-need moves down into `shared` (`BLOCK_FRAMES`, `AUDIO_EXTENSIONS`, `validate_reference_settings`,
-`log_flux_bands`, `AUDIO_FILE_FILTER`, `normalized_wav_path`, `branding.user_agent`,
-`OutputTracks`, `subtract_into`, `export_audio`, `download/`, `DownloadDialog`).
+`web/scripts/check-architecture.mjs` parse the imports and fail the build otherwise. A new
+feature is one new directory under `src/features/`. Anything two features — or the GUI and the
+CLI — both need moves down into `shared`: `BLOCK_FRAMES`, `AUDIO_EXTENSIONS`,
+`validate_reference_settings`, `log_flux_bands`, `AUDIO_FILE_FILTER`, `normalized_wav_path`,
+`branding.user_agent`, `OutputTracks`, `subtract_into`, `export_audio`, `download/`,
+`DownloadDialog`.
 
 | Path | What lives there |
 |---|---|
-| `src/app/` | `main_window.py` (FluentWindow shell: navigation, i18n/theme, auto-find, the window `QShortcut`s), `job_presenter.py` (page and result state), `job_runner.py`/`worker.py` (QThread lifecycle and adapter), `version.py` |
-| `src/features/reference_removal/` | `dsp/algorithms.py` (complex subtraction + residual mask, linked peak protection), `dsp/transfer.py` (smoothed spectra, vectorised LDL^H solve, adjusted multiple coherence), `dsp/alignment.py` (tempo correction + GCC-PHAT + drift tracking + Lanczos warp), `finder.py` (automatic accompaniment match), `processing.py`, `page.py`, `models.py` |
+| `src/app/` | `main_window.py` (FluentWindow shell: navigation, i18n/theme, auto-find, the window `QShortcut`s), `job_presenter.py` (page and result state), `job_runner.py`/`worker.py` (QThread lifecycle and adapter), `full_stage_processing.py`, `version.py` |
+| `src/features/reference_removal/` | `dsp/algorithms.py` (complex subtraction + residual mask, linked peak protection), `dsp/transfer.py` (smoothed spectra, vectorised LDL^H solve, adjusted multiple coherence), `dsp/alignment.py` (tempo correction + GCC-PHAT + drift tracking + Lanczos warp), `finder.py` (automatic song-source match), `processing.py`, `page.py`, `models.py` |
 | `src/features/full_stage/` | Multi-source fingerprint matching, timeline models, `timeline_model.py` (`QAbstractTableModel` behind the editable timeline, `clip_edited`/`edit_rejected`) |
 | `src/features/home/`, `settings/` | Brand and entry cards; language/theme/log level, `updates.py` (GitHub release query + version compare) and `dialog.py`. The app never installs an update — the dialog opens the release page |
-| `src/shared/` (root) | `config.py` (the `cfg` `QConfig`), `i18n.py` (`tr()`, `install_language()`, `SUPPORTED_LANGUAGES`), `jobs.py` (the reference-settings contract behind `ReferenceJob`, `FullStageJob` and the CLI: `SIGMA_CHOICES`, `STRENGTH_RANGE`, `validate_reference_settings`, `OutputTracks`, `planned_outputs`), `logging.py`, `processing.py` (`CancellationToken`, `ProgressEvent`, `ProcessingResult`), `progress.py`, `branding.py` |
+| `src/shared/` (root) | `config.py` (the `cfg` `QConfig`), `i18n.py` (`tr()`, `install_language()`, `SUPPORTED_LANGUAGES`), `jobs.py` (the settings contract behind `ReferenceJob`, `FullStageJob` and the CLI: `SIGMA_CHOICES`, `STRENGTH_RANGE`, `validate_reference_settings`, `OutputTracks`, `planned_outputs`), `logging.py`, `processing.py` (`CancellationToken`, `ProgressEvent`, `ProcessingResult`), `progress.py`, `branding.py` |
 | `src/shared/audio/` | `io.py`: mapped I/O, soxr resample, atomic WAV write, `BLOCK_FRAMES` (262 144), `AUDIO_EXTENSIONS`, `release_mapped_pages()`; `analysis.py`: `AudioStats`, peak/RMS, block-wise `copy_audio`/`subtract_into`, `export_audio` |
 | `src/shared/download/` | `media.py`: the yt-dlp wrapper — `search()` (`ytsearch`, flat), `fetch()` (best audio, `noplaylist` — a watch URL carrying a radio `list` is hundreds of entries — WAV through ffmpeg when it is there, the container as it arrived when it is not, cancellable in extraction through `match_filter` as well as in transfer through the progress hook), `looks_like_url`, `ffmpeg_available`; `cache.py`: the `downloads.json` index under AppLocalData, so a link is fetched once — matched by video id as well as by URL, because the link pasted is rarely the canonical one recorded; `runner.py`: the `QThread` behind one search or download. YouTube Music is link-only — its search answers with channels, not songs |
 | `src/shared/dsp/` | `spectral.py`: librosa-compatible `stft`/`istft` (`n_fft=2048`, `hop=512`) and `log_flux_bands()`, shared by full-stage matching and coarse alignment; `rate.py`: the global tempo scale search both workflows run before matching; `stretch.py`: pitch-preserving WSOLA, numpy/scipy only because Pyodide runs the same pipeline |
-| `src/shared/ui/` | `responsive.py` (`LayoutMode`/`LayoutMetrics`, `ResponsiveColumns`, `FoldingRow`, `allow_shrinking`, `HeightForWidth`, `ElidedLabel`), `cards.py` (`FormCard`, `PageScrollArea`), `widgets.py` (`SmoothComboBox`, file filters, `normalized_wav_path`), `download_dialog.py` (the fetch dialog both reference pages open, imported in the slot rather than at module scope — yt-dlp is a tenth of a second of startup) |
+| `src/shared/ui/` | `responsive.py` (`LayoutMode`/`LayoutMetrics`, `ResponsiveColumns`, `FoldingRow`, `allow_shrinking`, `HeightForWidth`, `ElidedLabel`), `cards.py` (`FormCard`, `PageScrollArea`, `format_clock`), `widgets.py` (`SmoothComboBox`, file filters, `normalized_wav_path`), `download_dialog.py` (the fetch dialog both reference pages open, imported in the slot rather than at module scope — yt-dlp is a tenth of a second of startup) |
 | `src/resources/` | `i18n/{zh_cn,zh_tw,en_us,ja_jp,ko_kr}.{ts,qm}`, `purivox.svg`, `resource_path` |
 | `web/scripts/` | `build-python-archive.mjs` (packs `src/` for Pyodide), `build-i18n.mjs`, `build-assets.mjs`, `check-architecture.mjs`. Never a second implementation of the DSP |
 | `tests/`, `docs/` | Tests mirror `src/` path-for-path, `benchmarks/` behind `--runslow`; Chinese docs with one translation per file in `docs/en/` |
@@ -79,9 +95,10 @@ need moves down into `shared` (`BLOCK_FRAMES`, `AUDIO_EXTENSIONS`, `validate_ref
 ## Pipelines
 
 **Reference** (`features/reference_removal/processing.py`): `read_audio` (SoundFile, Qt Multimedia
-fallback) → upmix to stereo → resample the song to the stage rate (soxr) → optional `align_audio` →
-`process_audio` (blocks from the spectral-cell budget, ~45 s at 44.1 kHz, ≥2 s overlap, cos²/sin²
-crossfade) → peak/RMS stats → atomic WAV at the song's own rate and bit depth. `process_audio` has
+fallback) → upmix to stereo → resample the song source to the stage recording's rate (soxr) →
+optional `align_audio` → `process_audio` (blocks from the spectral-cell budget, ~45 s at 44.1 kHz,
+≥2 s overlap, cos²/sin² crossfade) → peak/RMS stats → atomic WAV at the stage recording's own rate
+and bit depth. `process_audio` has
 a pooled and an inline schedule because Pyodide has no pthreads; `test_dsp_execution.py` holds them
 to the same output.
 
@@ -92,72 +109,7 @@ dataclass and hands it to `JobPresenter`, which owns page and result state and d
 `CancellationToken.raise_if_cancelled()`, never swallowed. The CLI runs the same jobs synchronously
 and cancels the token on SIGINT.
 
-## Commands
-
-```bash
-uv sync --locked
-
-uv run --locked purivox                            # GUI
-uv run --locked purivox mr <song> <acc> <out.wav> --strength 75 --sigma 8 --align --lang zh_cn
-uv run --locked purivox fetch <link>                # or: <keywords> [--limit N] [--pick N]
-uv run --locked purivox fetch --list                # what has been downloaded
-uv run --locked purivox --selftest                 # pipeline smoke, offscreen-safe
-
-# DSP A/B across a change
-uv run --locked python tools/eval_cancellation.py --save baseline.json
-uv run --locked python tools/eval_cancellation.py --compare baseline.json
-
-# what one job costs, phase by phase, with peak RSS
-uv run --locked python tools/bench_pipeline.py --save bench-baseline.json
-uv run --locked python tools/bench_pipeline.py --compare bench-baseline.json
-
-# checks (Qt needs the offscreen platform)
-uv run --locked ruff check src tests
-uv run --locked ruff format --check src tests
-QT_QPA_PLATFORM=offscreen uv run --locked pytest
-QT_QPA_PLATFORM=offscreen uv run --locked pytest tests/benchmarks --runslow   # 15-min gate
-uv build                                           # sdist + wheel
-
-# browser build (predev/prebuild repack src/ and regenerate the translation JSON)
-cd web && bun install && bun run dev       # http://localhost:5173/
-cd web && bun run check                    # lint + tsc + layering; also `lint`, `format`, `build`
-PURIVOX_BASE=/repo/ bun run build          # only for a Pages *project* site subpath
-
-# translations: edit the .ts, recompile, commit both
-uv run --locked pyside6-lrelease src/resources/i18n/<locale>.ts -qm src/resources/i18n/<locale>.qm
-
-# onefile executable (dist/Purivox.bin; macOS builds dist/Purivox.app instead)
-uv sync --locked --group deploy
-uv run --locked --group deploy pyside6-deploy -c pysidedeploy.spec
-```
-
-Language keys: `zh_cn`, `zh_tw`, `en_us`, `ja_jp`, `ko_kr`.
-
-## Commits & Releases
-
-Rule 15 first: none of this happens until you are asked. When you are:
-
-- Commits land on `main`. The history is linear and single-author, so do not open a branch first —
-  not for a cleanup, not for a refactor, not for anything you were told to commit. A branch is for
-  work that was asked for as a branch or a pull request.
-- Subject: `type(scope): what changed`, imperative and lower case, no trailing period. Types in use
-  are `feat`, `fix`, `perf`, `refactor`, `docs`, `ci`, `build`, `chore`; the scope is the area
-  (`dsp`, `ui`, `web`, `audio`, `i18n`, `full-stage`, `settings`, `shared`, `release`) and may be
-  dropped for a change that spans the repository.
-- Body: prose wrapped at 80 columns, in English, explaining why the change looks like this — the
-  problem, the constraint that decided the design, what was rejected and why. Not a restatement of
-  the diff, and not a bullet list.
-- `CHANGELOG.md` gets one bilingual section per released version. The release workflow publishes the
-  section whose heading matches the tag, and the in-app update dialog shows that same text.
-- A release tag is `v<version>` and must match `src/app/version.py`; CI checks that first and fails
-  the build in its opening minutes rather than after an hour of compiling.
-- The AUR package (`deployment/aur/`) is published after a release by running
-  `deployment/aur/publish.sh`, never by CI — it re-points `purivox-bin` at the release `.deb`,
-  builds it once as a check, and pushes `PKGBUILD` and `.SRCINFO`.
-
 ## Conventions & Invariants
-
-Most of what follows is here because it cost someone time.
 
 ### Python
 
@@ -205,15 +157,14 @@ Most of what follows is here because it cost someone time.
 
 - Shortcuts (`Ctrl+O`, `Ctrl+Return`, `F5`, `Esc`, `Ctrl+P`) live on `MainWindow` and dispatch to
   `current_page()`, never on a page — three page-local `Ctrl+O` bindings would be ambiguous, and a
-  window shortcut works before a page takes focus. `_apply_shortcut_hints()`
-  appends each binding to its button's tooltip, so no shortcut needs a translation key.
+  window shortcut works before a page takes focus. `_apply_shortcut_hints()` appends each binding to
+  its button's tooltip, so no shortcut needs a translation key.
 - Four `LayoutMode`s by page width: `PORTRAIT` < 620 stacks label over control, `HALF` < 960 and
   `LANDSCAPE` < 1440 stay one column, `ULTRAWIDE` ≥ 1440 splits into two lanes at
   `CONTENT_MAX_WIDTH`; height only sets `LayoutMetrics.short`. `PageScrollArea` measures the
   viewport and pushes metrics down to every `Responsive` child — a widget must never fold on its own
   width, because a page already squeezed is a page cut off and the scroll areas keep
-  `ScrollBarAlwaysOff`. Cards join through
-  `add_card(card, lane)`, never `layout.addWidget`.
+  `ScrollBarAlwaysOff`. Cards join through `add_card(card, lane)`, never `layout.addWidget`.
 - A label that can hold a path needs `allow_shrinking()` or its longest word becomes the page
   minimum; paths belong in `ElidedLabel` (one line, full text in `text()` and the tooltip); wrapping
   text needs `HeightForWidth` on every container up to the page, because Qt asks the widget, never
@@ -225,7 +176,7 @@ Most of what follows is here because it cost someone time.
   and the preview readout keeps the whole-second form of it.
 - Files arrive through `QFileDialog` only, funnelled into one method per page (`set_song`,
   `set_stage`, `add_source_paths`) that also does the follow-up — a default output name, an
-  invalidated analysis. The AI page watches the model directories with `QFileSystemWatcher`.
+  invalidated analysis.
 - No tooltips on transport controls: a Fluent `Tooltip` opens on keyboard focus, not just hover, so
   it covers what is above the button every time it is tabbed to. Put the word on the button.
 
@@ -275,22 +226,53 @@ every build is a cold one. The cache key follows `uv.lock` and `pysidedeploy.spe
 the source hash writes a fresh ~400 MB entry on every push, and the 10 GB quota then evicts the
 entry the next run needed.
 
-## Tooling
+## Commands
 
-Python ≥3.11, pinned to 3.14 for development by `.python-version`; uv with `uv.lock` committed, the
-`dev` group synced by default and `deploy` opt-in. PySide6 ≥6.8 + `PySide6-Fluent-Widgets`
-(vendored `qfluentwidgets`) and never a second Fluent package — not the `[full]` extra, whose
-pillow and colorthief only feed an AcrylicLabel this app never builds; Qt is mandatory even for the
-CLI, which falls back to `QAudioDecoder` for decoding. numpy ≥2, scipy, soundfile, soxr, yt-dlp,
-all range-pinned; yt-dlp needs updating whenever a site changes under it. ruff only (`line-length = 100`, E/F/I/UP/B/SIM/RUF), `ruff format`, no black or
-isort. Nuitka 4.1.3 via `pyside6-deploy`, onefile (`dist/Purivox.bin` / `Purivox.exe`) and macOS
-app bundles for arm64 and x86_64 (`dist/Purivox.app`, from a CI-derived spec).
+```bash
+uv sync --locked
+
+uv run --locked purivox                            # GUI
+uv run --locked purivox mr <stage> <source> <out.wav> --strength 75 --sigma 8 --align --lang zh_cn
+uv run --locked purivox fetch <link>                # or: <keywords> [--limit N] [--pick N]
+uv run --locked purivox fetch --list                # what has been downloaded
+uv run --locked purivox --selftest                 # pipeline smoke, offscreen-safe
+
+# DSP A/B across a change
+uv run --locked python tools/eval_cancellation.py --save baseline.json
+uv run --locked python tools/eval_cancellation.py --compare baseline.json
+
+# what one job costs, phase by phase, with peak RSS
+uv run --locked python tools/bench_pipeline.py --save bench-baseline.json
+uv run --locked python tools/bench_pipeline.py --compare bench-baseline.json
+
+# checks (Qt needs the offscreen platform)
+uv run --locked ruff check src tests
+uv run --locked ruff format --check src tests
+QT_QPA_PLATFORM=offscreen uv run --locked pytest
+QT_QPA_PLATFORM=offscreen uv run --locked pytest tests/shared/test_jobs.py     # one file
+QT_QPA_PLATFORM=offscreen uv run --locked pytest tests/benchmarks --runslow   # 15-min gate
+uv build                                           # sdist + wheel
+
+# browser build (predev/prebuild repack src/ and regenerate the translation JSON)
+cd web && bun install && bun run dev       # http://localhost:5173/
+cd web && bun run check                    # lint + tsc + layering; also `lint`, `format`, `build`
+PURIVOX_BASE=/repo/ bun run build          # only for a Pages *project* site subpath
+
+# translations: edit the .ts, recompile, commit both
+uv run --locked pyside6-lrelease src/resources/i18n/<locale>.ts -qm src/resources/i18n/<locale>.qm
+
+# onefile executable (dist/Purivox.bin; macOS builds dist/Purivox.app instead)
+uv sync --locked --group deploy
+uv run --locked --group deploy pyside6-deploy -c pysidedeploy.spec
+```
+
+Language keys: `zh_cn`, `zh_tw`, `en_us`, `ja_jp`, `ko_kr`.
 
 ## Testing
 
-- `QT_QPA_PLATFORM=offscreen uv run --locked pytest` — offscreen is mandatory; conftest sets it and
-  auto-skips `slow` tests unless `--runslow`, which runs the 15-minute 44.1 kHz stereo benchmark
-  (`tests/benchmarks/test_long_audio.py`: seam smoothness, peak RSS ≤ 2 GiB).
+- Offscreen is mandatory (conftest sets it); `slow` tests are auto-skipped unless `--runslow`, which
+  runs the 15-minute 44.1 kHz stereo benchmark (`tests/benchmarks/test_long_audio.py`: seam
+  smoothness, peak RSS ≤ 2 GiB).
 - `tests/` mirrors `src/` path-for-path, so a change's tests are at the mirrored path: DSP and
   alignment regressions under `tests/features/reference_removal/`, timeline and matching under
   `full_stage/`, runner and presenter lifecycles and the pytest-qt GUI/layout tests under
@@ -301,7 +283,51 @@ app bundles for arm64 and x86_64 (`dist/Purivox.app`, from a CI-derived spec).
 - No test reaches a real host — the update tests repoint `updates.RELEASES_API` at a localhost
   server.
 - DSP changes are accepted on measurement, not argument: run `purivox --selftest` and
-  `tools/eval_cancellation.py --compare` before committing, and `tools/bench_pipeline.py
-  --compare` to show what the change bought. Synthetic metrics are regression
-  evidence only and claim nothing about real music. `docs/reference-removal.md` documents the
-  algorithm as it stands — no before/after, no trade-off tables.
+  `tools/eval_cancellation.py --compare` before committing, and `tools/bench_pipeline.py --compare`
+  to show what the change bought. Synthetic metrics are regression evidence only and claim nothing
+  about real music. `docs/reference-removal.md` documents the algorithm as it stands — no
+  before/after, no trade-off tables.
+
+**Before you call a change done:**
+
+- `ruff check` and `ruff format --check` are clean, and `pytest` passes.
+- The new behaviour has a test at the mirrored path, or a reason why it cannot.
+- A DSP change carries an `eval_cancellation.py --compare` delta; a performance change carries a
+  `bench_pipeline.py --compare` delta.
+- A UI change was looked at in `PORTRAIT` and `ULTRAWIDE`, not only at the default window size.
+- A new or reworded string exists in all five `.ts` files, and both `.qm` files were recompiled.
+- A new source directory is registered in the three packaging lists.
+
+## Tooling
+
+Python ≥3.11, pinned to 3.14 for development by `.python-version`; uv with `uv.lock` committed, the
+`dev` group synced by default and `deploy` opt-in. PySide6 ≥6.8 + `PySide6-Fluent-Widgets`
+(vendored `qfluentwidgets`) and never a second Fluent package — not the `[full]` extra, whose
+pillow and colorthief only feed an AcrylicLabel this app never builds; Qt is mandatory even for the
+CLI, which falls back to `QAudioDecoder` for decoding. numpy ≥2, scipy, soundfile, soxr, yt-dlp,
+all range-pinned; yt-dlp needs updating whenever a site changes under it. ruff only
+(`line-length = 100`, E/F/I/UP/B/SIM/RUF) plus `ruff format` — no black, no isort. Nuitka 4.1.3 via
+`pyside6-deploy`, onefile (`dist/Purivox.bin` / `Purivox.exe`) and macOS app bundles for arm64 and
+x86_64 (`dist/Purivox.app`, from a CI-derived spec).
+
+## Commits & Releases
+
+Rule 15 first: none of this happens until you are asked. When you are:
+
+- Commits land on `main`. The history is linear and single-author, so do not open a branch first —
+  not for a cleanup, not for a refactor, not for anything you were told to commit. A branch is for
+  work that was asked for as a branch or a pull request.
+- Subject: `type(scope): what changed`, imperative and lower case, no trailing period. Types in use
+  are `feat`, `fix`, `perf`, `refactor`, `docs`, `ci`, `build`, `chore`; the scope is the area
+  (`dsp`, `ui`, `web`, `audio`, `i18n`, `full-stage`, `settings`, `shared`, `release`) and may be
+  dropped for a change that spans the repository.
+- Body: prose wrapped at 80 columns, in English, explaining why the change looks like this — the
+  problem, the constraint that decided the design, what was rejected and why. Not a restatement of
+  the diff, and not a bullet list.
+- `CHANGELOG.md` gets one bilingual section per released version. The release workflow publishes the
+  section whose heading matches the tag, and the in-app update dialog shows that same text.
+- A release tag is `v<version>` and must match `src/app/version.py`; CI checks that first and fails
+  the build in its opening minutes rather than after an hour of compiling.
+- The AUR package (`deployment/aur/`) is published after a release by running
+  `deployment/aur/publish.sh`, never by CI — it re-points `purivox-bin` at the release `.deb`,
+  builds it once as a check, and pushes `PKGBUILD` and `.SRCINFO`.
