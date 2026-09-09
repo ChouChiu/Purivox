@@ -70,12 +70,6 @@ export function AudioPlayer({ url, seconds, registerToggle }: Props) {
 
 	useEffect(() => setTotal(seconds), [seconds]);
 
-	useEffect(() => {
-		setPlaying(false);
-		setPosition(0);
-		setFailed(false);
-	}, []);
-
 	const toggle = useCallback(() => {
 		const element = audio.current;
 		if (element === null || url === null) return;

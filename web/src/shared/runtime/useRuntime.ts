@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { PurivoxClient } from "./PurivoxClient";
 import type { BootPayload } from "./protocol";
@@ -40,14 +40,12 @@ export interface Runtime {
 export function useRuntime(): Runtime {
 	const [stage, setStage] = useState<BootStage>("idle");
 	const [failure, setFailure] = useState<string | null>(null);
-	const report = useRef(setStage);
-	report.current = setStage;
 
 	const client = useMemo(
 		() =>
 			new PurivoxClient(
 				`${import.meta.env.BASE_URL}purivox-src.zip`,
-				(payload) => report.current(payload.stage),
+				(payload) => setStage(payload.stage),
 			),
 		[],
 	);

@@ -166,13 +166,9 @@ def _spectral_flux_lag(
     for song_band, reference_band in zip(song_features, reference_features, strict=True):
         correlation = correlate(song_band, reference_band, mode="full", method="fft")
         scores = correlation if scores is None else scores + correlation
-    if scores is None:
-        return None
     lags = correlation_lags(song_features.shape[1], reference_features.shape[1])
     hop_seconds = max(round(0.02 * feature_rate), 1) / feature_rate
     valid = np.abs(lags) <= round(max_lag_seconds / hop_seconds)
-    if not np.any(valid):
-        return None
     valid_lags = lags[valid]
     valid_scores = scores[valid]
     best = int(np.argmax(valid_scores))
@@ -398,7 +394,6 @@ def align_audio(
     full_reference = _normalize(_mono(accompaniment[:, :full_check]))
     if full_mix is None or full_reference is None:
         return accompaniment
-    full_check = min(full_mix.size, full_reference.size)
     max_lag = min(sample_rate * 20, full_check - 1)
     near_limit = min(sample_rate // 2, max_lag)
     lag_samples = _spectral_flux_lag(mix, accompaniment, sample_rate)

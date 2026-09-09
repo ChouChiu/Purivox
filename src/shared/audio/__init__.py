@@ -2,8 +2,6 @@ from .analysis import AudioStats, analyze_audio, copy_audio, export_audio, subtr
 from .io import (
     AUDIO_EXTENSIONS,
     BLOCK_FRAMES,
-    DEFAULT_BIT_DEPTH,
-    WAV_BIT_DEPTHS,
     AudioData,
     create_pcm_audio,
     read_audio,
@@ -15,8 +13,6 @@ from .io import (
 __all__ = [
     "AUDIO_EXTENSIONS",
     "BLOCK_FRAMES",
-    "DEFAULT_BIT_DEPTH",
-    "WAV_BIT_DEPTHS",
     "AudioData",
     "AudioStats",
     "analyze_audio",

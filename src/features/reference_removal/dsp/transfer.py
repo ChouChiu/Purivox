@@ -82,7 +82,6 @@ def weighted_smooth(
     weights: np.ndarray | None,
     sigma_time: float,
     inverse_denominator: np.ndarray | None = None,
-    out: np.ndarray | None = None,
 ) -> np.ndarray:
     """Smooth `values * weights` and divide by the smoothed weights.
 
@@ -94,13 +93,11 @@ def weighted_smooth(
     measured 2.4x faster with a bit-identical result.
     """
     if weights is None:
-        return spectral_smooth(values, sigma_time, out=out)
-    if inverse_denominator is None:
-        inverse_denominator = np.reciprocal(spectral_smooth(weights, sigma_time) + 1e-12)
+        return spectral_smooth(values, sigma_time)
     # The product is consumed by the smoothing pass that follows it, so it is
     # formed once into the buffer the smoothed result lands in rather than into
     # a temporary that then has to be read and discarded.
-    numerator = np.multiply(values, weights, out=out)
+    numerator = np.multiply(values, weights)
     spectral_smooth(numerator, sigma_time, out=numerator)
     numerator *= inverse_denominator
     return numerator
@@ -304,11 +301,7 @@ def predict_reference_spectra(
     overfit_scale = observations / (observations - TRANSFER_ORDER)
     predicted: list[np.ndarray] = []
     explained: list[np.ndarray] = []
-    magnitude = (
-        np.empty(song_spectra[0].shape, dtype=np.empty(0, spectrum_dtype).real.dtype)
-        if coherence
-        else None
-    )
+    magnitude = np.empty(song_spectra[0].shape, dtype=real_dtype) if coherence else None
     lower = inverse_pivot = None
     if not diagonal:
         lower, inverse_pivot = _factorize_hermitian(covariance)

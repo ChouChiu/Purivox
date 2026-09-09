@@ -48,7 +48,7 @@ def analyze_audio(
         # slower for a statistic that is displayed to a tenth of a decibel.
         square_sum += float(np.einsum("ij,ij->", values, values))
         sample_count += values.size
-    rms = math.sqrt(square_sum / max(sample_count, 1))
+    rms = math.sqrt(square_sum / sample_count)
     return AudioStats(
         duration_seconds=audio.frames / audio.sample_rate,
         sample_rate=audio.sample_rate,
@@ -59,18 +59,23 @@ def analyze_audio(
     )
 
 
-def copy_audio(
-    source: AudioData,
-    destination: AudioData,
-    token: CancellationToken | None = None,
-) -> None:
-    """Copy compatible mapped audio in cancellable, bounded-memory blocks."""
+def _require_matching_formats(source: AudioData, destination: AudioData) -> None:
+    """Both block loops address the two arrays with the same indices."""
     if (
         source.channels != destination.channels
         or source.frames != destination.frames
         or source.sample_rate != destination.sample_rate
     ):
         raise ValueError("source and destination audio formats must match")
+
+
+def copy_audio(
+    source: AudioData,
+    destination: AudioData,
+    token: CancellationToken | None = None,
+) -> None:
+    """Copy compatible mapped audio in cancellable, bounded-memory blocks."""
+    _require_matching_formats(source, destination)
     token = token or CancellationToken()
     for start in range(0, source.frames, BLOCK_FRAMES):
         token.raise_if_cancelled()
@@ -90,12 +95,7 @@ def subtract_into(
     is taken away, and under Emscripten a second full-length buffer is resident
     heap rather than a mapped file.
     """
-    if (
-        minuend.channels != target.channels
-        or minuend.frames != target.frames
-        or minuend.sample_rate != target.sample_rate
-    ):
-        raise ValueError("source and destination audio formats must match")
+    _require_matching_formats(minuend, target)
     token = token or CancellationToken()
     for start in range(0, minuend.frames, BLOCK_FRAMES):
         token.raise_if_cancelled()

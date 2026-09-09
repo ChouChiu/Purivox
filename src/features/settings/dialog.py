@@ -24,7 +24,6 @@ class UpdateDialog(MessageBoxBase):
 
     def __init__(self, release: Release, parent: QWidget):
         super().__init__(parent)
-        self.release = release
         self.title_label = SubtitleLabel(tr("update_title", version=release.version), self)
         self.notes = TextBrowser(self)
         self.notes.setOpenExternalLinks(True)

@@ -2,6 +2,7 @@
 import {
 	type FailureKind,
 	INPUT_ERRORS,
+	WORK_DIR,
 	type WorkerRequest,
 	type WorkerResponse,
 } from "../runtime/protocol";
@@ -12,8 +13,6 @@ import {
 	type PyProxy,
 } from "./pyodide";
 
-/** Where uploads land and where results are written, inside Pyodide's filesystem. */
-const WORK_DIR = "/work";
 /** Where the packed Python tree is unpacked, and what goes on `sys.path`. */
 const SOURCE_DIR = "/purivox";
 

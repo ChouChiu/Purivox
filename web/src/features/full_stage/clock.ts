@@ -25,7 +25,7 @@ export function clock(seconds: number): string {
 
 export function parseClock(text: string): number {
 	const parts = text.trim().split(":");
-	if (parts.length < 1 || parts.length > 3) throw new Error("invalid time");
+	if (parts.length > 3) throw new Error("invalid time");
 	const values = parts.map((part) => {
 		const value = Number(part.trim());
 		if (!Number.isFinite(value) || value < 0) throw new Error("invalid time");

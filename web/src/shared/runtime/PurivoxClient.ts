@@ -1,8 +1,9 @@
-import type {
-	BootPayload,
-	ProgressPayload,
-	WorkerRequest,
-	WorkerResponse,
+import {
+	type BootPayload,
+	type ProgressPayload,
+	WORK_DIR,
+	type WorkerRequest,
+	type WorkerResponse,
 } from "./protocol";
 
 /** Pinned so a Pyodide release never changes the pipeline under a visitor. */
@@ -15,7 +16,6 @@ export const PYODIDE_URL =
  * dozen progress steps rather than one.
  */
 export const CHUNK_BYTES = 4 * 1024 * 1024;
-export const WORK_DIR = "/work";
 
 export class PurivoxError extends Error {
 	constructor(

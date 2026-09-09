@@ -9,7 +9,6 @@ import {
 
 import {
 	type Catalogue,
-	DEFAULT_LANGUAGE,
 	type Language,
 	loadCatalogue,
 	preferredLanguage,
@@ -89,5 +88,3 @@ export function useLanguage(): LanguageContextValue {
 	}
 	return value;
 }
-
-export { DEFAULT_LANGUAGE };

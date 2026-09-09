@@ -106,8 +106,6 @@ def _prepare(stage: np.ndarray, widest_query: int) -> _Stage:
 def _peak_score(stage: _Stage, query: np.ndarray) -> float | None:
     """Best normalized correlation of `query` anywhere along the stage."""
     width = query.shape[1]
-    if width > stage.length:
-        return None
     score = np.zeros(stage.length - width + 1, dtype=np.float64)
     stage_energy = np.zeros_like(score)
     query_energy = float(np.sum(query * query))

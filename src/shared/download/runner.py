@@ -75,7 +75,6 @@ class DownloadRunner(QObject):
 
     def __init__(self, parent: QObject | None = None):
         super().__init__(parent)
-        self._thread: QThread | None = None
         self._task: _DownloadTask | None = None
 
     @property
@@ -110,7 +109,6 @@ class DownloadRunner(QObject):
         task.finished.connect(task.deleteLater)
         thread.finished.connect(thread.deleteLater)
         thread.destroyed.connect(self._reset)
-        self._thread = thread
         self._task = task
         thread.start()
         return True
@@ -121,6 +119,5 @@ class DownloadRunner(QObject):
 
     @Slot()
     def _reset(self) -> None:
-        self._thread = None
         self._task = None
         self.finished.emit()

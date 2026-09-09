@@ -193,10 +193,7 @@ export function MrPage({ client, ready, active, onBind }: Props) {
 					detail={song === null ? undefined : <AudioSummary file={song} />}
 					disabled={!ready || state.running}
 					onPick={([file]) =>
-						void pick(file, 0, (prepared) => {
-							setSong(prepared);
-							void refreshEstimate(prepared, accompaniment);
-						})
+						void pick(file, 0, (prepared) => setSong(prepared))
 					}
 				/>
 				<FilePicker
@@ -209,10 +206,7 @@ export function MrPage({ client, ready, active, onBind }: Props) {
 					}
 					disabled={!ready || state.running}
 					onPick={([file]) =>
-						void pick(file, 1, (prepared) => {
-							setAccompaniment(prepared);
-							void refreshEstimate(song, prepared);
-						})
+						void pick(file, 1, (prepared) => setAccompaniment(prepared))
 					}
 				/>
 				<Field label={t("output_file")} hint={t("web_output_hint")}>

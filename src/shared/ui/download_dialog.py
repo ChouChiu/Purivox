@@ -9,7 +9,6 @@ for, and the file is an input to a job, not a temporary.
 
 from __future__ import annotations
 
-import logging
 from pathlib import Path
 
 from PySide6.QtCore import Qt, QUrl
@@ -38,8 +37,7 @@ from shared.download import (
     looks_like_url,
 )
 from shared.i18n import tr
-
-logger = logging.getLogger(__name__)
+from shared.ui.cards import format_clock
 
 DIALOG_WIDTH = 620
 LIST_HEIGHT = 240
@@ -48,13 +46,7 @@ RESULTS, CACHE = "results", "cache"
 
 def _duration(seconds: float) -> str:
     total = int(seconds)
-    if total <= 0:
-        return "--:--"
-    hours, rest = divmod(total, 3600)
-    minutes, remainder = divmod(rest, 60)
-    if hours:
-        return f"{hours:d}:{minutes:02d}:{remainder:02d}"
-    return f"{minutes:02d}:{remainder:02d}"
+    return "--:--" if total <= 0 else format_clock(total)
 
 
 def _size(bytes_: int) -> str:

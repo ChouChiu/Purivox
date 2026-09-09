@@ -8,6 +8,7 @@ from PySide6.QtCore import QAbstractTableModel, QModelIndex, QObject, Qt, Signal
 from features.full_stage.matching import add_manual_clip, remove_manual_clip
 from features.full_stage.models import ClipKind, FullStageAnalysis, TimelineClip
 from shared.i18n import tr
+from shared.ui.cards import format_clock
 
 ENABLED, KIND, STAGE_RANGE, SOURCE_RANGE, SPEED, CONFIDENCE, SOURCE = range(7)
 _HEADER_KEYS = (
@@ -29,15 +30,6 @@ _RANGE_SEPARATOR = re.compile(r"\s+-\s+")
 # Qt always passes a parent index; the shared invalid one keeps the override
 # signature identical to the C++ virtual it replaces.
 _NO_PARENT = QModelIndex()
-
-
-def clock(seconds: float) -> str:
-    milliseconds = max(0, round(seconds * 1000))
-    whole, millis = divmod(milliseconds, 1000)
-    minutes, secs = divmod(whole, 60)
-    hours, minutes = divmod(minutes, 60)
-    prefix = f"{hours:d}:{minutes:02d}" if hours else f"{minutes:02d}"
-    return f"{prefix}:{secs:02d}.{millis:03d}"
 
 
 def parse_clock(text: str) -> float:
@@ -122,11 +114,17 @@ class TimelineModel(QAbstractTableModel):
         if column == KIND:
             return tr(_KIND_KEYS[clip.kind])
         if column == STAGE_RANGE:
-            return f"{clock(clip.stage_start)} - {clock(clip.stage_end)}"
+            return (
+                f"{format_clock(clip.stage_start, millis=True)}"
+                f" - {format_clock(clip.stage_end, millis=True)}"
+            )
         if column == SOURCE_RANGE:
             if clip.kind == ClipKind.UNMATCHED:
                 return "—"
-            return f"{clock(clip.source_start)} - {clock(clip.source_end)}"
+            return (
+                f"{format_clock(clip.source_start, millis=True)}"
+                f" - {format_clock(clip.source_end, millis=True)}"
+            )
         if column == SPEED:
             if clip.kind == ClipKind.UNMATCHED or abs(clip.speed - 1.0) < 1e-9:
                 return "—"

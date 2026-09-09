@@ -301,7 +301,7 @@ def read_audio(path: str | Path, token: CancellationToken | None = None) -> Audi
     cancel = token or CancellationToken()
     try:
         return _read_with_soundfile(source, cancel)
-    except (sf.LibsndfileError, RuntimeError) as error:
+    except RuntimeError as error:
         logger.info("SoundFile decoder unavailable for %s; trying Qt: %s", source, error)
         return _read_with_qt(source, cancel)
 

@@ -132,14 +132,13 @@ export function FullStagePage({ client, ready, active, onBind }: Props) {
 				setStage(prepared);
 				// A new recording invalidates a timeline built against the old one.
 				setAnalysis(null);
-				await refreshEstimate(prepared, sources);
 			} catch (error) {
 				setProblem(error instanceof Error ? error.message : String(error));
 			} finally {
 				setNotice(null);
 			}
 		},
-		[client, refreshEstimate, sources, t],
+		[client, t],
 	);
 
 	const addSources = useCallback(
@@ -173,9 +172,8 @@ export function FullStagePage({ client, ready, active, onBind }: Props) {
 			const next = [...sources, ...added];
 			setSources(next);
 			setAnalysis(null);
-			await refreshEstimate(stage, next);
 		},
-		[client, refreshEstimate, sources, stage, t],
+		[client, sources, t],
 	);
 
 	const removeSource = useCallback(
@@ -184,9 +182,8 @@ export function FullStagePage({ client, ready, active, onBind }: Props) {
 			setSources(next);
 			setAnalysis(null);
 			await client.remove(path);
-			await refreshEstimate(stage, next);
 		},
-		[client, refreshEstimate, sources, stage],
+		[client, sources],
 	);
 
 	const jobRequest = useCallback(
@@ -291,13 +288,16 @@ export function FullStagePage({ client, ready, active, onBind }: Props) {
 	const blocked = budget !== null && !budget.fits;
 	const hasInputs = stage !== null && sources.length > 0;
 	const busy = state.running || notice !== null;
+	// Rendering needs a timeline, and analysing is what produces one.
+	const canRender =
+		ready && hasInputs && analysis !== null && !blocked && !busy;
 
 	useEffect(() => {
 		if (!active) return;
 		onBind({
 			choose: () => openStage.current?.(),
 			start: () => {
-				if (ready && hasInputs && analysis !== null && !blocked && !busy) {
+				if (canRender) {
 					reset();
 					void render();
 				}
@@ -313,10 +313,9 @@ export function FullStagePage({ client, ready, active, onBind }: Props) {
 		});
 	}, [
 		active,
-		analysis,
 		analyze,
-		blocked,
 		busy,
+		canRender,
 		cancel,
 		hasInputs,
 		onBind,
@@ -458,9 +457,7 @@ export function FullStagePage({ client, ready, active, onBind }: Props) {
 					state={state}
 					startLabel={t("stage_start")}
 					blockedBy={ready ? missing : null}
-					canStart={
-						ready && hasInputs && analysis !== null && !blocked && !busy
-					}
+					canStart={canRender}
 					onStart={() => {
 						reset();
 						void render();

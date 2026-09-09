@@ -2,7 +2,7 @@ import { sampleRate, seconds, totalBytes } from "../../shared/audio/prepare";
 import type { OutputTracks } from "../../shared/jobs";
 import { SHELL_SIGMA } from "../../shared/jobs";
 import type { PurivoxClient } from "../../shared/runtime/PurivoxClient";
-import { WORK_DIR } from "../../shared/runtime/PurivoxClient";
+import { WORK_DIR } from "../../shared/runtime/protocol";
 import type { Estimate, PreparedFile } from "../../shared/runtime/types";
 
 /** Ask the runtime whether one single-song job fits in the browser's budget. */

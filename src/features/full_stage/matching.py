@@ -527,7 +527,7 @@ def analyze_full_stage(
         speeds: list[float] = []
         for index, source in enumerate(source_paths):
             token.raise_if_cancelled()
-            value = 12 + round(70 * index / max(len(source_paths), 1))
+            value = 12 + round(70 * index / len(source_paths))
             report_progress(
                 progress,
                 value,

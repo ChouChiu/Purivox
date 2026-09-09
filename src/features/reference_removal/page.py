@@ -453,8 +453,7 @@ class MrPage(PageScrollArea):
     def _preview_position_changed(self, position: int) -> None:
         if not self._seeking:
             self.preview_seek.setValue(position)
-        duration = max(self.player.duration(), self.preview_seek.maximum())
-        self.preview_time.setText(f"{self._clock(position)} / {self._clock(duration)}")
+        self._preview_slider_moved(position)
 
     def _preview_duration_changed(self, duration: int) -> None:
         if duration > 0:

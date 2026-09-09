@@ -51,8 +51,10 @@ export type WorkerResponse =
 			id: number;
 			kind: FailureKind;
 			message: string;
-			key?: string;
 	  };
+
+/** Where uploads land and where results are written, inside Pyodide's filesystem. */
+export const WORK_DIR = "/work";
 
 /** Python exception names the CLI treats as the user's to fix, not a defect. */
 export const INPUT_ERRORS = new Set([

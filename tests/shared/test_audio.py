@@ -7,7 +7,6 @@ import soundfile as sf
 
 from shared.audio import (
     AudioData,
-    AudioStats,
     analyze_audio,
     copy_audio,
     create_pcm_audio,
@@ -27,7 +26,6 @@ def test_audio_analysis_and_copy_use_shared_contract():
         copy_audio(source, destination)
         stats = analyze_audio(destination)
         assert np.array_equal(destination.samples, source.samples)
-        assert isinstance(stats, AudioStats)
         assert stats.duration_seconds == 0.0005
         assert stats.peak_dbfs == 0.0
         assert np.isclose(stats.rms_dbfs, -4.259687, atol=1e-6)
