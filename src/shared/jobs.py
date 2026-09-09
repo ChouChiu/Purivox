@@ -27,7 +27,7 @@ class OutputTracks(StrEnum):
 
     The vocal is what the pipelines produce; the backing track is the stage
     recording minus that vocal, so the two always add back up to the recording
-    and the backing carries the level the accompaniment actually had on stage.
+    and the backing carries the level it actually had on stage.
     """
 
     VOCAL = "vocal"

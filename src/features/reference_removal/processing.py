@@ -80,8 +80,8 @@ def run_reference_job(
                 alignment.cleanup()
                 raise
         length = song.frames
-        # The result is the song with the accompaniment taken out of it, so it
-        # is exported at the song's own rate and depth rather than at a fixed
+        # The result is the stage recording with the backing taken out of it,
+        # so it keeps that recording's own rate and depth rather than a fixed
         # export format: resampling it up would only make the file larger.
         processed_audio = create_pcm_audio(song.channels, length, song.sample_rate, song.bit_depth)
         report_progress(progress, 32, "processing")
@@ -101,8 +101,8 @@ def run_reference_job(
             outputs.append(job.output.resolve())
         if tracks is not OutputTracks.VOCAL:
             # The backing track is what cancellation took out, so it is the stage
-            # recording less the vocal - which also gives it the level the
-            # accompaniment actually had on stage.  The vocal is already on disk
+            # recording less the vocal - which also gives it the level it
+            # actually had on stage.  The vocal is already on disk
             # (or was never asked for), so the difference overwrites it in place.
             subtract_into(song, processed_audio, token)
             backing = planned[-1]
