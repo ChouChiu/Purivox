@@ -87,8 +87,8 @@ uv run --locked purivox
 3. Alignment runs automatically. Start with the default removal strength of 75%; the graphical
    interface uses a fixed statistical window.
 4. Under **Export**, choose which stems to save: the vocal only, the backing track only, or
-   both. The backing track is the stage/live audio minus the vocal, so it carries the level the
-   accompaniment actually had on stage, and the two stems add back up to the original recording.
+   both. The backing track is the stage/live audio minus the vocal, so it carries the level it
+   actually had on stage, and the two stems add back up to the original recording.
 5. Preview the result before adjusting the strength. If you hear obvious pumping or thinning of
    the live vocal, reduce the strength or confirm that the song source is correct.
 

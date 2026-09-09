@@ -16,7 +16,7 @@ $$
 $$
 
 Cancellation runs in two stages, following the same arrangement used by acoustic echo cancellers:
-complex subtraction removes the predicted accompaniment vector, and a soft mask then suppresses
+complex subtraction removes the predicted backing vector, and a soft mask then suppresses
 whatever the linear stage could not describe cleanly. Writing the prediction as
 $\mathbf{d}=\mathbf{H}\mathbf{x}$, the first stage is
 
@@ -26,7 +26,7 @@ $$
 $$
 
 The second expression constrains the linear stage so that it can only remove energy, never add
-any. The residual still carries accompaniment the transfer could not describe — mostly
+any. The residual still carries backing the transfer could not describe — mostly
 reverberation ringing past the window and residual misalignment — whose size comes from a
 regression of the residual power on the power that was removed (see "Estimating the Leakage") and
 is handed to the linked soft mask:
@@ -248,7 +248,7 @@ system, and the scene that exists to punish a wrong cross-channel orientation is
 ### Estimating the Leakage
 
 What remains correlated after the linear stage is mostly reverberation ringing past the window and
-residual misalignment. The question is how much of the residual is still accompaniment, and it
+residual misalignment. The question is how much of the residual is still backing, and it
 cannot be dodged by looking only at reference-dominant frames: when the live source plays
 throughout, there are no frames where the reference sounds alone, so an intercept-free ratio
 $\rho=P_e/P_d$ measures the live source as leakage and the mask then removes it along with the rest.
@@ -260,7 +260,7 @@ $$
 P_e \approx \rho(f,n)\,P_d(f,n) + c(f,n)
 $$
 
-$\rho P_d$ rises and falls with the accompaniment that was actually there, so it is leakage; the
+$\rho P_d$ rises and falls with the backing that was actually there, so it is leakage; the
 slowly varying $c$ does not, so it is live content, and only the first term may be removed. $\rho$
 is thresholded by a smoothstep on the adjusted correlation the same way, and is bounded by the
 residual it was found in, so one weak-evidence cell cannot drive the mask to the floor.
@@ -302,7 +302,7 @@ never push the mask to the floor, and the mask ratio is formed from powers smoot
 fluctuation before it reaches the mask. The remaining knobs are `_INCOHERENT_OVERSUBTRACTION`,
 `_MASK_FLOOR` and `_MASK_SMOOTHING`; when $\gamma^2$ is only 0.02–0.05
 above 500 Hz there is simply not enough information to decide whether
-a given cell is accompaniment, which is why the smoothstep gate still shuts the path off at low
+a given cell is backing, which is why the smoothstep gate still shuts the path off at low
 confidence.
 
 ### Research Basis and Boundaries
@@ -357,8 +357,8 @@ audience sound.
 
 One cancellation can export two tracks. The vocal is what the pipeline produces; the backing
 track is defined as the stage/live audio minus that vocal, formed by a block-wise subtraction in
-the time domain. That definition buys two things: the backing carries the level the accompaniment
-actually had on stage rather than the level of the song source file, and the two stems add back up
+the time domain. That definition buys two things: the backing carries the level it actually had on
+stage rather than the level of the song source file, and the two stems add back up
 to the original recording exactly - a constructive identity that does not depend on how well
 cancellation worked.
 
