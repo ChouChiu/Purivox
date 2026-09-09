@@ -29,7 +29,8 @@ logger = logging.getLogger(__name__)
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="purivox", description="Vocal and accompaniment separation"
+        prog="purivox",
+        description="Reference-guided vocal isolation for stage and live recordings",
     )
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     parser.add_argument("--selftest", action="store_true", help=argparse.SUPPRESS)
