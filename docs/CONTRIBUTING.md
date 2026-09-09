@@ -185,7 +185,7 @@ QT_QPA_PLATFORM=offscreen uv run --locked pytest tests/benchmarks --runslow
 ### 测试放在哪
 
 `tests/` 与 `src/` 路径一一对应，所以改动的测试就在镜像位置：DSP 与对齐回归在
-`tests/features/reference_removal/`，时间线与匹配在 `full_stage/`，
+`tests/features/reference_removal/`，时间线、匹配与分段渲染也在同一目录，
 运行器与协调器生命周期以及 pytest-qt 的界面测试在 `tests/app/`，
 公共音频、任务协议和控件在 `tests/shared/`。
 
@@ -214,7 +214,7 @@ Linux、Windows 与两个架构的 macOS 产物。质量检查只在 Ubuntu 上�
 
 - **主题**写成 `type(scope): 改了什么`，祈使句、小写、不加句号。在用的类型有 `feat`、`fix`、
   `perf`、`refactor`、`docs`、`ci`、`build`、`chore`；scope 是区域（`dsp`、`ui`、`web`、`audio`、
-  `i18n`、`full-stage`、`settings`、`shared`、`release`），横跨整个仓库的改动可以省略。
+  `i18n`、`isolation`、`settings`、`shared`、`release`），横跨整个仓库的改动可以省略。
 - **正文**用英文散文，按 80 列折行，说明这个改动为什么长这样：问题是什么、哪个约束定了这个设计、
   否决了什么以及为什么。不是把 diff 重述一遍，也不是罗列要点。
 - 一次提交做一件事。翻译改动要带上重新编译的 `.qm`，依赖改动要带上 `uv.lock`。

@@ -5,7 +5,7 @@ PySide6 + PySide6-Fluent-Widgets, AGPL-3.0-or-later. `CLAUDE.md` symlinks here.
 
 This file is the operating manual for anyone changing the code. `README.md` (Chinese) is
 authoritative for users; `README_EN.md` and `docs/en/` are its translations, paired file-for-file.
-The deeper rationale lives in `docs/` — `architecture.md`, `reference-removal.md`, `full-stage.md`,
+The deeper rationale lives in `docs/` — `architecture.md`, `reference-removal.md`, `matching.md`,
 `web.md`, `CONTRIBUTING.md` — each with an English twin. Read this before you edit: most rules below
 exist because skipping one cost someone time.
 
@@ -29,7 +29,7 @@ exist because skipping one cost someone time.
 
 ## The Product
 
-One pipeline, two workflows over it. The GUI, the CLI and the browser build are shells.
+One pipeline, one workflow over it. The GUI, the CLI and the browser build are shells.
 
 Four names mean one thing each, and the UI strings already use them: the **stage/live recording**
 is the file being processed, the **song source** is the released song it is cancelled against, the
@@ -38,29 +38,38 @@ the song source explains, and the second export track.
 
 Backing is not *accompaniment*. The accompaniment is a song's instrumental; the backing is
 whatever of the song source the stage playback actually carried, source vocals included. The code
-uses the same names: `ReferenceJob.stage` is the stage/live recording, `ReferenceJob.source` is the
-song source, and the CLI positionals follow them.
+uses the same names: `IsolationJob.stage` is the stage/live recording, `IsolationJob.sources` are
+the song sources, and the CLI positionals follow them. `ReferenceJob` is only the whole-file
+engine's input, which is why it still names one `stage` and one `source`.
 
-**Reference cancellation** aligns the stage/live recording against the song source (GCC-PHAT plus
+**Reference cancellation** aligns the stage/live recording against a song source (GCC-PHAT plus
 clock-drift tracking), estimates a complex transfer, subtracts the prediction and soft-masks the
 residual. The cancellation result *is* the output; there is no spatial post-processing.
-**MR Remove** (`purivox mr`, the single-song page) runs it on one pair. **Full Stage** runs it on
-the clips a timeline matched inside a continuous stage recording, and only on the enabled ones.
+
+One job takes the recording and one or more song sources, and the only operational difference
+between one source and twenty is how many you add. The sources are matched against the recording
+(`analyze_stage`), and every matched clip is cancelled out of its own stretch of it
+(`render_stage_job`). A lone source about as long as the recording *is* the recording's own content
+and runs the whole-file path instead (`run_reference_job`), which aligns the pair over its whole
+length and corrects a clock difference between them: a capture running at a different tempo is
+exactly what stops the matcher placing the source, so the whole-file path keeps 1–2 dB more
+cancellation depth where it applies, while the matched clips are 2–4 dB better for a song that
+starts inside a longer take. `run_isolation_job` is the one entry point, and the GUI, the CLI and
+the browser bridge all call it.
 
 Neural separation was removed in favour of dedicated tools such as UVR5: it carried onnxruntime,
 58 MB of the packaged binary, for a workflow that does not use a song source at all. Do not bring it
 back.
 
-GUI and CLI are thin shells over `run_reference_job`; full-stage rendering is orchestrated in
-`src/app/full_stage_processing.py`. The **browser build** (`web/`) runs both workflows under Pyodide
-as a static site with no backend (<https://purivox.wwchun.top/>, `docs/web.md`).
+The **browser build** (`web/`) runs the same pipeline under Pyodide as a static site with no
+backend (<https://purivox.wwchun.top/>, `docs/web.md`).
 
 ## Layout
 
 ```text
 src/entrypoints/   cli.py, gui.py — startup only
-src/app/           MainWindow, JobPresenter, JobRunner/worker, full_stage_processing
-src/features/      reference_removal, full_stage, home, settings
+src/app/           MainWindow, JobPresenter, JobRunner/worker
+src/features/      reference_removal, home, settings
 src/shared/        audio/, download/, dsp/, ui/, config, i18n, jobs, logging, processing, progress,
                    branding
 src/web/           bridge.py (JSON in/out), timeline.py, limits.py — sibling of app
@@ -78,29 +87,43 @@ CLI — both need moves down into `shared`: `BLOCK_FRAMES`, `AUDIO_EXTENSIONS`,
 
 | Path | What lives there |
 |---|---|
-| `src/app/` | `main_window.py` (FluentWindow shell: navigation, i18n/theme, auto-find, the window `QShortcut`s), `job_presenter.py` (page and result state), `job_runner.py`/`worker.py` (QThread lifecycle and adapter), `full_stage_processing.py`, `version.py` |
-| `src/features/reference_removal/` | `dsp/algorithms.py` (complex subtraction + residual mask, linked peak protection), `dsp/transfer.py` (smoothed spectra, vectorised LDL^H solve, adjusted multiple coherence), `dsp/alignment.py` (tempo correction + GCC-PHAT + drift tracking + Lanczos warp), `finder.py` (automatic song-source match), `processing.py`, `page.py`, `models.py` |
-| `src/features/full_stage/` | Multi-source fingerprint matching, timeline models, `timeline_model.py` (`QAbstractTableModel` behind the editable timeline, `clip_edited`/`edit_rejected`) |
+| `src/app/` | `main_window.py` (FluentWindow shell: navigation, i18n/theme, the window `QShortcut`s), `job_presenter.py` (page and result state), `job_runner.py`/`worker.py` (QThread lifecycle and adapter), `version.py` |
+| `src/features/reference_removal/` | `dsp/algorithms.py` (complex subtraction + residual mask, linked peak protection), `dsp/transfer.py` (smoothed spectra, vectorised LDL^H solve, adjusted multiple coherence), `dsp/alignment.py` (tempo correction + GCC-PHAT + drift tracking + Lanczos warp), `matching.py` (multi-source fingerprint matching, candidate clustering, manual clip edits), `timeline_model.py` (`QAbstractTableModel` behind the editable timeline, `clip_edited`/`edit_rejected`), `rendering.py` (segmented per-clip render), `processing.py` (both engines and `run_isolation_job`), `models.py`, `page.py`, `preview.py` |
 | `src/features/home/`, `settings/` | Brand and entry cards; language/theme/log level, `updates.py` (GitHub release query + version compare) and `dialog.py`. The app never installs an update — the dialog opens the release page |
-| `src/shared/` (root) | `config.py` (the `cfg` `QConfig`), `i18n.py` (`tr()`, `install_language()`, `SUPPORTED_LANGUAGES`), `jobs.py` (the settings contract behind `ReferenceJob`, `FullStageJob` and the CLI: `SIGMA_CHOICES`, `STRENGTH_RANGE`, `validate_reference_settings`, `OutputTracks`, `planned_outputs`), `logging.py`, `processing.py` (`CancellationToken`, `ProgressEvent`, `ProcessingResult`), `progress.py`, `branding.py` |
+| `src/shared/` (root) | `config.py` (the `cfg` `QConfig`), `i18n.py` (`tr()`, `install_language()`, `SUPPORTED_LANGUAGES`), `jobs.py` (the settings contract behind `ReferenceJob`, `IsolationJob` and the CLI: `SIGMA_CHOICES`, `STRENGTH_RANGE`, `validate_reference_settings`, `OutputTracks`, `planned_outputs`), `logging.py`, `processing.py` (`CancellationToken`, `ProgressEvent`, `ProcessingResult`), `progress.py`, `branding.py` |
 | `src/shared/audio/` | `io.py`: mapped I/O, soxr resample, atomic WAV write, `BLOCK_FRAMES` (262 144), `AUDIO_EXTENSIONS`, `release_mapped_pages()`; `analysis.py`: `AudioStats`, peak/RMS, block-wise `copy_audio`/`subtract_into`, `export_audio` |
 | `src/shared/download/` | `media.py`: the yt-dlp wrapper — `search()` (`ytsearch`, flat), `fetch()` (best audio, `noplaylist` — a watch URL carrying a radio `list` is hundreds of entries — WAV through ffmpeg when it is there, the container as it arrived when it is not, cancellable in extraction through `match_filter` as well as in transfer through the progress hook), `looks_like_url`, `ffmpeg_available`; `cache.py`: the `downloads.json` index under AppLocalData, so a link is fetched once — matched by video id as well as by URL, because the link pasted is rarely the canonical one recorded; `runner.py`: the `QThread` behind one search or download. YouTube Music is link-only — its search answers with channels, not songs |
-| `src/shared/dsp/` | `spectral.py`: librosa-compatible `stft`/`istft` (`n_fft=2048`, `hop=512`) and `log_flux_bands()`, shared by full-stage matching and coarse alignment; `rate.py`: the global tempo scale search both workflows run before matching; `stretch.py`: pitch-preserving WSOLA, numpy/scipy only because Pyodide runs the same pipeline |
-| `src/shared/ui/` | `responsive.py` (`LayoutMode`/`LayoutMetrics`, `ResponsiveColumns`, `FoldingRow`, `allow_shrinking`, `HeightForWidth`, `ElidedLabel`), `cards.py` (`FormCard`, `PageScrollArea`, `format_clock`), `widgets.py` (`SmoothComboBox`, file filters, `normalized_wav_path`), `download_dialog.py` (the fetch dialog both reference pages open, imported in the slot rather than at module scope — yt-dlp is a tenth of a second of startup) |
+| `src/shared/dsp/` | `spectral.py`: librosa-compatible `stft`/`istft` (`n_fft=2048`, `hop=512`) and `log_flux_bands()`, shared by source matching and coarse alignment; `rate.py`: the global tempo scale search the pipeline runs before matching; `stretch.py`: pitch-preserving WSOLA, numpy/scipy only because Pyodide runs the same pipeline |
+| `src/shared/ui/` | `responsive.py` (`LayoutMode`/`LayoutMetrics`, `ResponsiveColumns`, `FoldingRow`, `allow_shrinking`, `HeightForWidth`, `ElidedLabel`), `cards.py` (`FormCard`, `PageScrollArea`, `format_clock`), `widgets.py` (`SmoothComboBox`, file filters, `normalized_wav_path`), `download_dialog.py` (the fetch dialog the page opens, imported in the slot rather than at module scope — yt-dlp is a tenth of a second of startup) |
 | `src/resources/` | `i18n/{zh_cn,zh_tw,en_us,ja_jp,ko_kr}.{ts,qm}`, `purivox.svg`, `resource_path` |
 | `web/scripts/` | `build-python-archive.mjs` (packs `src/` for Pyodide), `build-i18n.mjs`, `build-assets.mjs`, `check-architecture.mjs`. Never a second implementation of the DSP |
 | `tests/`, `docs/` | Tests mirror `src/` path-for-path, `benchmarks/` behind `--runslow`; Chinese docs with one translation per file in `docs/en/` |
-| `deployment/`, `tools/` | Nuitka entry shim + `.deb`/`.rpm` packaging; `eval_cancellation.py` (DSP A/B), `bench_pipeline.py` (per-phase wall time and peak RSS) |
+| `deployment/`, `tools/` | Nuitka entry shim + `.deb`/`.rpm` packaging; `eval_cancellation.py` (DSP A/B), `eval_isolation.py` (pipeline engine A/B), `bench_pipeline.py` (per-phase wall time and peak RSS) |
 
 ## Pipelines
 
-**Reference** (`features/reference_removal/processing.py`): `read_audio` (SoundFile, Qt Multimedia
-fallback) → upmix to stereo → resample the song source to the stage recording's rate (soxr) →
-optional `align_audio` → `process_audio` (blocks from the spectral-cell budget, ~45 s at 44.1 kHz,
-≥2 s overlap, cos²/sin² crossfade) → peak/RMS stats → atomic WAV at the stage recording's own rate
-and bit depth. `process_audio` has
-a pooled and an inline schedule because Pyodide has no pthreads; `test_dsp_execution.py` holds them
-to the same output.
+**One pipeline, two engines.** `features/reference_removal/processing.py:run_isolation_job` matches
+the sources against the recording, then picks the engine by geometry: a lone source about as long as
+the recording (within a second) is the recording's own content and runs the whole-file engine;
+anything else runs the segmented engine over the clips the matcher placed. Nothing matched with one
+source falls back to the whole-file engine; nothing matched with several is an error, because
+cancelling a whole show against one song removes the wrong content. A timeline the user checked is
+rendered as it stands — an edited timeline is a decision, an untouched one leaves the engine to the
+geometry.
+
+**Whole-file** (`run_reference_job`): `read_audio` (SoundFile, Qt Multimedia fallback) → upmix to
+stereo → resample the song source to the stage recording's rate (soxr) → optional `align_audio` →
+`process_audio` (blocks from the spectral-cell budget, ~45 s at 44.1 kHz, ≥2 s overlap, cos²/sin²
+crossfade) → peak/RMS stats → atomic WAV at the stage recording's own rate and bit depth.
+`process_audio` has a pooled and an inline schedule because Pyodide has no pthreads;
+`test_dsp_execution.py` holds them to the same output.
+
+**Segmented** (`render_stage_job`): the recording is read once into the output buffer, then each
+enabled clip reads and resamples its source, stretches it by the clip's tempo ratio, aligns the
+slice (drift tracking, gated by a direct 2x2 fit that keeps the matcher's position when alignment
+would make it worse), cancels with `process_audio` and blends the result in over a 50 ms crossfade.
+Ranges no clip covers are copied through untouched, so the backing track is silent exactly where
+nothing was cancelled.
 
 **Job lifecycle**: a page emits `start_requested`/`cancel_requested`; `MainWindow` builds the job
 dataclass and hands it to `JobPresenter`, which owns page and result state and delegates to
@@ -132,7 +155,7 @@ and cancels the token on SIGINT.
   use are all tested. `zh_tw` is Taiwanese usage, not a character conversion of `zh_cn`
   (檔案/取樣率/辨識, not 文件/采样率/识别); a test pins a few of those terms.
 - Search the catalogues before inventing a string: the desktop already named most states
-  (`warn_no_song`, `stage_need_sources`, `preview_empty`, the whole `home_*` set), and reuse keeps
+  (`warn_no_source`, `stage_need_sources`, `preview_empty`, the whole `home_*` set), and reuse keeps
   five locales correct for free.
 - Progress carries its key and values alongside the translated text (`shared/progress.py`), because
   the browser build runs the same pipelines without Qt and translates on the page.
@@ -156,8 +179,8 @@ and cancels the token on SIGINT.
 ### Desktop UI
 
 - Shortcuts (`Ctrl+O`, `Ctrl+Return`, `F5`, `Esc`, `Ctrl+P`) live on `MainWindow` and dispatch to
-  `current_page()`, never on a page — three page-local `Ctrl+O` bindings would be ambiguous, and a
-  window shortcut works before a page takes focus. `_apply_shortcut_hints()` appends each binding to
+  `current_page()`, never on a page — page-local bindings would be ambiguous, and a window shortcut
+  works before a page takes focus. `_apply_shortcut_hints()` appends each binding to
   its button's tooltip, so no shortcut needs a translation key.
 - Four `LayoutMode`s by page width: `PORTRAIT` < 620 stacks label over control, `HALF` < 960 and
   `LANDSCAPE` < 1440 stay one column, `ULTRAWIDE` ≥ 1440 splits into two lanes at
@@ -174,9 +197,9 @@ and cancels the token on SIGINT.
   It shares the status line and is reserved the width of `00:00.000`, so it cannot re-elide the
   text beside it as the tenths tick; `format_clock(seconds, millis=True)` is the one formatter,
   and the preview readout keeps the whole-second form of it.
-- Files arrive through `QFileDialog` only, funnelled into one method per page (`set_song`,
-  `set_stage`, `add_source_paths`) that also does the follow-up — a default output name, an
-  invalidated analysis.
+- Files arrive through `QFileDialog` only, funnelled into one method per input (`set_stage`,
+  `add_source_paths`) that also does the follow-up — a default output name, an invalidated
+  analysis.
 - No tooltips on transport controls: a Fluent `Tooltip` opens on keyboard focus, not just hover, so
   it covers what is above the button every time it is tabbed to. Put the word on the button.
 
@@ -197,9 +220,8 @@ and cancels the token on SIGINT.
 
 ### Front end (`web/`)
 
-- `MrPage` and `FullStagePage` stay mounted and hide with `hidden`; unmounting stops a preview
-  mid-play and discards a finished result or a running job. Since every page is mounted at once,
-  window-scoped behaviour gates on the `active` prop.
+- The working page stays mounted and hides with `hidden`; unmounting stops a preview mid-play and
+  discards a finished result or a running job. Window-scoped behaviour gates on the `active` prop.
 - Window shortcuts (`Ctrl+O`/`Ctrl+Enter`/`Esc`/`F5`) live in `shared/runtime/shortcuts.ts` and are
   bound by `app/App.tsx`, never by a page, which registers through `onBind` — the rule `MainWindow`
   follows. Breakpoints mirror the desktop (620px = `PORTRAIT`).
@@ -232,7 +254,7 @@ entry the next run needed.
 uv sync --locked
 
 uv run --locked purivox                            # GUI
-uv run --locked purivox mr <stage> <source> <out.wav> --strength 75 --sigma 8 --align --lang zh_cn
+uv run --locked purivox mr <stage> <source>... <out.wav> --strength 75 --sigma 8 --align --lang zh_cn
 uv run --locked purivox fetch <link>                # or: <keywords> [--limit N] [--pick N]
 uv run --locked purivox fetch --list                # what has been downloaded
 uv run --locked purivox --selftest                 # pipeline smoke, offscreen-safe
@@ -240,6 +262,10 @@ uv run --locked purivox --selftest                 # pipeline smoke, offscreen-s
 # DSP A/B across a change
 uv run --locked python tools/eval_cancellation.py --save baseline.json
 uv run --locked python tools/eval_cancellation.py --compare baseline.json
+
+# pipeline A/B: both engines over the same scenes, so the geometry rule stays honest
+uv run --locked python tools/eval_isolation.py --save isolation-baseline.json
+uv run --locked python tools/eval_isolation.py --compare isolation-baseline.json
 
 # what one job costs, phase by phase, with peak RSS
 uv run --locked python tools/bench_pipeline.py --save bench-baseline.json
@@ -273,18 +299,19 @@ Language keys: `zh_cn`, `zh_tw`, `en_us`, `ja_jp`, `ko_kr`.
 - Offscreen is mandatory (conftest sets it); `slow` tests are auto-skipped unless `--runslow`, which
   runs the 15-minute 44.1 kHz stereo benchmark (`tests/benchmarks/test_long_audio.py`: seam
   smoothness, peak RSS ≤ 2 GiB).
-- `tests/` mirrors `src/` path-for-path, so a change's tests are at the mirrored path: DSP and
-  alignment regressions under `tests/features/reference_removal/`, timeline and matching under
-  `full_stage/`, runner and presenter lifecycles and the pytest-qt GUI/layout tests under
-  `tests/app/`, the browser shell's JSON contract and Qt-free imports under `tests/web/`.
+- `tests/` mirrors `src/` path-for-path, so a change's tests are at the mirrored path: DSP,
+  alignment, matching, timeline and render regressions under `tests/features/reference_removal/`,
+  runner and presenter lifecycles and the pytest-qt GUI/layout tests under `tests/app/`, the browser
+  shell's JSON contract and Qt-free imports under `tests/web/`.
 - Three repository-wide gates: `test_architecture.py` (import boundaries), `test_packaging.py`
   (shipped-source roster, compiled catalogues), `test_documentation.py` (README index, doc
   translation pairing, internal links).
 - No test reaches a real host — the update tests repoint `updates.RELEASES_API` at a localhost
   server.
 - DSP changes are accepted on measurement, not argument: run `purivox --selftest` and
-  `tools/eval_cancellation.py --compare` before committing, and `tools/bench_pipeline.py --compare`
-  to show what the change bought. Synthetic metrics are regression evidence only and claim nothing
+  `tools/eval_cancellation.py --compare` before committing, `tools/eval_isolation.py --compare`
+  when the change touches which engine runs, and `tools/bench_pipeline.py --compare` to show what
+  the change bought. Synthetic metrics are regression evidence only and claim nothing
   about real music. `docs/reference-removal.md` documents the algorithm as it stands — no
   before/after, no trade-off tables.
 
@@ -292,8 +319,9 @@ Language keys: `zh_cn`, `zh_tw`, `en_us`, `ja_jp`, `ko_kr`.
 
 - `ruff check` and `ruff format --check` are clean, and `pytest` passes.
 - The new behaviour has a test at the mirrored path, or a reason why it cannot.
-- A DSP change carries an `eval_cancellation.py --compare` delta; a performance change carries a
-  `bench_pipeline.py --compare` delta.
+- A DSP change carries an `eval_cancellation.py --compare` delta, a change to the engine choice an
+  `eval_isolation.py --compare` delta, and a performance change a `bench_pipeline.py --compare`
+  delta.
 - A UI change was looked at in `PORTRAIT` and `ULTRAWIDE`, not only at the default window size.
 - A new or reworded string exists in all five `.ts` files, and both `.qm` files were recompiled.
 - A new source directory is registered in the three packaging lists.
@@ -319,7 +347,7 @@ Rule 15 first: none of this happens until you are asked. When you are:
   work that was asked for as a branch or a pull request.
 - Subject: `type(scope): what changed`, imperative and lower case, no trailing period. Types in use
   are `feat`, `fix`, `perf`, `refactor`, `docs`, `ci`, `build`, `chore`; the scope is the area
-  (`dsp`, `ui`, `web`, `audio`, `i18n`, `full-stage`, `settings`, `shared`, `release`) and may be
+  (`dsp`, `ui`, `web`, `audio`, `i18n`, `isolation`, `settings`, `shared`, `release`) and may be
   dropped for a change that spans the repository.
 - Body: prose wrapped at 80 columns, in English, explaining why the change looks like this — the
   problem, the constraint that decided the design, what was rejected and why. Not a restatement of

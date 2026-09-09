@@ -216,9 +216,9 @@ Synthetic metrics exist to catch implementation regressions and claim nothing ab
 ### Where Tests Go
 
 `tests/` mirrors `src/` path for path, so a change's tests are at the mirrored location: DSP and
-alignment regressions under `tests/features/reference_removal/`, timeline and matching under
-`full_stage/`, runner and presenter lifecycles and the pytest-qt interface tests under
-`tests/app/`, and shared audio, job contracts, and widgets under `tests/shared/`.
+alignment regressions, the timeline, matching and the segmented render under
+`tests/features/reference_removal/`, runner and presenter lifecycles and the pytest-qt interface
+tests under `tests/app/`, and shared audio, job contracts, and widgets under `tests/shared/`.
 
 Pytest uses the `importlib` import mode, so different directories may reuse the test file name that
 matches their source without a module collision. Three repository-wide gates sit alongside:
@@ -250,7 +250,7 @@ the 10 GB quota then evicts the entry the next run needed.
 
 - The **subject** is `type(scope): what changed` — imperative, lower case, no trailing period. The
   types in use are `feat`, `fix`, `perf`, `refactor`, `docs`, `ci`, `build`, and `chore`; the scope
-  is the area (`dsp`, `ui`, `web`, `audio`, `i18n`, `full-stage`, `settings`, `shared`, `release`)
+  is the area (`dsp`, `ui`, `web`, `audio`, `i18n`, `isolation`, `settings`, `shared`, `release`)
   and may be dropped for a change that spans the repository.
 - The **body** is English prose wrapped at 80 columns explaining why the change looks like this:
   the problem, the constraint that decided the design, what was rejected and why. Not a restatement

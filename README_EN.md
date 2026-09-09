@@ -9,12 +9,13 @@ never leaves your own tab.
 
 Purivox is a vocal isolation tool for stage and live recordings, available as a desktop
 application and in the browser, built with Python, PySide6, and PySide6-Fluent-Widgets. Its core
-MR Remove feature provides two workflows:
+MR Remove feature is one workflow: provide a stage/live recording and add its song sources.
 
-- **Single**: provide a stage/live recording and the corresponding song source. Purivox
-  automatically synchronizes them and isolates the live vocals.
-- **Full Stage**: provide a continuous stage/live recording and multiple song sources. Purivox
-  identifies where each song occurs and isolates the live vocals in each matched segment.
+- **One source**: Purivox aligns and cancels that song directly. When the source is as long as
+  the recording, it corrects a speed difference between the two over the whole length; when it
+  covers only part of the recording, it works at the position it matched.
+- **Several sources**: Purivox first locates each song in the recording, then cancels the live
+  vocals in each matched segment. File order does not affect matching.
 
 Vocal Isolation removes only content that can be explained by the song source. It is therefore
 designed to preserve live vocals, speech, cheering, and ambient sound that are absent from that
@@ -31,8 +32,8 @@ reference cancellation.
 - Instant switching among Chinese, English, Japanese, and Korean interfaces
 - Global tempo detection with pitch-preserving stretching, time alignment, local clock-drift
   tracking, and coherent reference cancellation
-- Song identification, repeated-segment detection, and editable processing ranges for full-stage
-  recordings
+- Song identification for several sources, repeated-segment detection, and editable processing
+  ranges
 - Chunked long-audio processing, task cancellation, and atomic output writes
 - Exports keep the input file's sample rate and bit depth, never upsampled to hit a format
 - In-app result preview and audio statistics
@@ -50,7 +51,7 @@ reference cancellation.
 
 If you would rather not install anything, the [browser build](https://purivox.wwchun.top/)
 runs the same pipelines. A long enough
-stage recording is refused there because a browser tab has a memory ceiling. See
+recording is refused there because a browser tab has a memory ceiling. See
 [Browser Build (WebAssembly)](docs/en/web.md) for the details.
 
 The desktop application can be downloaded from the
@@ -80,41 +81,33 @@ uv run --locked purivox
 
 ## Using the Graphical Interface
 
-### Single
+### Vocal Isolation
 
-1. Open **Vocal Isolation** and select **Single**.
-2. Select the stage/live audio to process and the corresponding song source.
-3. Alignment runs automatically. Start with the default removal strength of 75%; the graphical
-   interface uses a fixed statistical window.
-4. Under **Export**, choose which stems to save: the vocal only, the backing track only, or
+1. Open **Vocal Isolation** and select the stage/live recording to process.
+2. Add the song sources the recording may contain: one source cancels that song, several are
+   located in the recording first, and file order does not affect matching.
+3. With several sources, click **Find songs**, then inspect full songs, short segments,
+   unidentified ranges, and match confidence.
+4. If necessary, double-click to edit recording times or source ranges, or clear the checkbox for
+   a segment that should not be processed.
+5. Under **Export**, choose which stems to save: the vocal only, the backing track only, or
    both. The backing track is the stage/live audio minus the vocal, so it carries the level it
    actually had on stage, and the two stems add back up to the original recording.
-5. Preview the result before adjusting the strength. If you hear obvious pumping or thinning of
-   the live vocal, reduce the strength or confirm that the song source is correct.
+6. Confirm the output location and the processing options, then start. Preview the result before
+   adjusting the strength. If you hear obvious pumping or thinning of the live vocal, reduce the
+   strength or confirm that the song source is correct.
 
 Use a song source that matches the version played at the venue as closely as possible. Different
 masters, edits, speeds, keys, or extra content will reduce removal quality.
 
-### Full Stage
-
-1. Select **Full Stage** under **Vocal Isolation**, then load the continuous stage/live
-   recording.
-2. Add song sources that may occur in the recording. Their file order does not affect matching.
-3. Click **Find songs**, then inspect full songs, short segments, unidentified ranges,
-   and match confidence.
-4. If necessary, double-click to edit recording times or source ranges, or clear the checkbox for
-   a segment that should not be processed.
-5. Confirm the output location, the export choice, and the processing options, then process
-   the full recording.
-
 Unidentified ranges retain their original content and duration. Inter-song speech, audience
-interaction, advertisements, and empty-stage audio are not removed automatically. Full-stage
-processing is currently available only in the graphical interface.
+interaction, advertisements, and empty-stage audio are not removed automatically. The command line
+accepts one song source; use the graphical interface or the browser build to process several at
+once.
 
 ### Fetching a Source from a Link
 
-Both file rows on the Single page, and the stage audio and source list on the Full Stage page,
-carry a **Fetch** button:
+The stage-recording row and the source list carry a **Fetch** button:
 
 1. Paste a YouTube or YouTube Music link to download it directly, or type keywords to search
    YouTube and double-click a result. YouTube Music is link-only: its search does not answer
@@ -124,7 +117,7 @@ carry a **Fetch** button:
    own, say — is still recognised as the same track.
 3. A link carrying a playlist yields the one track it points at, not the whole list.
 4. Select an entry and press **Use selected** to put the file in the field that asked for it.
-   The full-stage source list accepts more than one at a time.
+   The source list accepts more than one at a time.
 
 With ffmpeg installed the download is converted to WAV; without it the original container is
 kept — usually WebM/Opus — and Qt Multimedia decodes it, so the pipelines read either one.
@@ -188,8 +181,8 @@ On success the file path is printed to standard output, ready to hand to `purivo
 
 - libsndfile natively supports formats including WAV, FLAC, and OGG. Other formats supported by
   the system decoder are read through Qt Multimedia when possible.
-- MR Remove and Full Stage process at the stage/live audio's original sample rate throughout, and
-  export at that same rate.
+- MR Remove processes at the stage/live audio's original sample rate throughout, and
+  exports at that same rate.
 - Every exported PCM WAV keeps the input file's sample rate and bit depth: an 8- or 16-bit PCM
   input is written at 16 bits, and wider 24-/32-bit PCM, float and every lossy format at 24.
   Upsampling cannot create spectral detail absent from the input and only enlarges the file, so
@@ -207,7 +200,7 @@ Architecture, algorithms, testing, and release information are available in
 
 - [Architecture and Data Flow](docs/en/architecture.md)
 - [Reference Cancellation](docs/en/reference-removal.md)
-- [Full Stage Processing](docs/en/full-stage.md)
+- [Source Matching, the Timeline, and Segmented Rendering](docs/en/matching.md)
 - [Browser Build (WebAssembly)](docs/en/web.md)
 - [Contributing](docs/en/CONTRIBUTING.md)
 

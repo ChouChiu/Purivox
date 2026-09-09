@@ -15,8 +15,7 @@ to end and is never uploaded anywhere.
 
 | Feature | Browser | Why |
 |---|---|---|
-| Single vocal isolation | ✅ | `run_reference_job` carries no Qt |
-| Full stage (matching, timeline, render) | ✅ | `analyze_full_stage_job` / `run_full_stage_job` carry no Qt |
+| Vocal isolation (matching, timeline, both engines) | ✅ | `run_isolation_job` carries no Qt |
 
 There is one copy of the algorithm. The browser runs the desktop's own `src/features/**`, packed
 into `purivox-src.zip` at build time; there is no second TypeScript implementation.
@@ -30,15 +29,17 @@ flowchart TD
     pyodide -->|loadPackage| deps["numpy · scipy · soundfile · soxr"]
     pyodide -->|unpackArchive| sources["purivox-src.zip = the Python tree from src/"]
     sources --> bridge["web/bridge.py"]
-    bridge --> pipelines["run_reference_job<br/>analyze_full_stage_job<br/>run_full_stage_job"]
+    bridge --> pipelines["run_isolation_job<br/>analyze_stage<br/>render_stage_job<br/>run_reference_job"]
 ```
 
-- `src/web/bridge.py` is the JavaScript-facing job entry point: **JSON in, JSON out**. Handing a
-  dict across would give the page a proxy it must `destroy()` by hand, and a progress callback
-  fires often enough that one leaked proxy per update matters.
+- `src/web/bridge.py` is the JavaScript-facing job entry point: **JSON in, JSON out**, exporting
+  `probe_audio`, `estimate_isolation`, `analyze_stage`, `run_isolation`, `add_timeline_clip`,
+  `remove_timeline_clip` and `edit_timeline_clip`. Handing a dict across would give the page a proxy
+  it must `destroy()` by hand, and a progress callback fires often enough that one leaked proxy per
+  update matters.
 - `src/web/timeline.py` serialises the timeline. Inserting and removing clips calls
-  `add_manual_clip` / `remove_manual_clip` in `features.full_stage.matching` directly, so the page
-  edits under the same rules the GUI's `TimelineModel` does.
+  `add_manual_clip` / `remove_manual_clip` in `features.reference_removal.matching` directly, so the
+  page edits under the same rules the GUI's `TimelineModel` does.
 - `src/web/limits.py` estimates the memory budget; see below.
 - `web/` is the Vite + React front end, whose `bun run build` output deploys as-is. It is
   organised by feature, mirroring the Python tree.
@@ -53,8 +54,7 @@ web/src/
   app/App.tsx                    the shell: navigation, theme, runtime wiring
                                  (the counterpart of src/app/main_window.py)
   features/
-    reference_removal/           MrPage.tsx, job.ts
-    full_stage/                  FullStagePage.tsx, Timeline.tsx, clock.ts, job.ts
+    reference_removal/           MrPage.tsx, Timeline.tsx, clock.ts, job.ts
     settings/                    SettingsPage.tsx
   shared/                        depends on neither app nor features
     runtime/                     PurivoxClient, the worker protocol, useClient, useJob, types
@@ -68,10 +68,10 @@ agreed: `scripts/check-architecture.mjs` parses imports and requires that `share
 `app` nor `features`, that no feature import another, and that `app` not import the entry point. It
 runs alongside `tsc` and Biome under `bun run check`.
 
-The split is visible in the code: the full-stage timeline's `clock.ts` carries milliseconds because
+The split is visible in the code: the timeline's `clock.ts` carries milliseconds because
 its ranges are editable, while the result card's duration label does not and lives in
 `shared/ui/duration.ts`. The desktop divides them the same way — the first is `clock()` in
-`full_stage/timeline_model.py`, the second the private `_clock()` in `reference_removal/page.py`.
+`reference_removal/timeline_model.py`, the second the private `_clock()` in `reference_removal/page.py`.
 
 ## Changes made for a build with no Qt and no threads
 
@@ -90,7 +90,7 @@ scope by `shared/progress.py`, which every pipeline uses through `report_progres
 - `create_pcm_audio` and `resample_audio` allocate on the heap here rather than through a temporary
   file and `np.memmap`. Emscripten's filesystem keeps a file's contents in a JavaScript-side array
   that `mmap` cannot alias into the wasm heap, so it allocates a second region and copies — which
-  makes a mapped buffer cost two of everything it holds. Measured over one three-minute single-song
+  makes a mapped buffer cost two of everything it holds. Measured over one three-minute whole-file
   job: the mapped build held 190,512,000 bytes under `/tmp`, exactly its three full-length buffers,
   while both builds used the same wasm heap. Allocating on the heap simply removes that copy.
 - `release_mapped_pages` became best-effort. There is no mapping left to release on the browser
@@ -126,16 +126,16 @@ through memory over and over. Measured on a 151 MB file, 1.5 seconds became 0.5.
 
 `Ctrl+O` chooses files, `Ctrl+Enter` starts,
 `Esc` cancels, `F5` finds songs and `Ctrl+P` toggles the preview, matching the desktop — and for
-the desktop's reason: three page-local `Ctrl+O` bindings would be an ambiguous overload, and a
+the desktop's reason: page-local `Ctrl+O` bindings would be an ambiguous overload, and a
 window shortcut works before a page has taken focus. While a time
 range is being edited, `Esc` and `Enter` belong to the input.
 
 ### The interface reuses the vocabulary the desktop already settled on
 
 The home page, the specific message when an input is missing ("Choose the stage / live audio
-first." rather than only greying out Start), the match summary, the empty preview state and the
-switch's on/off words all come from keys that have been in the `.ts` catalogues all along and that
-the browser build simply was not using. The brand mark is not a redrawing either:
+first." rather than only greying out Start), the match summary and the empty preview state all
+come from keys that have been in the `.ts` catalogues all along and that the browser build simply
+was not using. The brand mark is not a redrawing either:
 `scripts/build-assets.mjs` copies the desktop's `src/resources/purivox.svg` into the site's favicon
 and header mark, so there is one source for it.
 
@@ -178,7 +178,7 @@ to press.
 ### There is no code splitting
 
 The bundle is 560 KB of JavaScript, 160 KB gzipped, which is not
-the bottleneck next to 23 MB of Pyodide. Splitting the three pages into async chunks would buy a
+the bottleneck next to 23 MB of Pyodide. Splitting the pages into async chunks would buy a
 saving the visitor cannot perceive, at the cost of another loading state.
 
 ## The memory ceiling
@@ -192,10 +192,12 @@ file.
 2.6 GB - 4 GB less room for the interpreter, numpy/scipy and allocator fragmentation:
 
 ```text
-single:  input bytes + song buffer + reference buffer + max(the two) + export + DSP working set
-stage:   input bytes + 2 x stage buffer + 3 x longest source buffer + export + DSP working set
-where:   buffer bytes = channels(2) x sample rate x 4 x seconds
-         export bytes = channels(2) x sample rate x 3 x seconds, only when both stems are written
+render:     input bytes + 2 x stage buffer + 4 x longest source buffer + export + DSP working set
+whole file: input bytes + stage buffer + 2 x source buffer + max(stage, source) + export
+            + DSP working set
+estimate:   the larger of the two, because which path runs depends on the material
+where:      buffer bytes = channels(2) x sample rate x 4 x seconds
+            export bytes = channels(2) x sample rate x 3 x seconds, only when both stems are written
 ```
 
 Exporting the backing track costs no extra buffer of its own - the subtraction overwrites the same
@@ -203,10 +205,11 @@ memory. What is charged is the first WAV staying in the Emscripten filesystem wh
 written, because that filesystem is the same heap.
 
 A job over the budget is refused outright, pointing at the desktop app; past 60% it warns. At
-44.1 kHz stereo that works out at roughly 60 minutes for a stage recording and 30 for a single
-song. The formula uses the real sample rate, so 48 kHz and 96 kHz material tightens automatically.
+44.1 kHz stereo that works out at roughly 35 minutes of stage recording; a longer source lowers the
+ceiling, and a source as long as the recording gives about 17 minutes. The formula uses the real
+sample rate, so 48 kHz and 96 kHz material tightens automatically.
 
-Matching is not affected: `analyze_full_stage` calls `cleanup()` on the stage recording as soon as
+Matching is not affected: `analyze_stage` calls `cleanup()` on the stage recording as soon as
 it has read it and keeps only the downsampled proxy. The render is the memory-hungry step, because
 it holds the stage and a full-length output at the same time.
 

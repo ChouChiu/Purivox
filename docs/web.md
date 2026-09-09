@@ -14,8 +14,7 @@
 
 | 功能 | 浏览器版 | 原因 |
 |---|---|---|
-| 单曲垫音消除 | ✅ | `run_reference_job` 不含 Qt |
-| 整场垫音消除（识别 + 时间线 + 渲染） | ✅ | `analyze_full_stage_job` / `run_full_stage_job` 不含 Qt |
+| 垫音消除（匹配 + 时间线 + 两个引擎） | ✅ | `run_isolation_job` 与两个引擎都不含 Qt |
 
 算法只有一份源码。浏览器跑的就是桌面版的 `src/features/**`，构建时打包进
 `purivox-src.zip`，不存在第二套 TypeScript 实现。
@@ -29,13 +28,15 @@ flowchart TD
     pyodide -->|loadPackage| deps["numpy · scipy · soundfile · soxr"]
     pyodide -->|unpackArchive| sources["purivox-src.zip = src/ 的 Python 树"]
     sources --> bridge["web/bridge.py"]
-    bridge --> pipelines["run_reference_job<br/>analyze_full_stage_job<br/>run_full_stage_job"]
+    bridge --> pipelines["run_isolation_job<br/>analyze_stage<br/>render_stage_job<br/>run_reference_job"]
 ```
 
-- `src/web/bridge.py`：面向 JavaScript 的作业入口，**JSON 进、JSON 出**。用 dict 会让 Pyodide
+- `src/web/bridge.py`：面向 JavaScript 的作业入口，**JSON 进、JSON 出**，导出
+  `probe_audio`、`estimate_isolation`、`analyze_stage`、`run_isolation`、
+  `add_timeline_clip`、`remove_timeline_clip`、`edit_timeline_clip`。用 dict 会让 Pyodide
   交给页面一个需要手动 `destroy()` 的代理，而进度回调触发得足够频繁，每次泄漏一个代理就是问题。
 - `src/web/timeline.py`：时间线的序列化。增删片段直接调用
-  `features.full_stage.matching` 里的 `add_manual_clip` / `remove_manual_clip`，
+  `features.reference_removal.matching` 里的 `add_manual_clip` / `remove_manual_clip`，
   和 GUI 的 `TimelineModel` 走同一套规则。
 - `src/web/limits.py`：内存预算估算，见下文。
 - `web/`：Vite + React 前端，`bun run build` 的产物即可直接部署；按功能划分，与 Python 端同构。
@@ -49,8 +50,7 @@ web/src/
   main.tsx                       入口
   app/App.tsx                    外壳：导航、主题、运行时装配（对应 src/app/main_window.py）
   features/
-    reference_removal/           MrPage.tsx、job.ts
-    full_stage/                  FullStagePage.tsx、Timeline.tsx、clock.ts、job.ts
+    reference_removal/           MrPage.tsx、Timeline.tsx、clock.ts、job.ts
     settings/                    SettingsPage.tsx
   shared/                        不依赖 app 与 features
     runtime/                     PurivoxClient、worker 协议、useClient、useJob、types
@@ -63,9 +63,9 @@ web/src/
 `scripts/check-architecture.mjs` 解析 import，要求 `shared` 不得导入 `app` 或 `features`、
 功能之间不得互相导入、`app` 不得导入入口。它与 `tsc`、Biome 一起挂在 `bun run check` 上。
 
-划分依据是看得见的：整场时间线的 `clock.ts` 带毫秒，因为时间范围要可编辑；
+划分依据是看得见的：时间线的 `clock.ts` 带毫秒，因为时间范围要可编辑；
 结果卡片的时长标签不带毫秒，住在 `shared/ui/duration.ts`。桌面端本来就是这样分的——
-前者是 `full_stage/timeline_model.py` 的 `clock()`，后者是 `reference_removal/page.py`
+前者是 `reference_removal/timeline_model.py` 的 `clock()`，后者是 `reference_removal/page.py`
 的私有 `_clock()`。
 
 ## 为无 Qt、无线程环境所做的改动
@@ -82,7 +82,7 @@ web/src/
   （`tests/features/reference_removal/test_dsp_execution.py`）。
 - `create_pcm_audio` 与 `resample_audio` 在这里直接在堆上分配，不再经过临时文件和 `np.memmap`。
   Emscripten 的文件系统把内容存在 JavaScript 侧的数组里，`mmap` 没法把它别名到 wasm 堆上，
-  只能另外分配一块再复制进去——一个映射缓冲区因此要占两份。实测一次三分钟的单曲任务：
+  只能另外分配一块再复制进去——一个映射缓冲区因此要占两份。实测一次三分钟的整文件任务：
   映射版本在 `/tmp` 里同时压着 190,512,000 字节，正好是三个全长缓冲，而两个版本的 wasm
   堆占用一模一样；改成堆上分配之后，那一份直接不存在了。
 - `release_mapped_pages` 改为“尽力而为”。浏览器路径上已经没有映射可放；就算有，
@@ -114,7 +114,7 @@ soundfile 0.7 + soxr 0.1，实测压缩后体积）。Pyodide 的 lock 文件里
 
 `Ctrl+O` 选择文件、`Ctrl+Enter` 开始、`Esc` 取消、
 `F5` 识别歌曲、`Ctrl+P` 试听播放 / 暂停，和桌面版一致。
-理由也和桌面版相同：三个页面各自绑 `Ctrl+O` 会互相打架，
+理由也和桌面版相同：页面各自绑 `Ctrl+O` 会互相打架，
 而窗口级快捷键在页面拿到焦点之前就能用。正在编辑时间范围时 `Esc` 和 `Enter` 归输入框，
 不会误触发。
 
@@ -122,7 +122,7 @@ soundfile 0.7 + soxr 0.1，实测压缩后体积）。Pyodide 的 lock 文件里
 
 首页、缺少输入时的具体提示
 （“请先选择舞台 / 现场音频。”而不是只把按钮灰掉）、识别结果摘要、试听空状态、
-开关的开 / 关文字，用的都是 `.ts` 里早就存在、web 端一直闲置的词条。
+匹配摘要与空试听状态，用的都是 `.ts` 里早就存在、web 端一直闲置的词条。
 品牌图标也不是重画的：`scripts/build-assets.mjs` 把桌面版的
 `src/resources/purivox.svg` 复制成站点的 favicon 和页眉标识，只有一份源。
 
@@ -148,7 +148,7 @@ soundfile 0.7 + soxr 0.1，实测压缩后体积）。Pyodide 的 lock 文件里
 
 这修的是一个真 bug：之前切换标签会卸载页面，
 正在播放的试听被打断，已完成的结果和正在跑的任务一起丢掉——用户换个标签并没有要求这些。
-代价是三个页面同时挂载，所以快捷键的绑定要靠 `active` 判断谁在前台，否则后挂载的页面会抢走。
+代价是页面同时挂载，所以快捷键的绑定要靠 `active` 判断谁在前台，否则后挂载的页面会抢走。
 
 ### 响应式按桌面版的断点走
 
@@ -159,7 +159,7 @@ soundfile 0.7 + soxr 0.1，实测压缩后体积）。Pyodide 的 lock 文件里
 ### 没有做代码分割
 
 打包后 JS 是 560 KB（gzip 160 KB），相对 23 MB 的 Pyodide
-不是瓶颈；把三个页面拆成异步块只会换来用户感觉不到的收益和一层额外的加载状态。
+不是瓶颈；把页面拆成异步块只会换来用户感觉不到的收益和一层额外的加载状态。
 
 ## 内存上限
 
@@ -171,8 +171,9 @@ wasm32 的堆上限是 4 GB，而 Emscripten 的文件系统住在同一个标�
 （4 GB 减去解释器、numpy/scipy 与内存碎片的余量）：
 
 ```text
-单曲：  输入字节 + 歌曲缓冲 + 参考缓冲 + max(两者) + 导出字节 + DSP 工作集
-整场：  输入字节 + 2 × 舞台缓冲 + 3 × 最长音源缓冲 + 导出字节 + DSP 工作集
+分段渲染：输入字节 + 2 × 舞台缓冲 + 4 × 最长音源缓冲 + 导出字节 + DSP 工作集
+整文件：  输入字节 + 舞台缓冲 + 2 × 音源缓冲 + max(舞台, 音源) + 导出字节 + DSP 工作集
+取两者较大值，因为跑哪条路径取决于素材
 其中：  缓冲字节 = 声道数(2) × 采样率 × 4 × 秒数
        导出字节 = 声道数(2) × 采样率 × 3 × 秒数，仅在同时导出消音与垫音时计入
 ```
@@ -181,10 +182,10 @@ wasm32 的堆上限是 4 GB，而 Emscripten 的文件系统住在同一个标�
 Emscripten 文件系统里的那份，而那个文件系统就是同一块堆。
 
 超出预算的任务会被直接拒绝并提示改用桌面版，到 60% 时给出警告。
-44.1 kHz 立体声下这大致对应整场约 60 分钟、单曲约 30 分钟；
+44.1 kHz 立体声下这大致对应 35 分钟左右的舞台录音；音源越长上限越低，音源与录音等长时约 17 分钟。
 公式按实际采样率计算，48 kHz / 96 kHz 素材会自动收紧。
 
-识别阶段不受此限：`analyze_full_stage` 读完舞台录音就 `cleanup()`，只保留降采样代理。
+识别阶段不受此限：`analyze_stage` 读完舞台录音就 `cleanup()`，只保留降采样代理。
 真正吃内存的是渲染，它要同时持有舞台和输出两个全长缓冲。
 
 ## 取消

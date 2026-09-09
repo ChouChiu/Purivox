@@ -16,10 +16,10 @@ the interface.
 
 ```text
 src/entrypoints/                 Startup only: launches the GUI or parses the CLI
-src/app/                         Main window, task runner, and cross-feature orchestration
+src/app/                         Main window, task runner, and background thread
 src/features/                    Self-contained pages, models, and processing logic
-├── reference_removal/           Single-track reference cancellation, preview controls, and DSP
-├── full_stage/                  Full Stage analysis and timeline models
+├── reference_removal/           Vocal isolation: source matching, the timeline, both engines,
+│                                the page, and the DSP
 ├── home/                        Home page
 └── settings/                    Settings page and the release check
 src/shared/                      Audio, spectra, job validation, configuration, logging,
@@ -51,30 +51,31 @@ neither may import `entrypoints`. The browser build is described in full in
 - `shared` must not import `app`, `entrypoints`, or any `features` package.
 - Feature packages must not import `app`, `entrypoints`, or another feature package.
 - Neither `app` nor `web` may import `entrypoints`.
-- Logic that combines multiple features belongs in `app`. Full Stage rendering, for example, uses
-  both timeline analysis and reference cancellation, so it lives in
-  `src/app/full_stage_processing.py`.
+- Logic that combines multiple features belongs in `app`. Vocal isolation keeps matching and
+  cancellation in one feature package, so its entry point `run_isolation_job` stays in
+  `features/reference_removal/processing.py` and `app` only hands it to the background thread;
+  moving the whole pipeline into `app` would make the feature depend on the shell.
 
 A shared data model belongs to the layer that consumes it, not necessarily where it first
-appeared. `AudioStats`, for example, is used by both Single and Full Stage and is defined in
-`shared.audio`; `ReferenceJob` serves only single-track reference cancellation and remains in
-`features/reference_removal`. Feature modules must not create implicit dependencies by
-re-exporting shared types from one another.
+appeared. `AudioStats`, for example, is used by both the whole-file path and the segmented render
+and is defined in `shared.audio`; `ReferenceJob` serves only the whole-file path and remains in
+`features/reference_removal` alongside the matching `IsolationJob`. Feature modules must not create
+implicit dependencies by re-exporting shared types from one another.
 
-The same rule applies to code: values and algorithms that more than one feature would otherwise
-reimplement move down into `shared` rather than being imported across features. Single-track and
-full-stage jobs validate strength and the statistics window through
-`shared.jobs.validate_reference_settings()`; both derive onset features from
-`shared.dsp.log_flux_bands()` and both correct a shifted tempo through `shared.dsp.rate` and
-`shared.dsp.stretch`; the file-dialog filters and the automatic song-source finder share
+The same rule applies to code: values and algorithms that more than one caller would otherwise
+reimplement move down into `shared` rather than being imported across features. Both engines
+validate strength and the statistics window through `shared.jobs.validate_reference_settings()`;
+they derive onset features from `shared.dsp.log_flux_bands()` and correct a shifted tempo through
+`shared.dsp.rate` and `shared.dsp.stretch`; the file-dialog filters and the decoders share
 `shared.audio.AUDIO_EXTENSIONS`.
 
 Fetching a source from a link is placed by that same rule: the GUI and the CLI both download, so
 the yt-dlp wrapper, the download index and the background thread live in `shared/download`; the
-fetch dialog is wanted by both feature pages, so it is `shared/ui/download_dialog.py` rather than
-homed in one feature and imported by the other. The browser build has no such path — Pyodide has
-no sockets and the sites answer with no cross-origin headers — so `web` never imports it, and
-`tests/web/test_headless_imports.py` holds that boundary.
+fetch dialog is imported on demand by `MainWindow`, in the slot that opens it, because yt-dlp is a
+tenth of a second of startup, and the page only emits `download_requested`; it wraps
+`shared/download`, so it stays in the shared layer beside the downloader. The browser build has no
+such path — Pyodide has no sockets and the sites answer with no cross-origin headers — so `web`
+never imports it, and `tests/web/test_headless_imports.py` holds that boundary.
 
 ## Task Execution Model
 
@@ -136,44 +137,63 @@ WAV output is first written to a temporary file in the destination directory, an
 then atomically replaces the destination. Cancellation or failure therefore leaves no partially
 written final output.
 
-## Two Processing Pipelines
+## One Pipeline, Two Engines
+
+The GUI, the CLI and the browser build all call
+`run_isolation_job(job, analysis, token, progress)`. It first matches the sources against the
+recording with `analyze_stage`, then picks an engine from the geometry: a lone source of the same
+length goes through the whole-file path `run_reference_job`, while matched clips go through
+`render_stage_job`.
 
 ```mermaid
 flowchart TB
-    input["Audio input"] --> choice{"Workflow"}
-    choice -->|Single| mr["Align song source<br/>coherent reference cancellation"]
-    choice -->|Full Stage| stage["Multi-source matching<br/>timeline-based cancellation"]
-    mr --> mrout["Vocal WAV<br/>in the song's own format"]
-    stage --> stageout["Full Stage WAV<br/>in the stage's own format"]
+    input["Stage recording + one or more song sources"] --> match["Source matching<br/>analyze_stage"]
+    match --> choice{"Geometry"}
+    choice -->|lone source of the same length,<br/>timeline untouched| whole["Whole-file path<br/>align over the whole length"]
+    choice -->|matched clips| stage["Segmented render<br/>align and cancel clip by clip"]
+    whole --> out["Vocal / backing WAV<br/>in the stage's own format"]
+    stage --> out
 ```
 
-### Single
+### The Whole-File Path
 
 ```text
 Read both files → convert to stereo → resample the song source → optional time alignment
 → reference cancellation → analysis → atomic output
 ```
 
-The output always retains the complete input-audio duration. If the song source is shorter, its
-remaining region is treated as a silent reference and the original input tail is preserved. The
-result is written at the song's own sample rate and bit depth; there is no export floor.
+The output always retains the stage recording's duration. If the song source is shorter, its
+remaining region is treated as a silent reference and the original tail is preserved. The result is
+written at the stage recording's own sample rate and bit depth; there is no export floor.
 
-### Full Stage
+### The Segmented Render
 
 ```text
-Extract fingerprints from the full recording and sources → match independently
-→ generate and manually correct a timeline → copy the original full recording
+Extract fingerprints from the stage recording and sources → match independently
+→ generate and manually correct a timeline → copy the original stage recording
 → align and cancel each matched segment → blend boundaries → atomic output
 ```
 
-Unmatched ranges come from the copy of the original full recording, so failed identification does
+Unmatched ranges come from the copy of the original stage recording, so failed identification does
 not introduce silence or shorten the output.
-Internal Full Stage processing and the final export both retain the stage/live audio's own sample
-rate and bit depth.
+Segment processing and the final export both retain the stage/live audio's own sample rate and bit
+depth.
+
+### How the Engine Is Chosen
+
+Geometry decides the engine, not match quality, and the reasoning with the measured numbers is in
+[Source Matching, the Timeline, and Segmented Rendering](matching.md): a lone source as long as the
+recording is the recording's own content, and the whole-file path aligns the two over their whole
+length and corrects a clock difference between them, whereas a shorter source is a song located
+inside the recording and only the matched clips can place it. When nothing is matched and there is
+exactly one source, the whole-file path is the fallback as well — a canceller that finds no
+correlation leaves the recording alone. With more than one source the job is refused instead of
+cancelling the recording as a whole. A timeline the user edited is rendered as it stands and no
+longer changes the engine.
 
 ### Export Format
 
-Both pipelines export at the input file's own sample rate and bit depth: upsampling would only
+Both engines export at the input file's own sample rate and bit depth: upsampling would only
 enlarge the file without producing spectral detail absent from the input. For bit depth, an 8- or
 16-bit PCM input is written at 16 bits, and wider 24-/32-bit PCM, float and every lossy format are
 written at 24.
@@ -214,8 +234,9 @@ would otherwise widen the whole page.
 
 Cards declare their lane through `PageScrollArea.add_card()`. One column keeps the order they were
 added in and only two lanes split them apart, so a narrow window reads top to bottom in the same
-order a wide one reads side by side: the single-song page keeps files and parameters in the primary
-lane, and status, preview and audio data in the secondary one.
+order a wide one reads side by side: the vocal-isolation page keeps files, the source list and
+parameters in the primary lane, and status, the timeline, preview and audio data in the secondary
+one.
 
 ## Configuration, Translation, and Logging
 
