@@ -18,9 +18,8 @@ import { duration as clock } from "./duration";
 /**
  * Only one preview plays at a time.
  *
- * Both working pages stay mounted so a preview survives a tab change, which
- * means two players can exist at once. Starting one stops the other rather than
- * letting them overlap.
+ * A result with both stems shows a player per stem, so starting one has to stop
+ * the other rather than let them overlap.
  */
 let playing: HTMLAudioElement | null = null;
 

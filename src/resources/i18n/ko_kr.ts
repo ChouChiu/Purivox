@@ -32,14 +32,6 @@
         <translation>찾아보기...</translation>
     </message>
     <message>
-        <source>auto_find_on</source>
-        <translation>자동 매칭: 켜짐</translation>
-    </message>
-    <message>
-        <source>auto_find_off</source>
-        <translation>자동 매칭: 꺼짐</translation>
-    </message>
-    <message>
         <source>params</source>
         <translation>처리 옵션</translation>
     </message>
@@ -70,14 +62,6 @@
     <message>
         <source>strength</source>
         <translation>보컬 추출 강도:</translation>
-    </message>
-    <message>
-        <source>switch_on</source>
-        <translation>켜기</translation>
-    </message>
-    <message>
-        <source>switch_off</source>
-        <translation>끄기</translation>
     </message>
     <message>
         <source>status_group</source>
@@ -173,7 +157,7 @@
     </message>
     <message>
         <source>warn_no_source</source>
-        <translation>무대 내용과 일치하는 곡 음원을 선택해 주세요.</translation>
+        <translation>곡 음원을 하나 이상 추가하세요.</translation>
     </message>
     <message>
         <source>warn_no_out</source>
@@ -236,12 +220,8 @@
         <translation>처리가 취소되었습니다</translation>
     </message>
     <message>
-        <source>auto_found</source>
-        <translation>일치할 가능성이 있는 곡 음원을 찾았습니다</translation>
-    </message>
-    <message>
-        <source>auto_not_found</source>
-        <translation>일치하는 곡 음원을 찾지 못했습니다. 직접 선택해 주세요</translation>
+        <source>source_already_added</source>
+        <translation>그 곡 음원은 이미 목록에 있습니다.</translation>
     </message>
     <message>
         <source>warn_invalid_parameters</source>
@@ -249,7 +229,7 @@
     </message>
     <message>
         <source>warn_same_inputs</source>
-        <translation>무대 / 라이브 오디오와 곡 음원은 서로 다른 파일이어야 합니다.</translation>
+        <translation>무대 녹음을 곡 음원으로 함께 쓸 수 없습니다.</translation>
     </message>
     <message>
         <source>warn_output_conflict</source>
@@ -268,22 +248,6 @@
         <translation>라이브 보컬 추출</translation>
     </message>
     <message>
-        <source>mr_single_title</source>
-        <translation>한 곡 라이브 보컬 추출</translation>
-    </message>
-    <message>
-        <source>nav_full_stage</source>
-        <translation>전체 공연 라이브 보컬 추출</translation>
-    </message>
-    <message>
-        <source>mr_tab_single</source>
-        <translation>한 곡</translation>
-    </message>
-    <message>
-        <source>mr_tab_full_stage</source>
-        <translation>전체 공연</translation>
-    </message>
-    <message>
         <source>nav_settings</source>
         <translation>설정</translation>
     </message>
@@ -293,59 +257,31 @@
     </message>
     <message>
         <source>home_intro</source>
-        <translation>곡 음원으로 무대 / 라이브 오디오에서 라이브 보컬을 추출합니다. 한 곡도 공연 전체도 처리할 수 있습니다.</translation>
+        <translation>무대/라이브 녹음에서 곡 음원으로 덧입힌 소리를 제거합니다. 음원은 한 곡이든 공연 전체든 됩니다.</translation>
     </message>
     <message>
         <source>home_choose_title</source>
-        <translation>처리 방식 선택</translation>
+        <translation>시작하기</translation>
     </message>
     <message>
         <source>home_choose_hint</source>
-        <translation>개별 곡은 ‘한 곡’, 연속된 공연 녹음은 ‘전체 공연’을 선택하세요. 두 모드 모두 해당 곡 음원이 필요합니다.</translation>
+        <translation>무대/라이브 녹음을 고르고 곡 음원을 추가하세요. 하나면 그 곡을, 여러 개면 녹음 안에서 곡마다 먼저 찾습니다.</translation>
     </message>
     <message>
         <source>home_mr_meta</source>
-        <translation>입력: 무대 / 라이브 녹음 1개 + 곡 음원 1개</translation>
+        <translation>입력: 무대/라이브 녹음 1개 + 곡 음원 1개 이상</translation>
     </message>
     <message>
         <source>home_mr_description</source>
-        <translation>곡 음원을 녹음에 정렬해 반주를 상쇄하고, 그 무대의 라이브 보컬만 남깁니다.</translation>
+        <translation>음원이 하나면 그 곡으로 정렬해 제거하고, 여러 개면 녹음 안에서 곡마다 먼저 찾은 뒤 구간별로 제거합니다. 렌더링 전에 타임라인을 확인하고 고칠 수 있습니다.</translation>
     </message>
     <message>
         <source>home_open_mr</source>
-        <translation>한 곡 처리</translation>
-    </message>
-    <message>
-        <source>home_full_stage_meta</source>
-        <translation>입력: 공연 전체 연속 녹음 + 여러 곡 음원</translation>
-    </message>
-    <message>
-        <source>home_full_stage_description</source>
-        <translation>여러 곡 음원으로 연속 녹음에서 각 곡의 위치를 찾은 뒤 구간별로 반주를 상쇄합니다. 타임라인은 내보내기 전에 편집할 수 있습니다.</translation>
-    </message>
-    <message>
-        <source>home_open_full_stage</source>
-        <translation>전체 공연 처리</translation>
-    </message>
-    <message>
-        <source>stage_files</source>
-        <translation>전체 공연 파일</translation>
-    </message>
-    <message>
-        <source>stage_audio</source>
-        <translation>전체 공연의 무대 / 라이브 오디오:</translation>
-    </message>
-    <message>
-        <source>stage_output_hint</source>
-        <translation>기본적으로 전체 녹음 옆에 처리 결과 WAV를 저장합니다</translation>
-    </message>
-    <message>
-        <source>stage_sources</source>
-        <translation>곡 음원</translation>
+        <translation>시작하기</translation>
     </message>
     <message>
         <source>stage_sources_hint</source>
-        <translation>전체 녹음에 나올 수 있는 곡 음원을 순서와 상관없이 추가하세요. 각 곡의 위치를 찾아 시간순으로 정렬합니다.</translation>
+        <translation>녹음에 나올 수 있는 곡 음원을 한꺼번에 추가하세요. 순서는 필요 없고 각 곡의 위치가 자동으로 찾아져 시간순으로 정렬됩니다.</translation>
     </message>
     <message>
         <source>stage_add_sources</source>
@@ -378,10 +314,6 @@
     <message>
         <source>stage_no_room_for_clip</source>
         <translation>구간을 넣을 수 있는 미식별 구간이 없습니다.</translation>
-    </message>
-    <message>
-        <source>stage_include_fragments</source>
-        <translation>감지된 노래 클립 처리:</translation>
     </message>
     <message>
         <source>stage_timeline</source>
@@ -440,18 +372,6 @@
         <translation>곡 찾기</translation>
     </message>
     <message>
-        <source>stage_start</source>
-        <translation>전체 녹음 처리</translation>
-    </message>
-    <message>
-        <source>stage_ready</source>
-        <translation>전체 녹음을 선택하고 곡 음원을 추가해 주세요.</translation>
-    </message>
-    <message>
-        <source>stage_need_audio</source>
-        <translation>전체 녹음을 먼저 선택해 주세요.</translation>
-    </message>
-    <message>
         <source>stage_need_sources</source>
         <translation>곡 음원을 하나 이상 추가해 주세요.</translation>
     </message>
@@ -461,15 +381,23 @@
     </message>
     <message>
         <source>stage_loading</source>
-        <translation>전체 녹음 읽는 중...</translation>
+        <translation>무대 녹음을 읽는 중...</translation>
     </message>
     <message>
         <source>stage_fingerprinting</source>
-        <translation>전체 녹음의 음악 분석 중...</translation>
+        <translation>녹음 안의 음악을 분석하는 중...</translation>
     </message>
     <message>
         <source>stage_matching_source</source>
         <translation>음원 매칭 중 {current}/{total}: {name}</translation>
+    </message>
+    <message>
+        <source>stage_whole_recording</source>
+        <translation>음원이 녹음 전체에 해당하므로 한 번에 처리하는 중...</translation>
+    </message>
+    <message>
+        <source>stage_match_fallback</source>
+        <translation>곡을 찾지 못해 녹음 전체를 처리합니다.</translation>
     </message>
     <message>
         <source>stage_analysis_done</source>
@@ -489,7 +417,7 @@
     </message>
     <message>
         <source>stage_render_loading</source>
-        <translation>전체 녹음을 읽고 출력 준비 중...</translation>
+        <translation>녹음을 읽고 출력을 준비하는 중...</translation>
     </message>
     <message>
         <source>stage_render_clip</source>

@@ -14,7 +14,7 @@ export interface Shortcuts {
 	start?(): void;
 	/** Escape - cancel a running job. */
 	cancel?(): void;
-	/** F5 - find songs, on the full-stage page only. */
+	/** F5 - find songs, on the vocal-isolation page. */
 	analyze?(): void;
 	/** Ctrl+P - play or pause the result preview. */
 	togglePreview?(): void;

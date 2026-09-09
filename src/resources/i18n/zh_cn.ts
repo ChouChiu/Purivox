@@ -32,14 +32,6 @@
         <translation>浏览...</translation>
     </message>
     <message>
-        <source>auto_find_on</source>
-        <translation>自动匹配: 开</translation>
-    </message>
-    <message>
-        <source>auto_find_off</source>
-        <translation>自动匹配: 关</translation>
-    </message>
-    <message>
         <source>params</source>
         <translation>处理选项</translation>
     </message>
@@ -70,14 +62,6 @@
     <message>
         <source>strength</source>
         <translation>垫音消除强度:</translation>
-    </message>
-    <message>
-        <source>switch_on</source>
-        <translation>开启</translation>
-    </message>
-    <message>
-        <source>switch_off</source>
-        <translation>关闭</translation>
     </message>
     <message>
         <source>status_group</source>
@@ -173,7 +157,7 @@
     </message>
     <message>
         <source>warn_no_source</source>
-        <translation>请选择与舞台内容对应的歌曲音源。</translation>
+        <translation>请至少添加一个歌曲音源。</translation>
     </message>
     <message>
         <source>warn_no_out</source>
@@ -236,12 +220,8 @@
         <translation>处理已取消</translation>
     </message>
     <message>
-        <source>auto_found</source>
-        <translation>已找到可能匹配的歌曲音源</translation>
-    </message>
-    <message>
-        <source>auto_not_found</source>
-        <translation>未找到匹配的歌曲音源，请手动选择</translation>
+        <source>source_already_added</source>
+        <translation>该歌曲音源已在列表中。</translation>
     </message>
     <message>
         <source>warn_invalid_parameters</source>
@@ -249,7 +229,7 @@
     </message>
     <message>
         <source>warn_same_inputs</source>
-        <translation>舞台 / 现场音频和歌曲音源不能是同一个文件。</translation>
+        <translation>舞台录音不能同时作为歌曲音源。</translation>
     </message>
     <message>
         <source>warn_output_conflict</source>
@@ -268,22 +248,6 @@
         <translation>垫音消除</translation>
     </message>
     <message>
-        <source>mr_single_title</source>
-        <translation>单曲垫音消除</translation>
-    </message>
-    <message>
-        <source>nav_full_stage</source>
-        <translation>整场垫音消除</translation>
-    </message>
-    <message>
-        <source>mr_tab_single</source>
-        <translation>单曲</translation>
-    </message>
-    <message>
-        <source>mr_tab_full_stage</source>
-        <translation>整场</translation>
-    </message>
-    <message>
         <source>nav_settings</source>
         <translation>设置</translation>
     </message>
@@ -293,59 +257,31 @@
     </message>
     <message>
         <source>home_intro</source>
-        <translation>使用歌曲音源消除舞台 / 现场音频中的垫音，单曲和整场连续录音都可以处理。</translation>
+        <translation>使用歌曲音源消除舞台 / 现场录音中的垫音：给一段录音，添加一首或多首歌曲音源即可。</translation>
     </message>
     <message>
         <source>home_choose_title</source>
-        <translation>选择处理方式</translation>
+        <translation>开始处理</translation>
     </message>
     <message>
         <source>home_choose_hint</source>
-        <translation>处理单个舞台请选择单曲；处理连续整场录音请选择整场。两种模式都需要对应的歌曲音源。</translation>
+        <translation>选一段舞台 / 现场录音，再添加它的歌曲音源：一份音源就消除这一首，多份音源会先在录音里逐首定位。</translation>
     </message>
     <message>
         <source>home_mr_meta</source>
-        <translation>输入：一段舞台 / 现场音频 + 一份歌曲音源</translation>
+        <translation>输入：一段舞台 / 现场录音 + 一份或多份歌曲音源</translation>
     </message>
     <message>
         <source>home_mr_description</source>
-        <translation>把歌曲音源对齐到录音上消除垫音，得到这一段舞台的现场人声。</translation>
+        <translation>一份音源直接对齐消除这一首；多份音源先在录音里逐首定位，再逐段消除；渲染前时间轴可以逐条确认和修改。</translation>
     </message>
     <message>
         <source>home_open_mr</source>
-        <translation>处理单曲</translation>
-    </message>
-    <message>
-        <source>home_full_stage_meta</source>
-        <translation>输入：整场连续录音 + 多份歌曲音源</translation>
-    </message>
-    <message>
-        <source>home_full_stage_description</source>
-        <translation>先用多份歌曲音源在整场录音里定位每首歌，再逐段消除垫音；渲染前时间轴可以逐条确认和修改。</translation>
-    </message>
-    <message>
-        <source>home_open_full_stage</source>
-        <translation>处理整场</translation>
-    </message>
-    <message>
-        <source>stage_files</source>
-        <translation>整场文件</translation>
-    </message>
-    <message>
-        <source>stage_audio</source>
-        <translation>整场舞台 / 现场音频:</translation>
-    </message>
-    <message>
-        <source>stage_output_hint</source>
-        <translation>默认在整场录音旁保存处理结果 WAV</translation>
-    </message>
-    <message>
-        <source>stage_sources</source>
-        <translation>歌曲音源</translation>
+        <translation>开始处理</translation>
     </message>
     <message>
         <source>stage_sources_hint</source>
-        <translation>一次添加整场可能出现的所有歌曲音源，无需手动排序；系统会识别每首歌的位置并按时间排列。</translation>
+        <translation>一次添加录音里可能出现的所有歌曲音源，无需手动排序；系统会识别每首歌的位置并按时间排列。</translation>
     </message>
     <message>
         <source>stage_add_sources</source>
@@ -378,10 +314,6 @@
     <message>
         <source>stage_no_room_for_clip</source>
         <translation>没有可插入片段的未识别区间。</translation>
-    </message>
-    <message>
-        <source>stage_include_fragments</source>
-        <translation>处理识别到的歌曲片段:</translation>
     </message>
     <message>
         <source>stage_timeline</source>
@@ -440,18 +372,6 @@
         <translation>识别歌曲</translation>
     </message>
     <message>
-        <source>stage_start</source>
-        <translation>开始处理整场录音</translation>
-    </message>
-    <message>
-        <source>stage_ready</source>
-        <translation>请先选择整场录音并添加歌曲音源。</translation>
-    </message>
-    <message>
-        <source>stage_need_audio</source>
-        <translation>请先选择整场录音。</translation>
-    </message>
-    <message>
         <source>stage_need_sources</source>
         <translation>请至少添加一个歌曲音源。</translation>
     </message>
@@ -461,15 +381,23 @@
     </message>
     <message>
         <source>stage_loading</source>
-        <translation>正在读取整场录音...</translation>
+        <translation>正在读取舞台录音...</translation>
     </message>
     <message>
         <source>stage_fingerprinting</source>
-        <translation>正在分析整场录音中的音乐...</translation>
+        <translation>正在分析录音中的音乐...</translation>
     </message>
     <message>
         <source>stage_matching_source</source>
         <translation>正在匹配音源 {current}/{total}：{name}</translation>
+    </message>
+    <message>
+        <source>stage_whole_recording</source>
+        <translation>音源覆盖整段录音，按整段对齐消除...</translation>
+    </message>
+    <message>
+        <source>stage_match_fallback</source>
+        <translation>未能定位到歌曲，改为整段消除。</translation>
     </message>
     <message>
         <source>stage_analysis_done</source>
@@ -489,7 +417,7 @@
     </message>
     <message>
         <source>stage_render_loading</source>
-        <translation>正在读取整场录音并准备输出...</translation>
+        <translation>正在读取录音并准备输出...</translation>
     </message>
     <message>
         <source>stage_render_clip</source>

@@ -4,10 +4,20 @@ import numpy as np
 import pytest
 import soundfile as sf
 
-from features.reference_removal.models import ReferenceJob
-from features.reference_removal.processing import run_reference_job
+from features.reference_removal.models import (
+    ClipKind,
+    IsolationJob,
+    ReferenceJob,
+    StageAnalysis,
+    TimelineClip,
+)
+from features.reference_removal.processing import (
+    _scaled_progress,
+    run_isolation_job,
+    run_reference_job,
+)
 from shared.jobs import OutputTracks
-from shared.processing import CancellationToken
+from shared.processing import CancellationToken, ProgressEvent
 
 
 def test_reference_pipeline_end_to_end(tmp_path: Path):
@@ -82,15 +92,23 @@ def test_reference_pipeline_rejects_same_stage_and_source(tmp_path: Path):
         run_reference_job(job, CancellationToken())
 
 
-def _cancellation_inputs(tmp_path: Path) -> tuple[Path, Path]:
+def _cancellation_inputs(
+    tmp_path: Path, seconds: float = 1.0, source_seconds: float | None = None
+) -> tuple[Path, Path]:
     """A stage recording holding a backing track plus a voice that is not in it."""
     sample_rate = 8_000
-    time = np.arange(sample_rate) / sample_rate
-    backing = 0.2 * np.sin(2 * np.pi * 110 * time)
-    vocal = 0.3 * np.sin(2 * np.pi * 440 * time)
+    stage_time = np.arange(int(sample_rate * seconds)) / sample_rate
+    source_time = np.arange(int(sample_rate * (source_seconds or seconds))) / sample_rate
+    backing = 0.2 * np.sin(2 * np.pi * 110 * source_time)
+    vocal = 0.3 * np.sin(2 * np.pi * 440 * stage_time)
     stage = tmp_path / "stage.wav"
     source = tmp_path / "instrumental.wav"
-    sf.write(stage, np.stack([vocal + backing] * 2, axis=1), sample_rate, subtype="PCM_24")
+    sf.write(
+        stage,
+        np.stack([vocal + np.pad(backing, (0, vocal.size - backing.size))] * 2, axis=1),
+        sample_rate,
+        subtype="PCM_24",
+    )
     sf.write(source, np.stack([backing] * 2, axis=1), sample_rate, subtype="PCM_24")
     return stage, source
 
@@ -142,3 +160,156 @@ def test_a_derived_backing_path_may_not_overwrite_an_input(tmp_path: Path):
             ),
             CancellationToken(),
         )
+
+
+def _unmatched(duration: float) -> StageAnalysis:
+    return StageAnalysis(duration, (TimelineClip(ClipKind.UNMATCHED, 0.0, duration),))
+
+
+def _matched(source: Path, duration: float) -> StageAnalysis:
+    return StageAnalysis(
+        duration,
+        (
+            TimelineClip(
+                ClipKind.SONG,
+                0.0,
+                duration,
+                source=source,
+                source_index=0,
+                source_start=0.0,
+                source_end=duration,
+                confidence=1.0,
+            ),
+        ),
+    )
+
+
+def test_a_matched_analysis_renders_its_clips(tmp_path: Path):
+    """A source shorter than the recording is a song inside it, not all of it."""
+    stage, source = _cancellation_inputs(tmp_path, seconds=4.0, source_seconds=1.0)
+    output = tmp_path / "matched.wav"
+    analysis = _matched(source, 4.0)
+    events: list[ProgressEvent] = []
+    result = run_isolation_job(
+        IsolationJob(stage, (source,), output, 100, 8, auto_align=False),
+        analysis,
+        CancellationToken(),
+        events.append,
+    )
+    assert result.analysis is analysis
+    assert result.outputs == (output.resolve(),)
+    assert output.is_file()
+    assert next(event.key for event in events) == "stage_render_loading"
+
+
+def test_a_lone_source_that_cannot_be_matched_is_cancelled_as_a_whole(tmp_path: Path):
+    """The fallback is the whole-file path, announced so the bar explains itself."""
+    stage, source = _cancellation_inputs(tmp_path, seconds=4.0, source_seconds=1.0)
+    output = tmp_path / "fallback.wav"
+    events: list[ProgressEvent] = []
+    result = run_isolation_job(
+        IsolationJob(stage, (source,), output, 100, 8, auto_align=False),
+        _unmatched(4.0),
+        CancellationToken(),
+        events.append,
+    )
+    assert result.outputs == (output.resolve(),)
+    assert output.is_file()
+    assert next(event.key for event in events) == "stage_match_fallback"
+    assert events[-1].value == 100
+
+
+def test_a_lone_source_as_long_as_the_recording_is_cancelled_as_one_take(tmp_path: Path):
+    """The single-song case keeps the whole-file path, clock correction and all."""
+    stage, source = _cancellation_inputs(tmp_path)
+    output = tmp_path / "one_take.wav"
+    events: list[ProgressEvent] = []
+    result = run_isolation_job(
+        IsolationJob(stage, (source,), output, 100, 8, auto_align=False),
+        _matched(source, 1.0),
+        CancellationToken(),
+        events.append,
+    )
+    assert result.outputs == (output.resolve(),)
+    assert output.is_file()
+    assert next(event.key for event in events) == "stage_whole_recording"
+
+
+def test_an_edited_timeline_decides_the_engine_itself(tmp_path: Path):
+    """A timeline the user touched is a decision, not a hint."""
+    stage, source = _cancellation_inputs(tmp_path)
+    output = tmp_path / "edited.wav"
+    events: list[ProgressEvent] = []
+    analysis = StageAnalysis(
+        1.0,
+        (
+            TimelineClip(
+                ClipKind.SONG,
+                0.0,
+                1.0,
+                source=source,
+                source_index=0,
+                source_start=0.0,
+                source_end=1.0,
+                confidence=1.0,
+                manual=True,
+            ),
+        ),
+    )
+    result = run_isolation_job(
+        IsolationJob(stage, (source,), output, 100, 8, auto_align=False),
+        analysis,
+        CancellationToken(),
+        events.append,
+    )
+    assert result.outputs == (output.resolve(),)
+    assert next(event.key for event in events) == "stage_render_loading"
+
+
+def test_a_timeline_with_every_clip_disabled_renders_nothing(tmp_path: Path):
+    stage, source = _cancellation_inputs(tmp_path)
+    analysis = StageAnalysis(
+        1.0,
+        (
+            TimelineClip(
+                ClipKind.SONG,
+                0.0,
+                1.0,
+                source=source,
+                source_index=0,
+                source_start=0.0,
+                source_end=1.0,
+                confidence=1.0,
+                enabled=False,
+            ),
+        ),
+    )
+    with pytest.raises(ValueError, match="no source could be matched"):
+        run_isolation_job(
+            IsolationJob(stage, (source,), tmp_path / "out.wav", 100, 8, auto_align=False),
+            analysis,
+            CancellationToken(),
+        )
+
+
+def test_several_sources_that_cannot_be_matched_are_refused(tmp_path: Path):
+    """Cancelling a whole show against one song would remove the wrong content."""
+    stage, source = _cancellation_inputs(tmp_path)
+    other = tmp_path / "other.wav"
+    other.write_bytes(source.read_bytes())
+    with pytest.raises(ValueError, match="no source could be matched"):
+        run_isolation_job(
+            IsolationJob(stage, (source, other), tmp_path / "out.wav", 100, 8, auto_align=False),
+            _unmatched(1.0),
+            CancellationToken(),
+        )
+
+
+def test_each_pipeline_reports_into_its_own_band_of_the_bar():
+    seen: list[ProgressEvent] = []
+    report = _scaled_progress(seen.append, 25, 100)
+    report(ProgressEvent(0, "start"))
+    report(ProgressEvent(50, "half"))
+    report(ProgressEvent(100, "done"))
+    assert [event.value for event in seen] == [25, 63, 100]
+    assert [event.message for event in seen] == ["start", "half", "done"]

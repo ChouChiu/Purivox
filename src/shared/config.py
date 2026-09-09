@@ -33,7 +33,6 @@ class AppConfig(QConfig):
         "INFO",
         OptionsValidator(list(LOG_LEVELS)),
     )
-    auto_find = ConfigItem("Reference", "AutoFind", True, BoolValidator())
     output_tracks = OptionsConfigItem(
         "Reference",
         "OutputTracks",

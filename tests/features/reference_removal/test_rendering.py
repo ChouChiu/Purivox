@@ -5,8 +5,8 @@ from pathlib import Path
 import numpy as np
 import soundfile as sf
 
-from app.full_stage_processing import _alignment_quality, run_full_stage_job
-from features.full_stage import ClipKind, FullStageAnalysis, FullStageJob, TimelineClip
+from features.reference_removal import ClipKind, IsolationJob, StageAnalysis, TimelineClip
+from features.reference_removal.rendering import _alignment_quality, render_stage_job
 from shared.audio import AudioData
 from shared.jobs import OutputTracks
 from shared.processing import CancellationToken
@@ -26,7 +26,7 @@ def _source(sample_rate: int, seconds: int, seed: int) -> np.ndarray:
     return np.stack([signal, signal], axis=1).astype(np.float32)
 
 
-def test_full_stage_render_keeps_unmatched_audio_and_processes_song(tmp_path: Path):
+def test_render_keeps_unmatched_audio_and_processes_the_matched_span(tmp_path: Path):
     sample_rate = 8_000
     reference = _source(sample_rate, 4, 7)
     stage = np.random.default_rng(8).normal(0, 0.01, (8 * sample_rate, 2)).astype(np.float32)
@@ -36,7 +36,7 @@ def test_full_stage_render_keeps_unmatched_audio_and_processes_song(tmp_path: Pa
     output_path = tmp_path / "output.wav"
     sf.write(stage_path, stage, sample_rate)
     sf.write(source_path, reference, sample_rate)
-    analysis = FullStageAnalysis(
+    analysis = StageAnalysis(
         8.0,
         (
             TimelineClip(ClipKind.UNMATCHED, 0.0, 2.0),
@@ -64,7 +64,7 @@ def test_full_stage_render_keeps_unmatched_audio_and_processes_song(tmp_path: Pa
             TimelineClip(ClipKind.UNMATCHED, 6.0, 8.0),
         ),
     )
-    job = FullStageJob(
+    job = IsolationJob(
         stage_path,
         (source_path,),
         output_path,
@@ -72,7 +72,7 @@ def test_full_stage_render_keeps_unmatched_audio_and_processes_song(tmp_path: Pa
         sigma=1,
     )
 
-    result = run_full_stage_job(job, analysis, CancellationToken())
+    result = render_stage_job(job, analysis, CancellationToken())
 
     rendered, rendered_rate = sf.read(output_path, always_2d=True, dtype="float32")
     original, _ = sf.read(stage_path, always_2d=True, dtype="float32")
@@ -107,7 +107,7 @@ def test_alignment_quality_rejects_a_shift_that_damages_an_existing_match():
     )
 
 
-def test_full_stage_backing_export_is_silent_where_nothing_was_cancelled(tmp_path: Path):
+def test_backing_export_is_silent_where_nothing_was_cancelled(tmp_path: Path):
     """The render starts as a copy of the stage, so untouched ranges cancel to zero."""
     sample_rate = 8_000
     reference = _source(sample_rate, 4, 7)
@@ -115,10 +115,10 @@ def test_full_stage_backing_export_is_silent_where_nothing_was_cancelled(tmp_pat
     stage[2 * sample_rate : 6 * sample_rate] += reference
     stage_path = tmp_path / "stage.wav"
     source_path = tmp_path / "source.wav"
-    output_path = tmp_path / "stage_full_stage_vocals.wav"
+    output_path = tmp_path / "stage_vocals.wav"
     sf.write(stage_path, stage, sample_rate, subtype="PCM_24")
     sf.write(source_path, reference, sample_rate, subtype="PCM_24")
-    analysis = FullStageAnalysis(
+    analysis = StageAnalysis(
         8.0,
         (
             TimelineClip(ClipKind.UNMATCHED, 0.0, 2.0),
@@ -126,7 +126,7 @@ def test_full_stage_backing_export_is_silent_where_nothing_was_cancelled(tmp_pat
             TimelineClip(ClipKind.UNMATCHED, 6.0, 8.0),
         ),
     )
-    job = FullStageJob(
+    job = IsolationJob(
         stage_path,
         (source_path,),
         output_path,
@@ -135,9 +135,9 @@ def test_full_stage_backing_export_is_silent_where_nothing_was_cancelled(tmp_pat
         tracks=OutputTracks.BOTH,
     )
 
-    result = run_full_stage_job(job, analysis, CancellationToken())
+    result = render_stage_job(job, analysis, CancellationToken())
 
-    backing_output = tmp_path / "stage_full_stage_backing.wav"
+    backing_output = tmp_path / "stage_backing.wav"
     assert result.outputs == (output_path.resolve(), backing_output.resolve())
     assert len(result.audio_stats) == 2
     vocal, _ = sf.read(output_path, always_2d=True, dtype="float32")

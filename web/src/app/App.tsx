@@ -14,7 +14,6 @@ import {
 } from "@fluentui/react-components";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { FullStagePage } from "../features/full_stage/FullStagePage";
 import { HomePage } from "../features/home/HomePage";
 import { MrPage } from "../features/reference_removal/MrPage";
 import { SettingsPage } from "../features/settings/SettingsPage";
@@ -30,7 +29,7 @@ import {
 } from "../shared/theme";
 import { BrandMark } from "../shared/ui/BrandMark";
 
-type Section = "home" | "mr" | "stage" | "settings";
+type Section = "home" | "mr" | "settings";
 
 const useStyles = makeStyles({
 	shell: {
@@ -167,17 +166,13 @@ export function App() {
 						onTabSelect={(_event, data) => setSection(data.value as Section)}
 					>
 						<Tab value="home">{t("nav_home")}</Tab>
-						<Tab value="mr">{t("mr_tab_single")}</Tab>
-						<Tab value="stage">{t("mr_tab_full_stage")}</Tab>
+						<Tab value="mr">{t("nav_mr")}</Tab>
 						<Tab value="settings">{t("nav_settings")}</Tab>
 					</TabList>
 				</div>
 
 				{section === "home" ? (
-					<HomePage
-						onOpenMr={() => setSection("mr")}
-						onOpenFullStage={() => setSection("stage")}
-					/>
+					<HomePage onOpenMr={() => setSection("mr")} />
 				) : null}
 				{/* The working pages stay mounted and are only hidden. Unmounting them
 				    would stop a preview mid-play and throw away a finished result or a
@@ -187,14 +182,6 @@ export function App() {
 						client={runtime.client}
 						ready={runtime.ready}
 						active={section === "mr"}
-						onBind={bind}
-					/>
-				</div>
-				<div hidden={section !== "stage"}>
-					<FullStagePage
-						client={runtime.client}
-						ready={runtime.ready}
-						active={section === "stage"}
 						onBind={bind}
 					/>
 				</div>

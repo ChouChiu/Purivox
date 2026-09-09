@@ -1,8 +1,8 @@
 """Fetch an input audio file from a link, and pick one that was fetched before.
 
-Both reference workflows take their inputs as files, and both of them regularly
-want the same file: the song a stage recording is matched against.  The dialog
-is therefore shared rather than built per page, and everything it downloads goes
+The isolation job takes its inputs as files, and it regularly wants several of
+the same kind: the songs a stage recording is matched against.  The dialog is
+therefore shared rather than built per input, and everything it downloads goes
 through one cache — fetching the same link twice is a round trip nobody asked
 for, and the file is an input to a job, not a temporary.
 """

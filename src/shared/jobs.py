@@ -12,9 +12,9 @@ STRENGTH_RANGE = range(STRENGTH_MINIMUM, STRENGTH_MAXIMUM + 1)
 def validate_reference_settings(strength: int, sigma: int) -> None:
     """Check the settings every reference-cancellation job shares.
 
-    Single-song and full-stage jobs live in feature packages that must not
-    import one another, and the CLI offers the same options again, so the
-    accepted values are defined once here instead of three times.
+    The job dataclasses, the CLI and the browser bridge all offer these
+    options, and features must not import one another, so the accepted values
+    are defined once here instead of three times.
     """
     if not STRENGTH_MINIMUM <= strength <= STRENGTH_MAXIMUM:
         raise ValueError(f"strength must be in [{STRENGTH_MINIMUM}, {STRENGTH_MAXIMUM}]")

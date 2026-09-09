@@ -50,15 +50,15 @@ def reference_scene(tmp_path: Path):
     )
 
 
-def test_run_reference_returns_outputs_and_json_progress(reference_scene):
+def test_run_isolation_returns_outputs_and_json_progress(reference_scene):
     stage, source, output = reference_scene
     updates: list[str] = []
 
-    payload = bridge.run_reference(
+    payload = bridge.run_isolation(
         json.dumps(
             {
                 "stage": str(stage),
-                "source": str(source),
+                "sources": [str(source)],
                 "output": str(output),
                 "strength": 75,
                 "sigma": 3,
@@ -71,13 +71,14 @@ def test_run_reference_returns_outputs_and_json_progress(reference_scene):
     result = json.loads(payload)
     assert result["outputs"] == [str(output.resolve())]
     assert output.is_file()
+    assert result["analysis"]["duration_seconds"] == pytest.approx(3.0)
     stats = result["audio_stats"][0]
     assert stats["sample_rate"] == 8_000
     assert stats["channels"] == 2
     assert stats["file_size"] > 0
 
     events = [json.loads(update) for update in updates]
-    assert events[0]["key"] == "loading_stage"
+    assert events[0]["key"] == "stage_loading"
     assert events[-1]["value"] == 100
     # The key travels untranslated because Pyodide has no Qt catalogue.
     assert events[-1]["values"]["path"] == str(output)
@@ -91,11 +92,11 @@ def test_silent_audio_reports_null_rather_than_negative_infinity(tmp_path: Path)
     source = _write(tmp_path / "source.wav", silence, sample_rate)
     output = tmp_path / "out.wav"
 
-    payload = bridge.run_reference(
+    payload = bridge.run_isolation(
         json.dumps(
             {
                 "stage": str(stage),
-                "source": str(source),
+                "sources": [str(source)],
                 "output": str(output),
                 "auto_align": False,
             }
@@ -186,9 +187,9 @@ def test_editing_a_stage_range_past_the_recording_is_rejected():
     ("seconds", "fits"),
     [(300.0, True), (7200.0, False)],
 )
-def test_full_stage_estimate_refuses_what_wasm_cannot_hold(seconds, fits):
+def test_estimate_refuses_what_wasm_cannot_hold(seconds, fits):
     payload = json.loads(
-        bridge.estimate_full_stage(
+        bridge.estimate_isolation(
             json.dumps(
                 {
                     "sample_rate": 44_100,
@@ -205,12 +206,12 @@ def test_full_stage_estimate_refuses_what_wasm_cannot_hold(seconds, fits):
 
 def test_a_single_song_of_ordinary_length_fits_comfortably():
     payload = json.loads(
-        bridge.estimate_reference(
+        bridge.estimate_isolation(
             json.dumps(
                 {
                     "sample_rate": 44_100,
                     "stage_seconds": 300.0,
-                    "source_seconds": 300.0,
+                    "longest_source_seconds": 300.0,
                     "file_bytes": 60_000_000,
                 }
             )
@@ -220,8 +221,8 @@ def test_a_single_song_of_ordinary_length_fits_comfortably():
     assert payload["tight"] is False
 
 
-def test_render_stage_accepts_an_edited_timeline(tmp_path: Path):
-    """The page hands back the analysis it edited, so the render must reload it."""
+def test_run_isolation_accepts_an_edited_timeline(tmp_path: Path):
+    """The page hands back the analysis it edited, so the job must reload it."""
     sample_rate = 8_000
     random = np.random.default_rng(11)
     time = np.arange(sample_rate * 4) / sample_rate
@@ -250,7 +251,7 @@ def test_render_stage_accepts_an_edited_timeline(tmp_path: Path):
     }
 
     payload = json.loads(
-        bridge.render_stage(
+        bridge.run_isolation(
             json.dumps(
                 {
                     "stage": str(stage_path),
@@ -295,14 +296,14 @@ def test_probe_reports_an_unreadable_container_instead_of_raising(tmp_path: Path
     assert payload["reason"]
 
 
-def test_run_reference_exports_both_stems(reference_scene):
+def test_run_isolation_exports_both_stems(reference_scene):
     stage, source, output = reference_scene
 
-    payload = bridge.run_reference(
+    payload = bridge.run_isolation(
         json.dumps(
             {
                 "stage": str(stage),
-                "source": str(source),
+                "sources": [str(source)],
                 "output": str(output),
                 "strength": 75,
                 "sigma": 3,
@@ -319,18 +320,18 @@ def test_run_reference_exports_both_stems(reference_scene):
     assert output.is_file() and backing.is_file()
 
 
-def test_estimate_reference_charges_for_the_second_exported_file(reference_scene):
+def test_estimate_charges_for_the_second_exported_file(reference_scene):
     request = json.dumps(
         {
             "sample_rate": 44_100,
             "stage_seconds": 300.0,
-            "source_seconds": 300.0,
+            "longest_source_seconds": 300.0,
             "file_bytes": 0,
         }
     )
-    single = json.loads(bridge.estimate_reference(request))
+    single = json.loads(bridge.estimate_isolation(request))
     both = json.loads(
-        bridge.estimate_reference(json.dumps({**json.loads(request), "both_tracks": True}))
+        bridge.estimate_isolation(json.dumps({**json.loads(request), "both_tracks": True}))
     )
     # The stem sitting in the Emscripten filesystem is heap like everything else.
     assert both["peak_bytes"] > single["peak_bytes"]

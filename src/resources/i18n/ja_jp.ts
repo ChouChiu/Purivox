@@ -32,14 +32,6 @@
         <translation>参照...</translation>
     </message>
     <message>
-        <source>auto_find_on</source>
-        <translation>自動照合: オン</translation>
-    </message>
-    <message>
-        <source>auto_find_off</source>
-        <translation>自動照合: オフ</translation>
-    </message>
-    <message>
         <source>params</source>
         <translation>処理設定</translation>
     </message>
@@ -70,14 +62,6 @@
     <message>
         <source>strength</source>
         <translation>ボーカル抽出強度:</translation>
-    </message>
-    <message>
-        <source>switch_on</source>
-        <translation>オン</translation>
-    </message>
-    <message>
-        <source>switch_off</source>
-        <translation>オフ</translation>
     </message>
     <message>
         <source>status_group</source>
@@ -173,7 +157,7 @@
     </message>
     <message>
         <source>warn_no_source</source>
-        <translation>ステージ内容に合う楽曲音源を選択してください。</translation>
+        <translation>曲の音源を1つ以上追加してください。</translation>
     </message>
     <message>
         <source>warn_no_out</source>
@@ -236,12 +220,8 @@
         <translation>処理がキャンセルされました</translation>
     </message>
     <message>
-        <source>auto_found</source>
-        <translation>一致する可能性のある楽曲音源が見つかりました</translation>
-    </message>
-    <message>
-        <source>auto_not_found</source>
-        <translation>一致する楽曲音源が見つかりません。手動で選択してください</translation>
+        <source>source_already_added</source>
+        <translation>その曲の音源はすでに一覧にあります。</translation>
     </message>
     <message>
         <source>warn_invalid_parameters</source>
@@ -249,7 +229,7 @@
     </message>
     <message>
         <source>warn_same_inputs</source>
-        <translation>ステージ / ライブ音声と楽曲音源には別のファイルを指定してください。</translation>
+        <translation>ステージ録音を曲の音源として同時に使うことはできません。</translation>
     </message>
     <message>
         <source>warn_output_conflict</source>
@@ -268,22 +248,6 @@
         <translation>ライブボーカル抽出</translation>
     </message>
     <message>
-        <source>mr_single_title</source>
-        <translation>単曲ライブボーカル抽出</translation>
-    </message>
-    <message>
-        <source>nav_full_stage</source>
-        <translation>公演全編のライブボーカル抽出</translation>
-    </message>
-    <message>
-        <source>mr_tab_single</source>
-        <translation>単曲</translation>
-    </message>
-    <message>
-        <source>mr_tab_full_stage</source>
-        <translation>全編処理</translation>
-    </message>
-    <message>
         <source>nav_settings</source>
         <translation>設定</translation>
     </message>
@@ -293,59 +257,31 @@
     </message>
     <message>
         <source>home_intro</source>
-        <translation>楽曲音源を使ってステージ / ライブ音声からライブボーカルを抽出します。単曲でも公演全編でも処理できます。</translation>
+        <translation>ステージ／ライブ録音から、曲の音源を使って被せ音を除去します。音源は1曲分でも公演全体分でもかまいません。</translation>
     </message>
     <message>
         <source>home_choose_title</source>
-        <translation>処理方法を選択</translation>
+        <translation>はじめる</translation>
     </message>
     <message>
         <source>home_choose_hint</source>
-        <translation>1 曲分を処理する場合は「単曲」、連続した公演録音は「全編処理」を選択してください。どちらも対応する楽曲音源が必要です。</translation>
+        <translation>ステージ／ライブ録音を選び、対応する曲の音源を追加してください。1つならその曲を、複数なら録音内の各曲をまず特定します。</translation>
     </message>
     <message>
         <source>home_mr_meta</source>
-        <translation>入力：ステージ / ライブ音声 1 本 + 楽曲音源 1 本</translation>
+        <translation>入力：ステージ／ライブ録音1つ + 曲の音源1つ以上</translation>
     </message>
     <message>
         <source>home_mr_description</source>
-        <translation>楽曲音源を録音に整列させて伴奏を打ち消し、そのステージのライブボーカルを取り出します。</translation>
+        <translation>音源が1つならその曲として整列して除去します。複数なら先に録音内で各曲を特定し、区間ごとに除去します。レンダリング前にタイムラインを確認・修正できます。</translation>
     </message>
     <message>
         <source>home_open_mr</source>
-        <translation>単曲を処理</translation>
-    </message>
-    <message>
-        <source>home_full_stage_meta</source>
-        <translation>入力：公演全編の連続録音 + 複数の楽曲音源</translation>
-    </message>
-    <message>
-        <source>home_full_stage_description</source>
-        <translation>複数の楽曲音源で連続録音の中から各曲の位置を割り出し、区間ごとに伴奏を打ち消します。タイムラインは書き出す前に編集できます。</translation>
-    </message>
-    <message>
-        <source>home_open_full_stage</source>
-        <translation>全編を処理</translation>
-    </message>
-    <message>
-        <source>stage_files</source>
-        <translation>全編ファイル</translation>
-    </message>
-    <message>
-        <source>stage_audio</source>
-        <translation>公演全編のステージ / ライブ音声:</translation>
-    </message>
-    <message>
-        <source>stage_output_hint</source>
-        <translation>既定では全編録音の隣に処理結果の WAV を保存します</translation>
-    </message>
-    <message>
-        <source>stage_sources</source>
-        <translation>楽曲音源</translation>
+        <translation>はじめる</translation>
     </message>
     <message>
         <source>stage_sources_hint</source>
-        <translation>全編に含まれる可能性のある楽曲音源を順不同で追加してください。各曲の位置を検出して時間順に並べます。</translation>
+        <translation>録音に含まれる可能性のある曲の音源をまとめて追加してください。並べ替えは不要で、各曲の位置が自動で特定され時間順に並びます。</translation>
     </message>
     <message>
         <source>stage_add_sources</source>
@@ -378,10 +314,6 @@
     <message>
         <source>stage_no_room_for_clip</source>
         <translation>セグメントを挿入できる未識別区間がありません。</translation>
-    </message>
-    <message>
-        <source>stage_include_fragments</source>
-        <translation>検出した楽曲クリップを処理:</translation>
     </message>
     <message>
         <source>stage_timeline</source>
@@ -440,18 +372,6 @@
         <translation>楽曲を検出</translation>
     </message>
     <message>
-        <source>stage_start</source>
-        <translation>全編録音を処理</translation>
-    </message>
-    <message>
-        <source>stage_ready</source>
-        <translation>全編録音を選択し、楽曲音源を追加してください。</translation>
-    </message>
-    <message>
-        <source>stage_need_audio</source>
-        <translation>全編録音を選択してください。</translation>
-    </message>
-    <message>
         <source>stage_need_sources</source>
         <translation>楽曲音源を少なくとも一つ追加してください。</translation>
     </message>
@@ -461,15 +381,23 @@
     </message>
     <message>
         <source>stage_loading</source>
-        <translation>全編録音を読み込み中...</translation>
+        <translation>ステージ録音を読み込んでいます...</translation>
     </message>
     <message>
         <source>stage_fingerprinting</source>
-        <translation>全編録音内の音楽を解析中...</translation>
+        <translation>録音内の楽曲を解析しています...</translation>
     </message>
     <message>
         <source>stage_matching_source</source>
         <translation>音源を照合中 {current}/{total}: {name}</translation>
+    </message>
+    <message>
+        <source>stage_whole_recording</source>
+        <translation>音源が録音全体に相当するため、まとめて処理しています...</translation>
+    </message>
+    <message>
+        <source>stage_match_fallback</source>
+        <translation>楽曲を特定できなかったため、録音全体を処理します。</translation>
     </message>
     <message>
         <source>stage_analysis_done</source>
@@ -489,7 +417,7 @@
     </message>
     <message>
         <source>stage_render_loading</source>
-        <translation>全編録音を読み込み、出力を準備中...</translation>
+        <translation>録音を読み込み、出力を準備しています...</translation>
     </message>
     <message>
         <source>stage_render_clip</source>

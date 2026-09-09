@@ -58,7 +58,6 @@ class FeatureCard(HeightForWidth, CardWidget):
 
 class HomePage(PageScrollArea):
     mr_requested = Signal()
-    full_stage_requested = Signal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -81,21 +80,17 @@ class HomePage(PageScrollArea):
         self.layout.addWidget(self.section_title)
         self.layout.addWidget(self.section_hint)
 
-        # The two entry cards sit side by side wherever a line of prose fits
-        # beside another, and stack only once the window is phone-narrow.
+        # One entry card: the second lane stays empty on a wide window rather
+        # than stretching one card's prose across it.
         self.cards = ResponsiveColumns(self.content)
         self.mr_card = FeatureCard(FluentIcon.MUSIC, self.cards)
-        self.full_stage_card = FeatureCard(FluentIcon.ALBUM, self.cards)
         self.cards.add(self.mr_card, Lane.PRIMARY)
-        self.cards.add(self.full_stage_card, Lane.SECONDARY)
         self.cards.set_columns(2)
         self.layout.addWidget(self.cards)
         self.layout.addStretch()
 
         self.mr_card.clicked.connect(self.mr_requested.emit)
-        self.full_stage_card.clicked.connect(self.full_stage_requested.emit)
         self.mr_card.open_button.clicked.connect(self.mr_requested.emit)
-        self.full_stage_card.open_button.clicked.connect(self.full_stage_requested.emit)
 
     def apply_layout(self, metrics: LayoutMetrics) -> None:
         super().apply_layout(metrics)
@@ -108,15 +103,9 @@ class HomePage(PageScrollArea):
         self.section_title.setText(tr("home_choose_title"))
         self.section_hint.setText(tr("home_choose_hint"))
 
-        self.mr_card.title.setText(tr("mr_single_title"))
+        self.mr_card.title.setText(tr("nav_mr"))
         self.mr_card.meta.setText(tr("home_mr_meta"))
         self.mr_card.description.setText(tr("home_mr_description"))
         self.mr_card.open_button.setText(tr("home_open_mr"))
 
-        self.full_stage_card.title.setText(tr("nav_full_stage"))
-        self.full_stage_card.meta.setText(tr("home_full_stage_meta"))
-        self.full_stage_card.description.setText(tr("home_full_stage_description"))
-        self.full_stage_card.open_button.setText(tr("home_open_full_stage"))
-
         self.mr_card.setAccessibleName(self.mr_card.title.text())
-        self.full_stage_card.setAccessibleName(self.full_stage_card.title.text())

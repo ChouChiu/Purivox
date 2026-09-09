@@ -9,10 +9,10 @@ import numpy as np
 from scipy.fft import irfft, next_fast_len, rfft
 from scipy.signal import correlate, find_peaks, resample_poly
 
-from features.full_stage.models import (
+from features.reference_removal.models import (
     ClipKind,
-    FullStageAnalysis,
-    FullStageJob,
+    IsolationJob,
+    StageAnalysis,
     TimelineClip,
 )
 from shared.audio import AudioData, read_audio
@@ -80,7 +80,7 @@ def _features(proxy: np.ndarray) -> np.ndarray:
         max(round(_HOP_SECONDS * _FEATURE_RATE), 1),
     )
     if bands is None:
-        raise ValueError("audio is too short for full-stage matching")
+        raise ValueError("audio is too short to match sources against")
     return bands
 
 
@@ -448,19 +448,18 @@ def _timeline(duration: float, occupied: list[TimelineClip]) -> tuple[TimelineCl
     return tuple(sorted(occupied + gaps, key=lambda clip: (clip.stage_start, clip.kind.value)))
 
 
-def _rebuilt(analysis: FullStageAnalysis, occupied: list[TimelineClip]) -> FullStageAnalysis:
+def _rebuilt(analysis: StageAnalysis, occupied: list[TimelineClip]) -> StageAnalysis:
     """Recompute the unmatched gaps around a changed set of matched clips."""
     return replace(analysis, clips=_timeline(analysis.duration_seconds, occupied))
 
 
-def add_manual_clip(analysis: FullStageAnalysis, clip: TimelineClip) -> FullStageAnalysis:
+def add_manual_clip(analysis: StageAnalysis, clip: TimelineClip) -> StageAnalysis:
     """Insert a user-supplied clip the matcher could not find on its own.
 
     A spliced backing track reuses parts of a source in an order no anchor
     search will reconstruct, so the timeline has to accept ranges the user
-    knows about.  The clip is a full song rather than a fragment because
-    rendering gates fragments behind a switch, and an explicit addition should
-    not be silently skipped by it.
+    knows about.  The clip is a full song rather than a fragment: a fragment is
+    what the matcher found on its own, and a range the user typed in is not one.
     """
     if clip.kind == ClipKind.UNMATCHED:
         raise ValueError("a manual clip must reference a source")
@@ -471,7 +470,7 @@ def add_manual_clip(analysis: FullStageAnalysis, clip: TimelineClip) -> FullStag
     return _rebuilt(analysis, occupied)
 
 
-def remove_manual_clip(analysis: FullStageAnalysis, index: int) -> FullStageAnalysis:
+def remove_manual_clip(analysis: StageAnalysis, index: int) -> StageAnalysis:
     """Drop a manually added clip. Detected clips are disabled, never removed."""
     if not 0 <= index < len(analysis.clips):
         raise IndexError("timeline index out of range")
@@ -505,11 +504,11 @@ def _unmatched_clips(duration: float, occupied: list[TimelineClip]) -> list[Time
     return gaps
 
 
-def analyze_full_stage(
-    job: FullStageJob,
+def analyze_stage(
+    job: IsolationJob,
     token: CancellationToken,
     progress: ProgressCallback = lambda _event: None,
-) -> FullStageAnalysis:
+) -> StageAnalysis:
     stage_audio = None
     try:
         report_progress(progress, 0, "stage_loading")
@@ -580,13 +579,13 @@ def analyze_full_stage(
         clips = _timeline(duration, songs + fragments)
         report_progress(progress, 100, "stage_analysis_done", count=len(songs))
         logger.info(
-            "full-stage analysis completed: stage=%s songs=%d fragments=%d missing=%d",
+            "stage analysis completed: stage=%s songs=%d fragments=%d missing=%d",
             job.stage,
             len(songs),
             len(fragments),
             len(missing),
         )
-        return FullStageAnalysis(duration, clips, tuple(missing))
+        return StageAnalysis(duration, clips, tuple(missing))
     finally:
         if stage_audio is not None:
             stage_audio.cleanup()

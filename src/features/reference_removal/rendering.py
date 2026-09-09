@@ -5,14 +5,12 @@ from pathlib import Path
 
 import numpy as np
 
-from features.full_stage import (
-    ClipKind,
-    FullStageAnalysis,
-    FullStageJob,
-    FullStageResult,
-    analyze_full_stage,
-)
 from features.reference_removal.dsp import align_audio, process_audio
+from features.reference_removal.models import (
+    IsolationJob,
+    IsolationResult,
+    StageAnalysis,
+)
 from shared.audio import (
     AudioStats,
     copy_audio,
@@ -30,18 +28,10 @@ from shared.progress import report_progress
 logger = logging.getLogger(__name__)
 
 
-def analyze_full_stage_job(
-    job: FullStageJob,
-    token: CancellationToken,
-    progress: ProgressCallback = lambda _event: None,
-) -> FullStageResult:
-    return FullStageResult(analyze_full_stage(job, token, progress))
-
-
 def _alignment_quality(mix: np.ndarray, reference: np.ndarray, sample_rate: int) -> float:
     """Estimate how much of the stage a time-aligned stereo reference explains.
 
-    Full-stage matching already supplies a close source position.  A second drift
+    Matching already supplies a close source position.  A second drift
     alignment is useful for some broadcasts, but an uncertain local lag track can
     make an already-correct match worse.  Compare both candidates with small direct
     2x2 fits and keep the robust median.
@@ -84,24 +74,19 @@ def _blend_segment(destination: np.ndarray, processed: np.ndarray, sample_rate: 
     destination += processed * weight
 
 
-def run_full_stage_job(
-    job: FullStageJob,
-    analysis: FullStageAnalysis,
+def render_stage_job(
+    job: IsolationJob,
+    analysis: StageAnalysis,
     token: CancellationToken,
     progress: ProgressCallback = lambda _event: None,
-) -> FullStageResult:
+) -> IsolationResult:
     logger.info(
-        "full-stage render settings: strength=%d sigma=%d auto_align=%s include_fragments=%s",
+        "stage render settings: strength=%d sigma=%d auto_align=%s",
         job.strength,
         job.sigma,
         job.auto_align,
-        job.include_fragments,
     )
-    matched = tuple(
-        clip
-        for clip in analysis.matched_clips
-        if clip.kind == ClipKind.SONG or job.include_fragments
-    )
+    matched = analysis.matched_clips
     if not matched:
         raise ValueError("no source could be matched to the stage audio")
 
@@ -230,8 +215,8 @@ def run_full_stage_job(
             output.release_pages()
             outputs.append(backing.resolve())
         report_progress(progress, 100, "done_status", path=outputs[0])
-        logger.info("full-stage render completed: %s", ", ".join(str(path) for path in outputs))
-        return FullStageResult(analysis, tuple(outputs), tuple(stats))
+        logger.info("stage render completed: %s", ", ".join(str(path) for path in outputs))
+        return IsolationResult(analysis, tuple(outputs), tuple(stats))
     finally:
         for audio in (output, stage):
             if audio is not None:

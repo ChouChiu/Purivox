@@ -6,13 +6,13 @@ import numpy as np
 import pytest
 import soundfile as sf
 
-from features.full_stage import (
+from features.reference_removal import (
     ClipKind,
-    FullStageAnalysis,
-    FullStageJob,
+    IsolationJob,
+    StageAnalysis,
     TimelineClip,
     add_manual_clip,
-    analyze_full_stage,
+    analyze_stage,
     remove_manual_clip,
 )
 from shared.processing import CancellationToken
@@ -32,7 +32,7 @@ def _source(sample_rate: int, seconds: int, seed: int) -> np.ndarray:
     return np.stack([signal, signal], axis=1).astype(np.float32)
 
 
-def test_full_stage_matches_sources_in_order_and_preserves_gaps(tmp_path: Path):
+def test_sources_are_matched_in_order_and_gaps_are_preserved(tmp_path: Path):
     sample_rate = 8_000
     first = _source(sample_rate, 8, 1)
     second = _source(sample_rate, 9, 2)
@@ -47,8 +47,8 @@ def test_full_stage_matches_sources_in_order_and_preserves_gaps(tmp_path: Path):
     sf.write(first_path, first, sample_rate)
     sf.write(second_path, second, sample_rate)
 
-    analysis = analyze_full_stage(
-        FullStageJob(stage_path, (second_path, first_path), tmp_path / "output.wav"),
+    analysis = analyze_stage(
+        IsolationJob(stage_path, (second_path, first_path), tmp_path / "output.wav"),
         CancellationToken(),
     )
 
@@ -69,7 +69,7 @@ def test_full_stage_matches_sources_in_order_and_preserves_gaps(tmp_path: Path):
 def test_manual_clip_is_inserted_and_gaps_are_recomputed(tmp_path: Path):
     """A spliced backing reuses a source in an order no anchor search finds."""
     source = (tmp_path / "song.wav").resolve()
-    analysis = FullStageAnalysis(
+    analysis = StageAnalysis(
         60.0,
         (
             TimelineClip(ClipKind.SONG, 0.0, 20.0, source, 0, 0.0, 20.0, 0.9),
@@ -98,7 +98,7 @@ def test_manual_clip_is_inserted_and_gaps_are_recomputed(tmp_path: Path):
 
 def test_manual_clip_removal_only_applies_to_manual_entries(tmp_path: Path):
     source = (tmp_path / "song.wav").resolve()
-    analysis = FullStageAnalysis(
+    analysis = StageAnalysis(
         40.0,
         (TimelineClip(ClipKind.SONG, 0.0, 20.0, source, 0, 0.0, 20.0, 0.9),),
     )
@@ -118,7 +118,7 @@ def test_manual_clip_removal_only_applies_to_manual_entries(tmp_path: Path):
 
 def test_manual_clip_rejects_a_range_past_the_stage(tmp_path: Path):
     source = (tmp_path / "song.wav").resolve()
-    analysis = FullStageAnalysis(10.0, (TimelineClip(ClipKind.UNMATCHED, 0.0, 10.0),))
+    analysis = StageAnalysis(10.0, (TimelineClip(ClipKind.UNMATCHED, 0.0, 10.0),))
 
     with pytest.raises(ValueError):
         add_manual_clip(
@@ -141,8 +141,8 @@ def test_a_source_played_at_a_different_tempo_is_matched_and_stretched(tmp_path:
     sf.write(stage_path, stage, sample_rate)
     sf.write(source_path, source, sample_rate)
 
-    analysis = analyze_full_stage(
-        FullStageJob(stage_path, (source_path,), tmp_path / "output.wav"),
+    analysis = analyze_stage(
+        IsolationJob(stage_path, (source_path,), tmp_path / "output.wav"),
         CancellationToken(),
     )
 

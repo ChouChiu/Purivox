@@ -10,13 +10,15 @@ from typing import Any
 
 import soundfile as sf
 
-from app.full_stage_processing import analyze_full_stage_job, run_full_stage_job
-from features.full_stage import FullStageJob
-from features.reference_removal import ReferenceJob, run_reference_job
+from features.reference_removal import (
+    IsolationJob,
+    matching,
+    run_isolation_job,
+)
 from shared.audio import AudioStats
 from shared.jobs import OutputTracks
 from shared.processing import CancellationToken, ProgressEvent
-from web.limits import MemoryEstimate, full_stage_peak_bytes, reference_peak_bytes
+from web.limits import MemoryEstimate, isolation_peak_bytes
 from web.timeline import add_clip, analysis_from_dict, analysis_to_dict, edit_clip, remove_clip
 
 logger = logging.getLogger(__name__)
@@ -102,28 +104,12 @@ def _estimate_to_dict(estimate: MemoryEstimate) -> dict[str, Any]:
     }
 
 
-def estimate_reference(request: str) -> str:
-    """Report whether one single-song job fits in the browser's memory budget."""
+def estimate_isolation(request: str) -> str:
+    """Report whether one isolation job fits in the browser's memory budget."""
     data = json.loads(request)
     return _dump(
         _estimate_to_dict(
-            reference_peak_bytes(
-                int(data["sample_rate"]),
-                float(data["stage_seconds"]),
-                float(data["source_seconds"]),
-                int(data.get("file_bytes", 0)),
-                bool(data.get("both_tracks", False)),
-            )
-        )
-    )
-
-
-def estimate_full_stage(request: str) -> str:
-    """Report whether one full-stage render fits in the browser's memory budget."""
-    data = json.loads(request)
-    return _dump(
-        _estimate_to_dict(
-            full_stage_peak_bytes(
+            isolation_peak_bytes(
                 int(data["sample_rate"]),
                 float(data["stage_seconds"]),
                 float(data["longest_source_seconds"]),
@@ -134,35 +120,13 @@ def estimate_full_stage(request: str) -> str:
     )
 
 
-def run_reference(request: str, on_progress: JsonCallback | None = None) -> str:
-    """Run one single-song cancellation over files already in the Pyodide filesystem."""
-    data = json.loads(request)
-    job = ReferenceJob(
-        stage=Path(data["stage"]),
-        source=Path(data["source"]),
-        output=Path(data["output"]),
-        strength=int(data.get("strength", 75)),
-        sigma=int(data.get("sigma", 3)),
-        auto_align=bool(data.get("auto_align", True)),
-        tracks=OutputTracks(data.get("tracks", OutputTracks.VOCAL)),
-    )
-    result = run_reference_job(job, CancellationToken(), _progress_callback(on_progress))
-    return _dump(
-        {
-            "outputs": [str(path) for path in result.outputs],
-            "audio_stats": [_stats_to_dict(stats) for stats in result.audio_stats],
-        }
-    )
-
-
-def _full_stage_job(data: dict[str, Any]) -> FullStageJob:
-    return FullStageJob(
+def _isolation_job(data: dict[str, Any]) -> IsolationJob:
+    return IsolationJob(
         stage=Path(data["stage"]),
         sources=tuple(Path(source) for source in data["sources"]),
         output=Path(data["output"]),
         strength=int(data.get("strength", 75)),
         sigma=int(data.get("sigma", 3)),
-        include_fragments=bool(data.get("include_fragments", True)),
         auto_align=bool(data.get("auto_align", True)),
         tracks=OutputTracks(data.get("tracks", OutputTracks.VOCAL)),
     )
@@ -171,18 +135,24 @@ def _full_stage_job(data: dict[str, Any]) -> FullStageJob:
 def analyze_stage(request: str, on_progress: JsonCallback | None = None) -> str:
     """Match the sources against the stage recording and return the timeline."""
     data = json.loads(request)
-    result = analyze_full_stage_job(
-        _full_stage_job(data), CancellationToken(), _progress_callback(on_progress)
+    analysis = matching.analyze_stage(
+        _isolation_job(data), CancellationToken(), _progress_callback(on_progress)
     )
-    return _dump({"analysis": analysis_to_dict(result.analysis)})
+    return _dump({"analysis": analysis_to_dict(analysis)})
 
 
-def render_stage(request: str, on_progress: JsonCallback | None = None) -> str:
-    """Cancel the enabled clips of an edited timeline out of the stage recording."""
+def run_isolation(request: str, on_progress: JsonCallback | None = None) -> str:
+    """Run one isolation job over files already in the Pyodide filesystem.
+
+    The page may send the timeline it is showing, which is what the user
+    checked and possibly edited; without one the pipeline matches the sources
+    first and falls back to a whole-file cancellation if a lone source cannot
+    be placed.
+    """
     data = json.loads(request)
-    analysis = analysis_from_dict(data["analysis"])
-    result = run_full_stage_job(
-        _full_stage_job(data), analysis, CancellationToken(), _progress_callback(on_progress)
+    analysis = analysis_from_dict(data["analysis"]) if data.get("analysis") else None
+    result = run_isolation_job(
+        _isolation_job(data), analysis, CancellationToken(), _progress_callback(on_progress)
     )
     return _dump(
         {

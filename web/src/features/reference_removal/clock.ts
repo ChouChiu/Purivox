@@ -1,7 +1,7 @@
 /**
  * Stage and source times, in the format the timeline is edited in.
  *
- * The desktop spells these in `features/full_stage/timeline_model.py`, which
+ * The desktop spells these in `features/reference_removal/timeline_model.py`, which
  * imports Qt and so cannot be shared with the browser. They are presentation,
  * not the algorithm - the analysis itself crosses as seconds.
  */

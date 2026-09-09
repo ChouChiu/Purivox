@@ -32,14 +32,6 @@
         <translation>Browse...</translation>
     </message>
     <message>
-        <source>auto_find_on</source>
-        <translation>Auto-match: On</translation>
-    </message>
-    <message>
-        <source>auto_find_off</source>
-        <translation>Auto-match: Off</translation>
-    </message>
-    <message>
         <source>params</source>
         <translation>Processing options</translation>
     </message>
@@ -70,14 +62,6 @@
     <message>
         <source>strength</source>
         <translation>Vocal isolation strength:</translation>
-    </message>
-    <message>
-        <source>switch_on</source>
-        <translation>On</translation>
-    </message>
-    <message>
-        <source>switch_off</source>
-        <translation>Off</translation>
     </message>
     <message>
         <source>status_group</source>
@@ -173,7 +157,7 @@
     </message>
     <message>
         <source>warn_no_source</source>
-        <translation>Choose the song source that matches the stage content.</translation>
+        <translation>Add at least one song source.</translation>
     </message>
     <message>
         <source>warn_no_out</source>
@@ -236,12 +220,8 @@
         <translation>Processing cancelled</translation>
     </message>
     <message>
-        <source>auto_found</source>
-        <translation>Found a possible matching song source</translation>
-    </message>
-    <message>
-        <source>auto_not_found</source>
-        <translation>No matching song source was found; choose one manually</translation>
+        <source>source_already_added</source>
+        <translation>That song source is already in the list.</translation>
     </message>
     <message>
         <source>warn_invalid_parameters</source>
@@ -249,7 +229,7 @@
     </message>
     <message>
         <source>warn_same_inputs</source>
-        <translation>The stage / live audio and song source must be different files.</translation>
+        <translation>The stage recording cannot also be a song source.</translation>
     </message>
     <message>
         <source>warn_output_conflict</source>
@@ -268,22 +248,6 @@
         <translation>Vocal Isolation</translation>
     </message>
     <message>
-        <source>mr_single_title</source>
-        <translation>Single Vocal Isolation</translation>
-    </message>
-    <message>
-        <source>nav_full_stage</source>
-        <translation>Full Stage Vocal Isolation</translation>
-    </message>
-    <message>
-        <source>mr_tab_single</source>
-        <translation>Single</translation>
-    </message>
-    <message>
-        <source>mr_tab_full_stage</source>
-        <translation>Full Stage</translation>
-    </message>
-    <message>
         <source>nav_settings</source>
         <translation>Settings</translation>
     </message>
@@ -293,59 +257,31 @@
     </message>
     <message>
         <source>home_intro</source>
-        <translation>Use matching song sources to isolate live vocals from stage / live audio, one track or a whole show.</translation>
+        <translation>Cancel the backing out of a stage / live recording with its song sources: add one source or a whole show's worth.</translation>
     </message>
     <message>
         <source>home_choose_title</source>
-        <translation>Choose a workflow</translation>
+        <translation>Get started</translation>
     </message>
     <message>
         <source>home_choose_hint</source>
-        <translation>Choose Single for one track or Full Stage for a continuous show. Both modes need matching song sources.</translation>
+        <translation>Pick a stage / live recording, then add its song sources: one source cancels that song, several are located in the recording first.</translation>
     </message>
     <message>
         <source>home_mr_meta</source>
-        <translation>Input: one stage / live recording + one song source</translation>
+        <translation>Input: one stage / live recording + one or more song sources</translation>
     </message>
     <message>
         <source>home_mr_description</source>
-        <translation>Aligns the song source to the recording and cancels the backing track, leaving the live vocals of that one stage.</translation>
+        <translation>One source is aligned and cancelled as that song; several are located in the recording first, then cancelled section by section. The timeline stays editable before rendering.</translation>
     </message>
     <message>
         <source>home_open_mr</source>
-        <translation>Open Single</translation>
-    </message>
-    <message>
-        <source>home_full_stage_meta</source>
-        <translation>Input: one continuous show recording + several song sources</translation>
-    </message>
-    <message>
-        <source>home_full_stage_description</source>
-        <translation>Matches several song sources against the continuous recording to place each song, then cancels section by section; the timeline stays editable before rendering.</translation>
-    </message>
-    <message>
-        <source>home_open_full_stage</source>
-        <translation>Open Full Stage</translation>
-    </message>
-    <message>
-        <source>stage_files</source>
-        <translation>Full Stage files</translation>
-    </message>
-    <message>
-        <source>stage_audio</source>
-        <translation>Full stage / live audio:</translation>
-    </message>
-    <message>
-        <source>stage_output_hint</source>
-        <translation>By default, saves the processed WAV next to the full recording</translation>
-    </message>
-    <message>
-        <source>stage_sources</source>
-        <translation>Song sources</translation>
+        <translation>Open</translation>
     </message>
     <message>
         <source>stage_sources_hint</source>
-        <translation>Add every song source that may appear in the recording in any order; each song is found and placed by time automatically.</translation>
+        <translation>Add every song source the recording may contain, in any order; each song is found and placed by time automatically.</translation>
     </message>
     <message>
         <source>stage_add_sources</source>
@@ -378,10 +314,6 @@
     <message>
         <source>stage_no_room_for_clip</source>
         <translation>No unidentified range is available for a new segment.</translation>
-    </message>
-    <message>
-        <source>stage_include_fragments</source>
-        <translation>Process detected song fragments:</translation>
     </message>
     <message>
         <source>stage_timeline</source>
@@ -440,18 +372,6 @@
         <translation>Find songs</translation>
     </message>
     <message>
-        <source>stage_start</source>
-        <translation>Process full recording</translation>
-    </message>
-    <message>
-        <source>stage_ready</source>
-        <translation>Choose the full recording and add song sources.</translation>
-    </message>
-    <message>
-        <source>stage_need_audio</source>
-        <translation>Choose the full recording first.</translation>
-    </message>
-    <message>
         <source>stage_need_sources</source>
         <translation>Add at least one song source.</translation>
     </message>
@@ -461,15 +381,23 @@
     </message>
     <message>
         <source>stage_loading</source>
-        <translation>Reading full recording...</translation>
+        <translation>Reading the stage recording...</translation>
     </message>
     <message>
         <source>stage_fingerprinting</source>
-        <translation>Analyzing music in the full recording...</translation>
+        <translation>Analysing the music in the recording...</translation>
     </message>
     <message>
         <source>stage_matching_source</source>
         <translation>Matching source {current}/{total}: {name}</translation>
+    </message>
+    <message>
+        <source>stage_whole_recording</source>
+        <translation>The source is the whole recording; cancelling it as one take...</translation>
+    </message>
+    <message>
+        <source>stage_match_fallback</source>
+        <translation>No song could be located; cancelling the recording as a whole.</translation>
     </message>
     <message>
         <source>stage_analysis_done</source>
@@ -489,7 +417,7 @@
     </message>
     <message>
         <source>stage_render_loading</source>
-        <translation>Reading the full recording and preparing the output...</translation>
+        <translation>Reading the recording and preparing the output...</translation>
     </message>
     <message>
         <source>stage_render_clip</source>

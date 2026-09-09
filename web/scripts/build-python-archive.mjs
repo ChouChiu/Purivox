@@ -17,9 +17,9 @@ const here = dirname(fileURLToPath(import.meta.url));
 const source = resolve(here, "..", "..", "src");
 const target = resolve(here, "..", "public", "purivox-src.zip");
 
-// `app` carries `full_stage_processing`, which orchestrates the render.  Its GUI
-// modules travel along but are never imported: nothing in the browser reaches
-// `app.main_window`.  `entrypoints` is left out entirely - it is Qt startup.
+// `app` carries the window and job wiring the browser never imports: nothing
+// here reaches `app.main_window`, and the pipelines it used to orchestrate now
+// live in `features`.  `entrypoints` is left out entirely - it is Qt startup.
 const PACKAGES = ["app", "features", "resources", "shared", "web"];
 // Compiled catalogues and Linguist sources are dead weight here; the page
 // translates from the JSON that build-i18n.mjs writes.

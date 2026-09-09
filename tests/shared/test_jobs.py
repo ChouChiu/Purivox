@@ -13,10 +13,8 @@ def test_backing_path_appends_when_there_is_no_marker():
     assert backing_path(Path("/tmp/我的现场.wav")) == Path("/tmp/我的现场_backing.wav")
 
 
-def test_backing_path_keeps_the_full_stage_default_readable():
-    assert backing_path(Path("/tmp/live_full_stage_vocals.wav")) == Path(
-        "/tmp/live_full_stage_backing.wav"
-    )
+def test_backing_path_swaps_the_vocal_marker_wherever_it_sits():
+    assert backing_path(Path("/tmp/live_encore_vocals.wav")) == Path("/tmp/live_encore_backing.wav")
 
 
 @pytest.mark.parametrize("tracks", [OutputTracks.VOCAL, OutputTracks.BACKING])

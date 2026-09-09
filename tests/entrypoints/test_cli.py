@@ -1,7 +1,22 @@
+from pathlib import Path
+
 import pytest
 
 from entrypoints.cli import build_parser
 from shared.jobs import OutputTracks
+
+
+def test_reference_command_takes_one_or_more_sources():
+    """The number of sources is the only difference between the two old modes."""
+    parser = build_parser()
+
+    one = parser.parse_args(["mr", "stage.wav", "song.flac", "out.wav"])
+    assert one.sources == [Path("song.flac")]
+    assert one.output == Path("out.wav")
+
+    many = parser.parse_args(["mr", "stage.wav", "a.flac", "b.flac", "out.wav"])
+    assert many.sources == [Path("a.flac"), Path("b.flac")]
+    assert many.output == Path("out.wav")
 
 
 def test_reference_command_parses_its_settings():

@@ -5,13 +5,12 @@ from PySide6.QtWidgets import QWidget
 from qfluentwidgets import InfoBar, InfoBarPosition, StateToolTip
 
 from app.job_runner import JobRunner
-from features.full_stage import FullStageResult
-from features.full_stage.page import FullStagePage
+from features.reference_removal import ClipKind, IsolationResult, StageAnalysis
 from features.reference_removal.page import MrPage
 from shared.i18n import tr
 from shared.processing import ProcessingOperation, ProcessingResultLike
 
-ProcessingPage = MrPage | FullStagePage
+ProcessingPage = MrPage
 
 
 class JobPresenter(QObject):
@@ -65,29 +64,42 @@ class JobPresenter(QObject):
         if self._state_tip is not None:
             self._state_tip.setContent(message)
 
+    @staticmethod
+    def _summary(analysis: StageAnalysis) -> str:
+        return tr(
+            "stage_analysis_summary",
+            songs=len(analysis.song_clips),
+            fragments=sum(clip.kind is ClipKind.FRAGMENT for clip in analysis.clips),
+            missing=len(analysis.missing_sources),
+        )
+
     @Slot(object)
     def _success(self, result: ProcessingResultLike) -> None:
         if self._state_tip is not None:
             self._state_tip.setState(True)
             self._state_tip = None
-        outputs = "\n".join(map(str, result.outputs))
-        if isinstance(self._active_page, MrPage) and result.outputs:
-            stats = result.audio_stats[0] if result.audio_stats else None
-            self._active_page.set_result(result.outputs[0], stats)
-        if isinstance(self._active_page, FullStagePage) and isinstance(result, FullStageResult):
-            self._active_page.set_analysis(result.analysis)
-            if result.outputs:
-                self._active_page.status.setText(tr("done_status", path=result.outputs[0]))
-            else:
-                outputs = tr(
-                    "stage_analysis_summary",
-                    songs=len(result.analysis.song_clips),
-                    fragments=sum(clip.kind.value == "fragment" for clip in result.analysis.clips),
-                    missing=len(result.analysis.missing_sources),
-                )
+        page = self._active_page
+        if isinstance(result, StageAnalysis):
+            # The Find songs button reports a timeline and writes nothing.
+            if page is not None:
+                page.set_analysis(result)
+            message = self._summary(result)
+        else:
+            analysis = result.analysis if isinstance(result, IsolationResult) else None
+            if page is not None and analysis is not None:
+                page.set_analysis(analysis)
+                if result.outputs:
+                    stats = result.audio_stats[0] if result.audio_stats else None
+                    page.set_result(result.outputs[0], stats)
+                    page.status.setText(tr("done_status", path=result.outputs[0]))
+            message = (
+                "\n".join(map(str, result.outputs))
+                if result.outputs
+                else (self._summary(analysis) if analysis is not None else "")
+            )
         InfoBar.success(
             tr("done_title"),
-            outputs,
+            message,
             duration=5000,
             position=InfoBarPosition.TOP_RIGHT,
             parent=self._parent,

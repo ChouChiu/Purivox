@@ -4,9 +4,9 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
-from features.full_stage import (
+from features.reference_removal import (
     ClipKind,
-    FullStageAnalysis,
+    StageAnalysis,
     TimelineClip,
     add_manual_clip,
     remove_manual_clip,
@@ -46,7 +46,7 @@ def clip_from_dict(data: dict[str, Any]) -> TimelineClip:
     )
 
 
-def analysis_to_dict(analysis: FullStageAnalysis) -> dict[str, Any]:
+def analysis_to_dict(analysis: StageAnalysis) -> dict[str, Any]:
     return {
         "duration_seconds": analysis.duration_seconds,
         "clips": [clip_to_dict(clip) for clip in analysis.clips],
@@ -54,8 +54,8 @@ def analysis_to_dict(analysis: FullStageAnalysis) -> dict[str, Any]:
     }
 
 
-def analysis_from_dict(data: dict[str, Any]) -> FullStageAnalysis:
-    return FullStageAnalysis(
+def analysis_from_dict(data: dict[str, Any]) -> StageAnalysis:
+    return StageAnalysis(
         duration_seconds=float(data["duration_seconds"]),
         clips=tuple(clip_from_dict(clip) for clip in data["clips"]),
         missing_sources=tuple(Path(path) for path in data.get("missing_sources", ())),
@@ -66,7 +66,7 @@ def add_clip(analysis_data: dict[str, Any], clip_data: dict[str, Any]) -> dict[s
     """Insert one manually described clip and rebuild the surrounding timeline.
 
     The page edits a plain object, but the rules that decide what a timeline
-    looks like after an edit stay in `features.full_stage.matching` - the GUI
+    looks like after an edit stay in `features.reference_removal.matching` - the GUI
     reaches the very same functions through `TimelineModel`.
     """
     analysis = analysis_from_dict(analysis_data)

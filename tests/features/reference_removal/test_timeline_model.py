@@ -4,8 +4,8 @@ from pathlib import Path
 
 from PySide6.QtCore import Qt
 
-from features.full_stage import ClipKind, FullStageAnalysis, TimelineClip
-from features.full_stage.timeline_model import (
+from features.reference_removal import ClipKind, StageAnalysis, TimelineClip
+from features.reference_removal.timeline_model import (
     CONFIDENCE,
     ENABLED,
     KIND,
@@ -18,8 +18,8 @@ from features.full_stage.timeline_model import (
 from shared.i18n import install_language, tr
 
 
-def _analysis(source: Path, speed: float = 1.0) -> FullStageAnalysis:
-    return FullStageAnalysis(
+def _analysis(source: Path, speed: float = 1.0) -> StageAnalysis:
+    return StageAnalysis(
         30.0,
         (
             TimelineClip(ClipKind.UNMATCHED, 0.0, 5.0),

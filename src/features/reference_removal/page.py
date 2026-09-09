@@ -4,12 +4,15 @@ import logging
 import math
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QUrl, Signal
+from PySide6.QtCore import QItemSelection, Qt, QUrl, Signal
 from PySide6.QtMultimedia import QAudioOutput, QMediaDevices, QMediaPlayer
 from PySide6.QtWidgets import (
+    QAbstractItemView,
     QFileDialog,
     QGridLayout,
     QHBoxLayout,
+    QHeaderView,
+    QListWidgetItem,
     QVBoxLayout,
     QWidget,
 )
@@ -18,15 +21,22 @@ from qfluentwidgets import (
     CaptionLabel,
     FluentIcon,
     LineEdit,
+    ListWidget,
     PrimaryPushButton,
     PushButton,
     Slider,
     StrongBodyLabel,
-    SwitchButton,
+    TableView,
     TitleLabel,
 )
 
+from features.reference_removal.models import (
+    ClipKind,
+    StageAnalysis,
+    TimelineClip,
+)
 from features.reference_removal.preview import SeekSlider
+from features.reference_removal.timeline_model import SOURCE, TimelineModel
 from shared.audio import AudioStats
 from shared.config import cfg
 from shared.i18n import tr
@@ -51,27 +61,32 @@ logger = logging.getLogger(__name__)
 
 VOLUME_SLIDER_WIDTH = 150
 STAT_COLUMNS = 4
+SOURCES_HEIGHT, SHORT_SOURCES_HEIGHT = 150, 110
+TIMELINE_HEIGHT, SHORT_TIMELINE_HEIGHT = 260, 180
 
 
 class MrPage(PageScrollArea):
+    """The one vocal-isolation page: a stage recording and one or more sources.
+
+    Every job is the same job.  With one source the page is the single-song
+    workflow it has always been; adding sources is the only difference, and the
+    pipeline matches each of them against the recording on its own.
+    """
+
     start_requested = Signal()
+    analyze_requested = Signal()
     cancel_requested = Signal()
-    stage_changed = Signal(str)
     download_requested = Signal(str)
-    """Which field a fetched file should land in: `stage` or `source`."""
+    """Which input a fetched file belongs to: `stage` or `sources`."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("mrPage")
         self.title = TitleLabel()
         self.layout.addWidget(self.title)
+
         self.files = FormCard()
         self.stage_label, self.stage_edit, self.stage_button = (
-            BodyLabel(),
-            LineEdit(),
-            PushButton(),
-        )
-        self.source_label, self.source_edit, self.source_button = (
             BodyLabel(),
             LineEdit(),
             PushButton(),
@@ -82,29 +97,35 @@ class MrPage(PageScrollArea):
             PushButton(),
         )
         self.stage_download = PushButton(FluentIcon.CLOUD_DOWNLOAD, "")
-        self.source_download = PushButton(FluentIcon.CLOUD_DOWNLOAD, "")
-        for edit in (self.stage_edit, self.source_edit):
-            edit.setReadOnly(True)
+        self.stage_edit.setReadOnly(True)
         # A path field beside both a browse and a fetch button is wider than a
         # phone-narrow row can hold: the field gives way, never the page.
-        for edit in (self.stage_edit, self.source_edit, self.output_edit):
+        for edit in (self.stage_edit, self.output_edit):
             allow_shrinking(edit)
         self.output_edit.setClearButtonEnabled(True)
         self._output_user_edited = False
-        self.auto_find = SwitchButton()
-        self.auto_find.setChecked(bool(cfg.auto_find.value))
         self.files.add_row(
             self.stage_label, self.stage_edit, self.stage_button, self.stage_download
         )
-        self.files.add_row(
-            self.source_label,
-            self.source_edit,
-            self.source_button,
-            self.source_download,
-            self.auto_find,
-        )
         self.files.add_row(self.output_label, self.output_edit, self.output_button)
         self.add_card(self.files)
+
+        self.sources_card = FormCard()
+        self.sources_hint = BodyLabel()
+        self.sources_hint.setWordWrap(True)
+        self.sources_card.layout.addWidget(self.sources_hint)
+        self.sources = ListWidget()
+        self.sources.setMinimumHeight(SOURCES_HEIGHT)
+        self.sources_card.layout.addWidget(self.sources)
+        source_actions = QHBoxLayout()
+        self.add_sources = PushButton(FluentIcon.ADD, "")
+        self.download_sources = PushButton(FluentIcon.CLOUD_DOWNLOAD, "")
+        self.remove_source = PushButton(FluentIcon.DELETE, "")
+        for button in (self.add_sources, self.download_sources, self.remove_source):
+            source_actions.addWidget(button)
+        source_actions.addStretch()
+        self.sources_card.layout.addLayout(source_actions)
+        self.add_card(self.sources_card)
 
         self.parameters = FormCard()
         self.tracks_label, self.tracks = BodyLabel(), SmoothComboBox()
@@ -118,6 +139,35 @@ class MrPage(PageScrollArea):
         self.add_card(self.parameters)
 
         self.add_status_card()
+
+        self.timeline_card = FormCard()
+        self.timeline_hint = BodyLabel()
+        self.timeline_hint.setWordWrap(True)
+        self.timeline_card.layout.addWidget(self.timeline_hint)
+        self.timeline_model = TimelineModel(self)
+        self.timeline = TableView()
+        self.timeline.setModel(self.timeline_model)
+        self.timeline.setMinimumHeight(TIMELINE_HEIGHT)
+        self.timeline.setEditTriggers(
+            QAbstractItemView.EditTrigger.DoubleClicked
+            | QAbstractItemView.EditTrigger.EditKeyPressed
+        )
+        self.timeline.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.timeline.verticalHeader().hide()
+        header = self.timeline.horizontalHeader()
+        for column in range(self.timeline_model.columnCount() - 1):
+            header.setSectionResizeMode(column, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(SOURCE, QHeaderView.ResizeMode.Stretch)
+        self.timeline_card.layout.addWidget(self.timeline)
+        clip_actions = QHBoxLayout()
+        self.add_clip = PushButton(FluentIcon.ADD, "")
+        self.remove_clip = PushButton(FluentIcon.DELETE, "")
+        self.remove_clip.setEnabled(False)
+        for button in (self.add_clip, self.remove_clip):
+            clip_actions.addWidget(button)
+        clip_actions.addStretch()
+        self.timeline_card.layout.addLayout(clip_actions)
+        self.add_card(self.timeline_card, Lane.SECONDARY)
 
         self.preview_card = FormCard()
         self.preview_status = ElidedLabel()
@@ -196,24 +246,33 @@ class MrPage(PageScrollArea):
         actions = QHBoxLayout()
         actions.addStretch()
         self.cancel_button = PushButton()
-        self.start_button = PrimaryPushButton()
+        self.analyze_button = PushButton(FluentIcon.SYNC, "")
+        self.start_button = PrimaryPushButton(FluentIcon.PLAY, "")
         self.cancel_button.setEnabled(False)
         actions.addWidget(self.cancel_button)
+        actions.addWidget(self.analyze_button)
         actions.addWidget(self.start_button)
         self.layout.addLayout(actions)
         self.layout.addStretch()
 
         self.stage_button.clicked.connect(self._select_stage)
-        self.source_button.clicked.connect(self._select_source)
         self.stage_download.clicked.connect(lambda: self.download_requested.emit("stage"))
-        self.source_download.clicked.connect(lambda: self.download_requested.emit("source"))
         self.output_button.clicked.connect(self._select_output)
         self.output_edit.textEdited.connect(self._output_edited)
         self.output_edit.editingFinished.connect(self.normalized_output_path)
+        self.add_sources.clicked.connect(self._add_sources)
+        self.download_sources.clicked.connect(lambda: self.download_requested.emit("sources"))
+        self.remove_source.clicked.connect(self._remove_source)
+        self.analyze_button.clicked.connect(self.analyze_requested)
         self.start_button.clicked.connect(self.start_requested)
         self.cancel_button.clicked.connect(self.cancel_requested)
         self.strength.valueChanged.connect(lambda value: self.strength_value.setText(f"{value}%"))
         self.tracks.currentIndexChanged.connect(self._tracks_changed)
+        self.timeline.selectionModel().selectionChanged.connect(self._selection_changed)
+        self.timeline_model.clip_edited.connect(self._clip_edited)
+        self.timeline_model.edit_rejected.connect(self._edit_rejected)
+        self.add_clip.clicked.connect(self._add_clip)
+        self.remove_clip.clicked.connect(self._remove_clip)
         self.preview_play.clicked.connect(self.toggle_preview)
         self.preview_stop.clicked.connect(self.stop_preview)
         self.preview_volume.valueChanged.connect(
@@ -227,6 +286,10 @@ class MrPage(PageScrollArea):
         self.player.durationChanged.connect(self._preview_duration_changed)
         self.player.playbackStateChanged.connect(lambda _state: self._update_preview_button())
         self.player.errorOccurred.connect(self._preview_error)
+
+    @property
+    def analysis(self) -> StageAnalysis | None:
+        return self.timeline_model.analysis
 
     def _reflow_stats(self, columns: int) -> None:
         """Re-place the audio-data tiles across `columns` of the grid."""
@@ -245,33 +308,44 @@ class MrPage(PageScrollArea):
         self.preview_volume.setMaximumWidth(
             UNBOUNDED_WIDTH if metrics.stacked_rows else VOLUME_SLIDER_WIDTH
         )
+        # The source list and the timeline are the two panes that would eat a
+        # short window whole, so they give back height before anything else.
+        self.sources.setMinimumHeight(SHORT_SOURCES_HEIGHT if metrics.short else SOURCES_HEIGHT)
+        self.timeline.setMinimumHeight(SHORT_TIMELINE_HEIGHT if metrics.short else TIMELINE_HEIGHT)
 
     def retranslate(self) -> None:
-        self.title.setText(tr("mr_single_title"))
+        self.title.setText(tr("nav_mr"))
         self.files.title_label.setText(tr("file_select"))
-        self.parameters.title_label.setText(tr("params"))
-        self.retranslate_status_card()
-        self.preview_card.title_label.setText(tr("preview_title"))
-        self.data_card.title_label.setText(tr("audio_data_title"))
         self.stage_label.setText(tr("mr_audio_label"))
-        self.source_label.setText(tr("source_label"))
         self.output_label.setText(tr("output_file"))
         self.output_edit.setPlaceholderText(tr("output_name_hint"))
-        self.strength_label.setText(tr("strength"))
+        self.stage_button.setText(tr("browse"))
+        self.output_button.setText(tr("browse"))
+        for button in (self.stage_download, self.download_sources):
+            button.setText(tr("download_fetch"))
+        self.sources_card.title_label.setText(tr("source_label"))
+        self.sources_hint.setText(tr("stage_sources_hint"))
+        self.add_sources.setText(tr("stage_add_sources"))
+        self.remove_source.setText(tr("stage_remove_source"))
+        self.parameters.title_label.setText(tr("params"))
         self.tracks_label.setText(tr("output_tracks"))
         self._retranslate_tracks()
-        for button in (self.stage_button, self.source_button, self.output_button):
-            button.setText(tr("browse"))
-        for button in (self.stage_download, self.source_download):
-            button.setText(tr("download_fetch"))
-        self.auto_find.setOnText(tr("auto_find_on"))
-        self.auto_find.setOffText(tr("auto_find_off"))
-        self.cancel_button.setText(tr("cancel"))
-        self.start_button.setText(tr("start"))
+        self.strength_label.setText(tr("strength"))
+        self.retranslate_status_card()
+        self.timeline_card.title_label.setText(tr("stage_timeline"))
+        self.timeline_hint.setText(tr("stage_timeline_hint"))
+        self.timeline_model.retranslate()
+        self.add_clip.setText(tr("stage_add_clip"))
+        self.remove_clip.setText(tr("stage_remove_clip"))
+        self.preview_card.title_label.setText(tr("preview_title"))
         self.preview_stop.setText(tr("preview_stop"))
         self.preview_volume_label.setText(tr("preview_volume"))
+        self.data_card.title_label.setText(tr("audio_data_title"))
         for key, label in self.stat_labels.items():
             label.setText(tr(f"audio_{key}"))
+        self.cancel_button.setText(tr("cancel"))
+        self.analyze_button.setText(tr("stage_analyze"))
+        self.start_button.setText(tr("start"))
         self._update_preview_button()
         self._render_stats()
         if self._result_path is None:
@@ -282,16 +356,21 @@ class MrPage(PageScrollArea):
     def set_running(self, running: bool) -> None:
         self.start_button.setEnabled(not running)
         self.cancel_button.setEnabled(running)
+        self.analyze_button.setEnabled(not running)
+        self.remove_clip.setEnabled(not running and self._selected_manual_row() is not None)
         for control in (
             self.stage_button,
-            self.source_button,
             self.stage_download,
-            self.source_download,
             self.output_button,
             self.output_edit,
+            self.add_sources,
+            self.download_sources,
+            self.remove_source,
+            self.sources,
             self.tracks,
             self.strength,
-            self.auto_find,
+            self.timeline,
+            self.add_clip,
         ):
             control.setEnabled(not running)
 
@@ -313,7 +392,46 @@ class MrPage(PageScrollArea):
         self.stage_edit.setText(path)
         if not self._output_user_edited or not self.output_edit.text().strip():
             self._apply_default_output()
-        self.stage_changed.emit(path)
+        self.invalidate_analysis()
+
+    def source_paths(self) -> tuple[Path, ...]:
+        return tuple(
+            Path(str(self.sources.item(index).data(Qt.ItemDataRole.UserRole)))
+            for index in range(self.sources.count())
+        )
+
+    def add_source_paths(self, paths: list[str]) -> None:
+        """Append the chosen sources, skipping ones the list already holds."""
+        existing = {str(path.resolve()) for path in self.source_paths()}
+        added = False
+        for path_text in paths:
+            path = Path(path_text).expanduser().resolve()
+            if str(path) in existing:
+                continue
+            item = QListWidgetItem(path.name)
+            item.setData(Qt.ItemDataRole.UserRole, str(path))
+            item.setToolTip(str(path))
+            self.sources.addItem(item)
+            existing.add(str(path))
+            added = True
+        if added:
+            self.clear_result()
+            self.invalidate_analysis()
+
+    def _add_sources(self) -> None:
+        paths, _ = QFileDialog.getOpenFileNames(
+            self,
+            tr("source_label"),
+            filter=AUDIO_FILE_FILTER,
+        )
+        self.add_source_paths(paths)
+
+    def _remove_source(self) -> None:
+        row = self.sources.currentRow()
+        if row >= 0:
+            self.sources.takeItem(row)
+            self.clear_result()
+            self.invalidate_analysis()
 
     def selected_tracks(self) -> OutputTracks:
         return OutputTracks(str(self.tracks.currentData() or OutputTracks.VOCAL.value))
@@ -346,19 +464,6 @@ class MrPage(PageScrollArea):
         if not self._output_user_edited:
             self._apply_default_output()
 
-    def _select_source(self) -> None:
-        path, _ = QFileDialog.getOpenFileName(
-            self,
-            tr("source_label"),
-            filter=AUDIO_FILE_FILTER,
-        )
-        if path:
-            self.set_source(path)
-
-    def set_source(self, path: str) -> None:
-        self.clear_result()
-        self.source_edit.setText(path)
-
     def _select_output(self) -> None:
         path, _ = QFileDialog.getSaveFileName(
             self, tr("output_file"), self.output_edit.text(), WAV_FILE_FILTER
@@ -383,6 +488,84 @@ class MrPage(PageScrollArea):
             self._output_user_edited = False
         self.output_edit.setText(str(path))
         return path
+
+    def set_analysis(self, analysis: StageAnalysis) -> None:
+        self.timeline_model.set_analysis(analysis)
+        self.status.setText(
+            tr(
+                "stage_analysis_summary",
+                songs=len(analysis.song_clips),
+                fragments=sum(clip.kind == ClipKind.FRAGMENT for clip in analysis.clips),
+                missing=len(analysis.missing_sources),
+            )
+        )
+
+    def invalidate_analysis(self, clear_timeline: bool = True) -> None:
+        if clear_timeline:
+            self.timeline_model.set_analysis(None)
+
+    def _selected_manual_row(self) -> int | None:
+        index = self.timeline.selectionModel().currentIndex()
+        clip = self.timeline_model.clip(index.row()) if index.isValid() else None
+        return index.row() if clip is not None and clip.manual else None
+
+    def _update_clip_actions(self) -> None:
+        self.remove_clip.setEnabled(self._selected_manual_row() is not None)
+
+    def _selection_changed(self, _selected: QItemSelection, _deselected: QItemSelection) -> None:
+        self._update_clip_actions()
+
+    def _clip_edited(self) -> None:
+        self.status.setText(tr("stage_manual_updated"))
+
+    def _edit_rejected(self) -> None:
+        self.status.setText(tr("stage_invalid_edit"))
+
+    def _add_clip(self) -> None:
+        if self.analysis is None:
+            self.status.setText(tr("stage_need_analysis"))
+            return
+        sources = self.source_paths()
+        if not sources:
+            self.status.setText(tr("stage_need_sources"))
+            return
+        index = self.sources.currentRow()
+        if not 0 <= index < len(sources):
+            index = 0
+        # Start inside the first gap the matcher left, which is where a spliced
+        # backing track's missing pieces almost always belong.
+        start = 0.0
+        limit = self.analysis.duration_seconds
+        for clip in self.analysis.clips:
+            if clip.kind == ClipKind.UNMATCHED:
+                start, limit = clip.stage_start, clip.stage_end
+                break
+        length = min(30.0, limit - start)
+        if length <= 0.0:
+            self.status.setText(tr("stage_no_room_for_clip"))
+            return
+        added = self.timeline_model.add_clip(
+            TimelineClip(
+                ClipKind.SONG,
+                start,
+                start + length,
+                source=sources[index],
+                source_index=index,
+                source_start=0.0,
+                source_end=length,
+                manual=True,
+            )
+        )
+        if added:
+            self.status.setText(tr("stage_manual_added"))
+
+    def _remove_clip(self) -> None:
+        row = self._selected_manual_row()
+        if row is None:
+            return
+        if self.timeline_model.remove_clip(row):
+            self.status.setText(tr("stage_manual_removed"))
+            self._update_clip_actions()
 
     @staticmethod
     def _clock(milliseconds: int) -> str:

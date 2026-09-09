@@ -25,8 +25,7 @@ DEFAULT_BIT_DEPTH = 24
 # Every streaming loop in the project reads, writes and copies audio in blocks
 # of this many frames, so a long recording never becomes a resident array.
 BLOCK_FRAMES = 262_144
-# Container suffixes offered by the file dialogs and accepted by the automatic
-# song-source finder.
+# Container suffixes the file dialogs offer and the decoders accept.
 AUDIO_EXTENSIONS = (".wav", ".flac", ".mp3", ".m4a", ".ogg", ".opus", ".webm")
 # A temporary mapping is how a long recording stays off the heap - where there
 # is a disk under it.  Emscripten's filesystem holds a file's bytes in the same

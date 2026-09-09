@@ -80,7 +80,7 @@ def log_flux_bands(
     """Summarise positive log-spectral flux in geometrically spaced bands.
 
     Two masters of the same music can share note attacks while their waveforms,
-    EQ, compression, vocals and ambience differ, so both full-stage matching and
+    EQ, compression, vocals and ambience differ, so both source matching and
     coarse alignment compare this feature instead of the raw waveform.  Returns
     `None` when the input is too short or too flat to describe.
     """

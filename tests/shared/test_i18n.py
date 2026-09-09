@@ -94,13 +94,15 @@ def test_unknown_key_translates_to_itself():
     assert tr("no_such_translation_key") == "no_such_translation_key"
 
 
-def test_english_mr_terms_match_product_workflows():
+def test_english_terms_name_the_merged_workflow():
+    """One workflow, and the four names the product uses for its parts."""
     install_language("en_us")
     assert tr("nav_mr") == "Vocal Isolation"
-    assert tr("mr_tab_single") == "Single"
-    assert tr("mr_tab_full_stage") == "Full Stage"
-    assert tr("mr_single_title") == "Single Vocal Isolation"
-    assert tr("nav_full_stage") == "Full Stage Vocal Isolation"
+    assert tr("mr_audio_label") == "Stage / live audio:"
+    assert tr("source_label") == "Song source:"
+    assert tr("track_vocal") == "Vocal"
+    assert tr("track_backing") == "Backing track"
+    assert tr("stage_analyze") == "Find songs"
 
 
 def test_japanese_and_korean_mr_terms_are_unambiguous():

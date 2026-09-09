@@ -5,8 +5,8 @@ from dataclasses import replace
 
 from PySide6.QtCore import QAbstractTableModel, QModelIndex, QObject, Qt, Signal
 
-from features.full_stage.matching import add_manual_clip, remove_manual_clip
-from features.full_stage.models import ClipKind, FullStageAnalysis, TimelineClip
+from features.reference_removal.matching import add_manual_clip, remove_manual_clip
+from features.reference_removal.models import ClipKind, StageAnalysis, TimelineClip
 from shared.i18n import tr
 from shared.ui.cards import format_clock
 
@@ -57,7 +57,7 @@ def parse_range(text: str) -> tuple[float, float]:
 
 
 class TimelineModel(QAbstractTableModel):
-    """Expose one full-stage analysis as an editable table.
+    """Expose one stage analysis as an editable table.
 
     The analysis stays the single source of truth: the view reads it through
     `data()` and writes back through `setData()`, so no code re-renders rows or
@@ -69,13 +69,13 @@ class TimelineModel(QAbstractTableModel):
 
     def __init__(self, parent: QObject | None = None):
         super().__init__(parent)
-        self._analysis: FullStageAnalysis | None = None
+        self._analysis: StageAnalysis | None = None
 
     @property
-    def analysis(self) -> FullStageAnalysis | None:
+    def analysis(self) -> StageAnalysis | None:
         return self._analysis
 
-    def set_analysis(self, analysis: FullStageAnalysis | None) -> None:
+    def set_analysis(self, analysis: StageAnalysis | None) -> None:
         self.beginResetModel()
         self._analysis = analysis
         self.endResetModel()

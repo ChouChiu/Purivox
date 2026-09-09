@@ -24,16 +24,12 @@ from qfluentwidgets import (
     setThemeColor,
 )
 
-from app.full_stage_processing import analyze_full_stage_job, run_full_stage_job
 from app.job_presenter import JobPresenter
-from app.mr_workspace import MrWorkspace
-from features.full_stage import FullStageJob
-from features.full_stage.page import FullStagePage
 from features.home import HomePage
 from features.reference_removal import (
-    ReferenceJob,
-    find_best_match,
-    run_reference_job,
+    IsolationJob,
+    analyze_stage,
+    run_isolation_job,
 )
 from features.reference_removal.page import MrPage
 from features.settings import SettingsPage
@@ -62,8 +58,6 @@ class MainWindow(FluentWindow):
         self.close_pending = False
         self.home = HomePage(self)
         self.mr = MrPage()
-        self.full_stage = FullStagePage()
-        self.mr_workspace = MrWorkspace(self.mr, self.full_stage, self)
         self.settings = SettingsPage(self)
         self.resize(1040, 760)
         # Small enough to dock the window to a portrait half of a screen; the
@@ -80,7 +74,7 @@ class MainWindow(FluentWindow):
 
     def _build_navigation(self) -> None:
         self.home_nav = self.addSubInterface(self.home, FluentIcon.HOME, "")
-        self.mr_nav = self.addSubInterface(self.mr_workspace, FluentIcon.MUSIC, "")
+        self.mr_nav = self.addSubInterface(self.mr, FluentIcon.MUSIC, "")
         self.settings_nav = self.addSubInterface(
             self.settings, FluentIcon.SETTING, "", NavigationItemPosition.BOTTOM
         )
@@ -108,43 +102,31 @@ class MainWindow(FluentWindow):
         return shortcut
 
     def current_page(self) -> QWidget:
-        """The page a shortcut should act on, looking through the MR workspace."""
-        current = self.stackedWidget.currentWidget()
-        if current is self.mr_workspace:
-            return self.mr_workspace.stack.currentWidget()
-        return current
+        """The page a shortcut should act on."""
+        return self.stackedWidget.currentWidget()
 
     def _browse_current_input(self) -> None:
-        page = self.current_page()
-        if isinstance(page, MrPage | FullStagePage):
-            page.browse_primary_input()
+        if isinstance(self.current_page(), MrPage):
+            self.mr.browse_primary_input()
 
     def _start_current(self) -> None:
-        page = self.current_page()
-        if isinstance(page, MrPage | FullStagePage):
-            page.start_requested.emit()
+        if isinstance(self.current_page(), MrPage):
+            self.mr.start_requested.emit()
 
     def _analyze_current(self) -> None:
-        page = self.current_page()
-        if isinstance(page, FullStagePage):
-            page.analyze_requested.emit()
+        if isinstance(self.current_page(), MrPage):
+            self.mr.analyze_requested.emit()
 
     def _toggle_preview(self) -> None:
-        page = self.current_page()
-        if isinstance(page, MrPage):
-            page.toggle_preview()
+        if isinstance(self.current_page(), MrPage):
+            self.mr.toggle_preview()
 
     def _connect(self) -> None:
         self.home.mr_requested.connect(self._open_mr)
-        self.home.full_stage_requested.connect(self._open_full_stage)
-        self.mr.start_requested.connect(self.start_reference)
+        self.mr.start_requested.connect(self.start_isolation)
         self.mr.cancel_requested.connect(self.cancel)
-        self.full_stage.analyze_requested.connect(self.analyze_full_stage)
-        self.full_stage.start_requested.connect(self.start_full_stage)
-        self.full_stage.cancel_requested.connect(self.cancel)
-        self.mr.stage_changed.connect(self._auto_find)
-        self.mr.download_requested.connect(self._download_for_mr)
-        self.full_stage.download_requested.connect(self._download_for_full_stage)
+        self.mr.analyze_requested.connect(self.analyze_sources)
+        self.mr.download_requested.connect(self._download)
         cfg.language.valueChanged.connect(self._language_changed)
         cfg.theme.valueChanged.connect(lambda value: self._apply_theme(str(value)))
         cfg.log_level.valueChanged.connect(lambda value: set_log_level(str(value)))
@@ -160,12 +142,7 @@ class MainWindow(FluentWindow):
         self.retranslate()
 
     def _open_mr(self) -> None:
-        self.mr_workspace.show_single()
-        self.switchTo(self.mr_workspace)
-
-    def _open_full_stage(self) -> None:
-        self.mr_workspace.show_full_stage()
-        self.switchTo(self.mr_workspace)
+        self.switchTo(self.mr)
 
     def _apply_theme(self, value: str) -> None:
         theme = {"light": Theme.LIGHT, "dark": Theme.DARK}.get(value, Theme.AUTO)
@@ -190,7 +167,7 @@ class MainWindow(FluentWindow):
 
     def retranslate(self) -> None:
         self.setWindowTitle(tr("window_title"))
-        for page in (self.home, self.mr_workspace, self.settings):
+        for page in (self.home, self.mr, self.settings):
             page.retranslate()
         self._apply_shortcut_hints()
         for navigation, key in (
@@ -204,12 +181,9 @@ class MainWindow(FluentWindow):
         """Append each binding to the tooltip of the control it triggers."""
         for control, shortcut in (
             (self.mr.stage_button, self.open_shortcut),
-            (self.full_stage.stage_button, self.open_shortcut),
             (self.mr.start_button, self.start_shortcut),
-            (self.full_stage.start_button, self.start_shortcut),
-            (self.full_stage.analyze_button, self.analyze_shortcut),
+            (self.mr.analyze_button, self.analyze_shortcut),
             (self.mr.cancel_button, self.cancel_shortcut),
-            (self.full_stage.cancel_button, self.cancel_shortcut),
             (self.mr.preview_play, self.preview_shortcut),
         ):
             keys = shortcut.key().toString(QKeySequence.SequenceFormat.NativeText)
@@ -291,18 +265,8 @@ class MainWindow(FluentWindow):
         dialog.deleteLater()
         return chosen
 
-    def _download_for_mr(self, target: str) -> None:
-        if self.jobs.running:
-            return
-        chosen = self._fetch_audio(multiple=False)
-        if not chosen:
-            return
-        if target == "stage":
-            self.mr.set_stage(str(chosen[0]))
-        else:
-            self.mr.set_source(str(chosen[0]))
-
-    def _download_for_full_stage(self, target: str) -> None:
+    def _download(self, target: str) -> None:
+        """Fetch what the field that asked for it needs: one file or several."""
         if self.jobs.running:
             return
         sources = target == "sources"
@@ -310,48 +274,48 @@ class MainWindow(FluentWindow):
         if not chosen:
             return
         if sources:
-            self.full_stage.add_source_paths([str(path) for path in chosen])
+            self.mr.add_source_paths([str(path) for path in chosen])
         else:
-            self.full_stage.set_stage(str(chosen[0]))
+            self.mr.set_stage(str(chosen[0]))
 
-    def _auto_find(self, stage: str) -> None:
-        if not self.mr.auto_find.isChecked():
-            return
-        match = find_best_match(Path(stage))
-        if match.found:
-            self.mr.source_edit.setText(str(match.path))
-            self.mr.status.setText(tr("auto_found"))
-        else:
-            self.mr.source_edit.clear()
-            self.mr.status.setText(tr("auto_not_found"))
-
-    def start_reference(self) -> None:
+    def start_isolation(self) -> None:
         if self.jobs.running:
             return
+        job = self._isolation_job()
+        if job is None:
+            return
+        cfg.set(cfg.output_tracks, job.tracks.value)
+        self.mr.clear_result()
+        # An analysis the page already holds carries the timeline the user
+        # checked and possibly edited; without one the pipeline matches first.
+        self._start_worker(self.mr, partial(run_isolation_job, job, self.mr.analysis))
+
+    def _isolation_job(self) -> IsolationJob | None:
+        """Build the job from what the page collected, or warn and return None."""
         if not self.mr.stage_edit.text():
             self._warning("warn_no_stage")
-            return
-        if not self.mr.source_edit.text():
+            return None
+        sources = self.mr.source_paths()
+        if not sources:
             self._warning("warn_no_source")
-            return
+            return None
         output = self.mr.normalized_output_path()
         if output is None:
             self._warning("warn_no_out")
-            return
+            return None
         stage = Path(self.mr.stage_edit.text()).expanduser().resolve()
-        source = Path(self.mr.source_edit.text()).expanduser().resolve()
-        if stage == source:
+        if stage in sources:
             self._warning("warn_same_inputs")
-            return
+            return None
         tracks = self.mr.selected_tracks()
-        inputs = {stage, source}
+        inputs = {stage, *sources}
         if any(path in inputs for path in planned_outputs(output, tracks)):
             self._warning("warn_output_conflict")
-            return
+            return None
         try:
-            job = ReferenceJob(
+            return IsolationJob(
                 stage=stage,
-                source=source,
+                sources=sources,
                 output=output,
                 strength=self.mr.strength.value(),
                 sigma=_GUI_REFERENCE_SIGMA_SECONDS,
@@ -360,68 +324,21 @@ class MainWindow(FluentWindow):
             )
         except ValueError:
             self._warning("warn_invalid_parameters")
-            return
-        cfg.set(cfg.auto_find, self.mr.auto_find.isChecked())
-        cfg.set(cfg.output_tracks, tracks.value)
-        self.mr.clear_result()
-        self._start_worker(self.mr, partial(run_reference_job, job))
+            return None
 
-    def _full_stage_job(self) -> FullStageJob | None:
-        if not self.full_stage.stage_edit.text():
-            self._warning("stage_need_audio")
-            return None
-        sources = self.full_stage.source_paths()
-        if not sources:
-            self._warning("stage_need_sources")
-            return None
-        output = self.full_stage.normalized_output_path()
-        if output is None:
-            self._warning("warn_no_out")
-            return None
-        tracks = self.full_stage.selected_tracks()
-        try:
-            job = FullStageJob(
-                stage=Path(self.full_stage.stage_edit.text()).expanduser().resolve(),
-                sources=sources,
-                output=output,
-                strength=self.full_stage.strength.value(),
-                sigma=_GUI_REFERENCE_SIGMA_SECONDS,
-                include_fragments=self.full_stage.include_fragments.isChecked(),
-                auto_align=True,
-                tracks=tracks,
-            )
-        except ValueError:
-            self._warning("warn_output_conflict")
-            return None
-        cfg.set(cfg.output_tracks, tracks.value)
-        return job
-
-    def analyze_full_stage(self) -> None:
+    def analyze_sources(self) -> None:
+        """Match the sources against the recording without cancelling anything."""
         if self.jobs.running:
             return
-        job = self._full_stage_job()
+        job = self._isolation_job()
         if job is None:
             return
-        self.full_stage.invalidate_analysis()
-        self._start_worker(self.full_stage, partial(analyze_full_stage_job, job))
-
-    def start_full_stage(self) -> None:
-        if self.jobs.running:
-            return
-        job = self._full_stage_job()
-        if job is None:
-            return
-        if self.full_stage.analysis is None:
-            self._warning("stage_need_analysis")
-            return
-        self._start_worker(
-            self.full_stage,
-            partial(run_full_stage_job, job, self.full_stage.analysis),
-        )
+        self.mr.invalidate_analysis()
+        self._start_worker(self.mr, partial(analyze_stage, job))
 
     def _start_worker(
         self,
-        page: MrPage | FullStagePage,
+        page: MrPage,
         operation: ProcessingOperation,
     ) -> None:
         # Kept as the single interception point for starting a job: the GUI

@@ -50,17 +50,14 @@ export interface Analysis {
 	missing_sources: string[];
 }
 
-export interface ReferenceResult {
-	outputs: string[];
-	audio_stats: AudioStats[];
-}
-
 export interface AnalysisResult {
 	analysis: Analysis;
 }
 
-export interface RenderResult extends ReferenceResult {
-	analysis: Analysis;
+/** What `run_isolation` returns: the timeline it used and the stems it wrote. */
+export interface IsolationResult extends AnalysisResult {
+	outputs: string[];
+	audio_stats: AudioStats[];
 }
 
 /** One file the page has put into the runtime, with what its header said. */

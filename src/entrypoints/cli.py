@@ -11,7 +11,7 @@ from pathlib import Path
 from PySide6.QtCore import QCoreApplication
 
 from app.version import __version__
-from features.reference_removal import ReferenceJob, run_reference_job
+from features.reference_removal import IsolationJob, run_isolation_job
 from shared.branding import APPLICATION_NAME, ORGANIZATION_NAME
 from shared.i18n import SUPPORTED_LANGUAGES, install_language
 from shared.jobs import (
@@ -37,8 +37,10 @@ def build_parser() -> argparse.ArgumentParser:
     commands = parser.add_subparsers(dest="command")
 
     reference = commands.add_parser("mr", help="reference-guided vocal extraction")
-    reference.add_argument("stage", type=Path)
-    reference.add_argument("source", type=Path)
+    reference.add_argument("stage", type=Path, help="the stage / live recording")
+    # One or many: the pipeline matches each source against the recording, and a
+    # lone source about as long as it is cancelled over the whole recording.
+    reference.add_argument("sources", type=Path, nargs="+", help="one or more song sources")
     reference.add_argument("output", type=Path)
     reference.add_argument(
         "--strength",
@@ -161,16 +163,16 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if args.command == "fetch":
             return _run_fetch(args, token)
-        job = ReferenceJob(
+        job = IsolationJob(
             stage=args.stage,
-            source=args.source,
+            sources=tuple(args.sources),
             output=args.output,
             strength=args.strength,
             sigma=args.sigma,
             auto_align=args.align,
             tracks=args.tracks,
         )
-        result = run_reference_job(job, token, _print_progress)
+        result = run_isolation_job(job, None, token, _print_progress)
         for output in result.outputs:
             print(output)
         return 0

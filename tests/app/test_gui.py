@@ -13,8 +13,7 @@ from qfluentwidgets.components.widgets.menu import DummyMenuAnimationManager
 
 from app import main_window
 from app.main_window import MainWindow
-from features.full_stage import ClipKind, FullStageAnalysis, TimelineClip
-from features.full_stage.page import FullStagePage
+from features.reference_removal import ClipKind, StageAnalysis, TimelineClip
 from features.reference_removal.page import MrPage
 from features.settings.updates import Release
 from shared.audio import AudioStats
@@ -31,22 +30,15 @@ from shared.ui import (
 )
 
 
-def test_main_window_has_mr_workspace_with_two_subpages(qtbot):
+def test_main_window_has_one_vocal_isolation_page(qtbot):
     load_config()
     window = MainWindow()
     qtbot.addWidget(window)
     assert not window.windowIcon().isNull()
     assert not window.windowIcon().pixmap(32, 32).isNull()
-    pages = (window.home, window.mr_workspace, window.settings)
+    pages = (window.home, window.mr, window.settings)
     assert len({page.objectName() for page in pages}) == 3
-    assert window.mr_workspace.stack.count() == 2
-    assert window.mr_workspace.stack.currentWidget() is window.mr
-    window.mr_workspace.show_full_stage()
-    assert window.mr_workspace.stack.currentWidget() is window.full_stage
-    window.mr_workspace.show_single()
-    assert window.mr_workspace.stack.currentWidget() is window.mr
-    assert window.mr.title.text() == "单曲垫音消除"
-    assert window.full_stage.title.text() == "整场垫音消除"
+    assert window.mr.title.text() == "垫音消除"
     assert window.settings.log_level_card.configItem is cfg.log_level
     previous_level = cfg.log_level.value
     cfg.set(cfg.log_level, "ERROR")
@@ -55,37 +47,33 @@ def test_main_window_has_mr_workspace_with_two_subpages(qtbot):
     window.retranslate()
 
 
-def test_home_page_presents_both_mr_workflows(qtbot):
+def test_home_page_presents_the_vocal_isolation_workflow(qtbot):
     load_config()
     window = MainWindow()
     qtbot.addWidget(window)
     window.home.retranslate()
 
-    assert window.home.section_title.text() == "选择处理方式"
+    assert window.home.section_title.text() == "开始处理"
+    assert window.home.mr_card.title.text() == "垫音消除"
     meta = window.home.mr_card.meta.text()
-    assert "舞台 / 现场音频" in meta
+    assert "舞台 / 现场录音" in meta
     assert "歌曲音源" in meta
-    assert "多份歌曲音源" in window.home.full_stage_card.meta.text()
-    assert window.home.mr_card.open_button.text() == "处理单曲"
-    assert window.home.full_stage_card.open_button.text() == "处理整场"
+    assert "多份音源" in window.home.mr_card.description.text()
+    assert window.home.mr_card.open_button.text() == "开始处理"
 
     with qtbot.waitSignal(window.home.mr_requested):
         window.home.mr_card.open_button.click()
-    with qtbot.waitSignal(window.home.full_stage_requested):
-        window.home.full_stage_card.open_button.click()
 
 
-def test_home_cards_open_the_matching_workspace_tab(qtbot):
+def test_home_card_opens_the_workflow(qtbot):
     load_config()
     window = MainWindow()
     qtbot.addWidget(window)
 
-    window.home.full_stage_card.open_button.click()
-    assert window.stackedWidget.currentWidget() is window.mr_workspace
-    assert window.mr_workspace.stack.currentWidget() is window.full_stage
-
     window.home.mr_card.open_button.click()
-    assert window.mr_workspace.stack.currentWidget() is window.mr
+
+    assert window.stackedWidget.currentWidget() is window.mr
+    assert window.current_page() is window.mr
 
 
 def _text(model, row: int, column: int) -> str:
@@ -108,8 +96,8 @@ def _select_row(page, row: int) -> None:
     )
 
 
-def test_full_stage_page_orders_sources_and_renders_analysis(qtbot, tmp_path: Path):
-    page = FullStagePage()
+def test_page_orders_sources_and_renders_analysis(qtbot, tmp_path: Path):
+    page = MrPage()
     qtbot.addWidget(page)
     page.retranslate()
     for name in ("first.wav", "second.wav"):
@@ -120,7 +108,7 @@ def test_full_stage_page_orders_sources_and_renders_analysis(qtbot, tmp_path: Pa
     assert [path.name for path in page.source_paths()] == ["first.wav", "second.wav"]
 
     source = (tmp_path / "second.wav").resolve()
-    analysis = FullStageAnalysis(
+    analysis = StageAnalysis(
         12.0,
         (
             TimelineClip(ClipKind.UNMATCHED, 0.0, 2.0),
@@ -149,9 +137,9 @@ def test_full_stage_page_orders_sources_and_renders_analysis(qtbot, tmp_path: Pa
     assert page.analysis.clips[1].source_end == 7.0
 
 
-def test_full_stage_page_adds_and_removes_a_manual_clip(qtbot, tmp_path: Path):
+def test_page_adds_and_removes_a_manual_clip(qtbot, tmp_path: Path):
     """Spliced backing tracks need timeline rows the matcher cannot produce."""
-    page = FullStagePage()
+    page = MrPage()
     qtbot.addWidget(page)
     page.retranslate()
     source = (tmp_path / "song.wav").resolve()
@@ -159,7 +147,7 @@ def test_full_stage_page_adds_and_removes_a_manual_clip(qtbot, tmp_path: Path):
     item.setData(Qt.ItemDataRole.UserRole, str(source))
     page.sources.addItem(item)
     page.set_analysis(
-        FullStageAnalysis(
+        StageAnalysis(
             60.0,
             (
                 TimelineClip(ClipKind.SONG, 0.0, 20.0, source, 0, 0.0, 20.0, 0.9),
@@ -190,13 +178,13 @@ def test_full_stage_page_adds_and_removes_a_manual_clip(qtbot, tmp_path: Path):
     assert not any(clip.manual for clip in page.analysis.clips)
 
 
-def test_full_stage_page_will_not_remove_a_detected_clip(qtbot, tmp_path: Path):
-    page = FullStagePage()
+def test_page_will_not_remove_a_detected_clip(qtbot, tmp_path: Path):
+    page = MrPage()
     qtbot.addWidget(page)
     page.retranslate()
     source = (tmp_path / "song.wav").resolve()
     page.set_analysis(
-        FullStageAnalysis(
+        StageAnalysis(
             30.0,
             (TimelineClip(ClipKind.SONG, 0.0, 20.0, source, 0, 0.0, 20.0, 0.9),),
         )
@@ -207,21 +195,20 @@ def test_full_stage_page_will_not_remove_a_detected_clip(qtbot, tmp_path: Path):
     assert not page.remove_clip.isEnabled()
 
 
-def test_full_stage_job_forwards_normal_mr_parameters(qtbot, tmp_path: Path):
+def test_isolation_job_forwards_normal_mr_parameters(qtbot, tmp_path: Path):
     load_config()
     window = MainWindow()
     qtbot.addWidget(window)
     stage = (tmp_path / "stage.wav").resolve()
     source = (tmp_path / "source.wav").resolve()
-    window.full_stage.stage_edit.setText(str(stage))
-    window.full_stage.output_edit.setText(str(tmp_path / "output.wav"))
-    item = QListWidgetItem(source.name)
-    item.setData(Qt.ItemDataRole.UserRole, str(source))
-    window.full_stage.sources.addItem(item)
+    window.mr.stage_edit.setText(str(stage))
+    window.mr.output_edit.setText(str(tmp_path / "output.wav"))
+    window.mr.add_source_paths([str(source)])
 
-    job = window._full_stage_job()
+    job = window._isolation_job()
 
     assert job is not None
+    assert job.sources == (source,)
     assert job.sigma == 3
     assert job.auto_align
 
@@ -272,7 +259,7 @@ def test_reference_start_rejects_same_input_before_worker(qtbot, tmp_path: Path,
     qtbot.addWidget(window)
     song = tmp_path / "song.wav"
     window.mr.stage_edit.setText(str(song))
-    window.mr.source_edit.setText(str(song))
+    window.mr.add_source_paths([str(song)])
     window.mr.output_edit.setText(str(tmp_path / "output.wav"))
     warnings = []
     monkeypatch.setattr(window, "_warning", warnings.append)
@@ -282,28 +269,29 @@ def test_reference_start_rejects_same_input_before_worker(qtbot, tmp_path: Path,
         lambda *_args, **_kwargs: pytest.fail("worker must not start"),
     )
 
-    window.start_reference()
+    window.start_isolation()
 
     assert warnings == ["warn_same_inputs"]
 
 
-def test_reference_start_forwards_fixed_job_settings(qtbot, tmp_path: Path, monkeypatch):
+def test_start_forwards_fixed_job_settings(qtbot, tmp_path: Path, monkeypatch):
     load_config()
     window = MainWindow()
     qtbot.addWidget(window)
     window.mr.stage_edit.setText(str(tmp_path / "song.wav"))
-    window.mr.source_edit.setText(str(tmp_path / "reference.wav"))
+    window.mr.add_source_paths([str(tmp_path / "reference.wav")])
     window.mr.output_edit.setText(str(tmp_path / "output.wav"))
     started = []
     monkeypatch.setattr(window, "_start_worker", lambda page, operation: started.append(operation))
 
-    window.start_reference()
+    window.start_isolation()
 
     assert len(started) == 1
     job = started[0].args[0]
     assert job.sigma == 3
     assert job.auto_align
     assert job.tracks is OutputTracks.VOCAL
+    assert started[0].args[1] is None, "a job with no analysis matches before it renders"
 
 
 def test_combo_boxes_use_stable_menu_without_opacity_animation(qtbot):
@@ -424,30 +412,23 @@ def test_choosing_files_sets_up_the_page(qtbot, tmp_path: Path):
     assert window.mr.stage_edit.text() == str(song)
     assert Path(window.mr.output_edit.text()).name == "live_vocals.wav"
 
-    window.full_stage.set_stage(str(song))
-    assert Path(window.full_stage.output_edit.text()).name == "live_full_stage_vocals.wav"
-
-    window.full_stage.add_source_paths([str(tmp_path / "a.wav"), str(tmp_path / "b.wav")])
-    assert [path.name for path in window.full_stage.source_paths()] == ["a.wav", "b.wav"]
-    window.full_stage.add_source_paths([str(tmp_path / "a.wav")])
-    assert len(window.full_stage.source_paths()) == 2, "a repeated source must not be added twice"
+    window.mr.add_source_paths([str(tmp_path / "a.wav"), str(tmp_path / "b.wav")])
+    assert [path.name for path in window.mr.source_paths()] == ["a.wav", "b.wav"]
+    window.mr.add_source_paths([str(tmp_path / "a.wav")])
+    assert len(window.mr.source_paths()) == 2, "a repeated source must not be added twice"
 
 
 def test_window_shortcuts_act_on_the_visible_page(qtbot):
     window = MainWindow()
     qtbot.addWidget(window)
-    window.switchTo(window.mr_workspace)
-    window.mr_workspace.show_single()
+    window.switchTo(window.mr)
     assert window.current_page() is window.mr
 
     with qtbot.waitSignal(window.mr.start_requested):
         window.start_shortcut.activated.emit()
-
-    window.mr_workspace.show_full_stage()
-    assert window.current_page() is window.full_stage
-    with qtbot.waitSignal(window.full_stage.analyze_requested):
+    with qtbot.waitSignal(window.mr.analyze_requested):
         window.analyze_shortcut.activated.emit()
-    with qtbot.waitSignal(window.full_stage.start_requested):
+    with qtbot.waitSignal(window.mr.start_requested):
         window.start_shortcut.activated.emit()
 
     # Cancelling with no job running must be harmless rather than an error.
@@ -459,7 +440,7 @@ def test_shortcut_hints_follow_the_interface_language(qtbot):
     qtbot.addWidget(window)
     cfg.set(cfg.language, "en_us")
     assert window.mr.start_button.toolTip() == "Start (Ctrl+Return)"
-    assert window.full_stage.analyze_button.toolTip().endswith("(F5)")
+    assert window.mr.analyze_button.toolTip().endswith("(F5)")
     cfg.set(cfg.language, "zh_cn")
     assert window.mr.start_button.toolTip() == "开始处理 (Ctrl+Return)"
 
@@ -477,8 +458,7 @@ def test_pages_fold_into_one_column_on_a_portrait_window(qtbot):
     qtbot.addWidget(window)
     window.show()
     qtbot.waitExposed(window)
-    window.switchTo(window.mr_workspace)
-    window.mr_workspace.show_single()
+    window.switchTo(window.mr)
 
     _resize_window(window, 500, 900)
 
@@ -498,15 +478,19 @@ def test_an_ultrawide_window_splits_the_pages_into_two_lanes(qtbot):
     qtbot.addWidget(window)
     window.show()
     qtbot.waitExposed(window)
-    window.switchTo(window.mr_workspace)
-    window.mr_workspace.show_single()
+    window.switchTo(window.mr)
 
     _resize_window(window, 2560, 1080)
 
     assert window.mr.metrics.mode is LayoutMode.ULTRAWIDE
-    assert window.mr.columns.lane_widgets(Lane.PRIMARY) == (window.mr.files, window.mr.parameters)
+    assert window.mr.columns.lane_widgets(Lane.PRIMARY) == (
+        window.mr.files,
+        window.mr.sources_card,
+        window.mr.parameters,
+    )
     assert window.mr.columns.lane_widgets(Lane.SECONDARY) == (
         window.mr.status_card,
+        window.mr.timeline_card,
         window.mr.preview_card,
         window.mr.data_card,
     )
@@ -535,8 +519,8 @@ def test_the_audio_data_tiles_reflow_with_the_window(qtbot):
     assert rows() == 4
 
 
-def test_a_short_window_gives_the_full_stage_panes_less_height(qtbot):
-    page = FullStagePage()
+def test_a_short_window_gives_the_stage_panes_less_height(qtbot):
+    page = MrPage()
     qtbot.addWidget(page)
 
     page.apply_layout(layout_metrics(QSize(1280, 900)))
@@ -555,10 +539,10 @@ def test_every_page_stays_inside_a_narrow_window(qtbot):
     qtbot.waitExposed(window)
     width, height = window.minimumWidth(), window.minimumHeight()
 
-    for target in (window.home, window.mr_workspace, window.settings):
+    for target in (window.home, window.mr, window.settings):
         window.switchTo(target)
         _resize_window(window, width, height)
-        for page in (window.home, window.mr, window.full_stage, window.settings):
+        for page in (window.home, window.mr, window.settings):
             if not page.isVisible():
                 continue
             assert page.content.minimumSizeHint().width() <= page.viewport().width(), (
@@ -652,15 +636,16 @@ def test_export_choice_renames_the_default_output_until_the_user_names_it(qtbot,
     assert page.output_edit.text() == "我的消音"
 
 
-def test_full_stage_export_choice_follows_the_same_rule(qtbot, tmp_path: Path):
-    page = FullStagePage()
+def test_the_default_output_name_has_no_workflow_in_it(qtbot, tmp_path: Path):
+    """One page, one naming rule: the recording's name plus the stem."""
+    page = MrPage()
     qtbot.addWidget(page)
     page.retranslate()
     page.set_stage(str(tmp_path / "live.wav"))
-    assert Path(page.output_edit.text()).name == "live_full_stage_vocals.wav"
+    assert Path(page.output_edit.text()).name == "live_vocals.wav"
 
     page.tracks.setCurrentIndex(page.tracks.findData(OutputTracks.BACKING.value))
-    assert Path(page.output_edit.text()).name == "live_full_stage_backing.wav"
+    assert Path(page.output_edit.text()).name == "live_backing.wav"
 
 
 def test_export_choice_survives_a_language_switch(qtbot):
@@ -709,15 +694,9 @@ def test_a_fetched_file_lands_in_the_field_that_asked_for_it(qtbot, tmp_path: Pa
     assert window.mr.stage_edit.text() == str(fetched[0])
     assert Path(window.mr.output_edit.text()).name == "one_vocals.wav"
 
-    window.mr.source_download.click()
-    assert window.mr.source_edit.text() == str(fetched[0])
-
-    window.full_stage.stage_download.click()
-    assert window.full_stage.stage_edit.text() == str(fetched[0])
-
-    window.full_stage.download_sources.click()
-    assert [path.name for path in window.full_stage.source_paths()] == ["one.wav", "two.wav"]
-    assert asked == [False, False, False, True], "only the source list takes more than one file"
+    window.mr.download_sources.click()
+    assert [path.name for path in window.mr.source_paths()] == ["one.wav", "two.wav"]
+    assert asked == [False, True], "only the source list takes more than one file"
 
 
 def test_a_cancelled_fetch_leaves_every_field_alone(qtbot, monkeypatch):
@@ -726,7 +705,7 @@ def test_a_cancelled_fetch_leaves_every_field_alone(qtbot, monkeypatch):
     monkeypatch.setattr(window, "_fetch_audio", lambda multiple: [])
 
     window.mr.stage_download.click()
-    window.full_stage.download_sources.click()
+    window.mr.download_sources.click()
 
     assert window.mr.stage_edit.text() == ""
-    assert window.full_stage.source_paths() == ()
+    assert window.mr.source_paths() == ()

@@ -44,16 +44,15 @@ const useStyles = makeStyles({
 		gap: tokens.spacingVerticalM,
 		height: "100%",
 	},
-	// The description grows so both cards' buttons line up at the bottom.
+	// The description grows so the button lines up at the bottom.
 	body: { flexGrow: 1 },
 });
 
 interface Props {
 	onOpenMr(): void;
-	onOpenFullStage(): void;
 }
 
-export function HomePage({ onOpenMr, onOpenFullStage }: Props) {
+export function HomePage({ onOpenMr }: Props) {
 	const styles = useStyles();
 	const { t } = useLanguage();
 
@@ -77,7 +76,7 @@ export function HomePage({ onOpenMr, onOpenFullStage }: Props) {
 			<div className={styles.choices}>
 				<Card className={styles.choice}>
 					<CardHeader
-						header={<Subtitle1>{t("mr_single_title")}</Subtitle1>}
+						header={<Subtitle1>{t("nav_mr")}</Subtitle1>}
 						description={
 							<Caption1 className={styles.muted}>{t("home_mr_meta")}</Caption1>
 						}
@@ -86,25 +85,6 @@ export function HomePage({ onOpenMr, onOpenFullStage }: Props) {
 					<div>
 						<Button appearance="primary" onClick={onOpenMr}>
 							{t("home_open_mr")}
-						</Button>
-					</div>
-				</Card>
-
-				<Card className={styles.choice}>
-					<CardHeader
-						header={<Subtitle1>{t("nav_full_stage")}</Subtitle1>}
-						description={
-							<Caption1 className={styles.muted}>
-								{t("home_full_stage_meta")}
-							</Caption1>
-						}
-					/>
-					<Body1 className={styles.body}>
-						{t("home_full_stage_description")}
-					</Body1>
-					<div>
-						<Button appearance="primary" onClick={onOpenFullStage}>
-							{t("home_open_full_stage")}
 						</Button>
 					</div>
 				</Card>
