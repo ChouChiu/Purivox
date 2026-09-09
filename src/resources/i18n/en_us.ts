@@ -12,15 +12,11 @@
         <translation>Choose audio</translation>
     </message>
     <message>
-        <source>song_label</source>
-        <translation>Input audio:</translation>
-    </message>
-    <message>
         <source>mr_audio_label</source>
         <translation>Stage / live audio:</translation>
     </message>
     <message>
-        <source>acc_label</source>
+        <source>source_label</source>
         <translation>Song source:</translation>
     </message>
     <message>
@@ -172,11 +168,11 @@
         <translation>Cancel</translation>
     </message>
     <message>
-        <source>warn_no_song</source>
+        <source>warn_no_stage</source>
         <translation>Choose the stage / live audio first.</translation>
     </message>
     <message>
-        <source>warn_no_acc</source>
+        <source>warn_no_source</source>
         <translation>Choose the song source that matches the stage content.</translation>
     </message>
     <message>
@@ -204,11 +200,11 @@
         <translation>Processing failed: {msg}</translation>
     </message>
     <message>
-        <source>loading_song</source>
+        <source>loading_stage</source>
         <translation>Reading stage / live audio...</translation>
     </message>
     <message>
-        <source>loading_acc</source>
+        <source>loading_source</source>
         <translation>Reading song source...</translation>
     </message>
     <message>

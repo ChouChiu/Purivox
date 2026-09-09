@@ -37,8 +37,8 @@ def build_parser() -> argparse.ArgumentParser:
     commands = parser.add_subparsers(dest="command")
 
     reference = commands.add_parser("mr", help="reference-guided vocal extraction")
-    reference.add_argument("song", type=Path)
-    reference.add_argument("accompaniment", type=Path)
+    reference.add_argument("stage", type=Path)
+    reference.add_argument("source", type=Path)
     reference.add_argument("output", type=Path)
     reference.add_argument(
         "--strength",
@@ -162,8 +162,8 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "fetch":
             return _run_fetch(args, token)
         job = ReferenceJob(
-            song=args.song,
-            accompaniment=args.accompaniment,
+            stage=args.stage,
+            source=args.source,
             output=args.output,
             strength=args.strength,
             sigma=args.sigma,

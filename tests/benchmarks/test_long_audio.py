@@ -17,7 +17,7 @@ def test_fifteen_minute_stereo_rss_length_and_seams():
     """Synthetic regression evidence only; this is not a real-music quality claim."""
     sample_rate = 44_100
     frames = 15 * 60 * sample_rate
-    song = create_pcm_audio(2, frames, sample_rate)
+    mix = create_pcm_audio(2, frames, sample_rate)
     reference = create_pcm_audio(2, frames, sample_rate)
     output = create_pcm_audio(2, frames, sample_rate)
     try:
@@ -28,13 +28,13 @@ def test_fifteen_minute_stereo_rss_length_and_seams():
             accompaniment = (0.20 * np.sin(2 * np.pi * 110 * time)).astype(np.float32)
             vocal = (0.12 * np.sin(2 * np.pi * 440 * time)).astype(np.float32)
             reference.samples[:, start:end] = accompaniment
-            song.samples[:, start:end] = accompaniment + vocal
-        song.release_pages()
+            mix.samples[:, start:end] = accompaniment + vocal
+        mix.release_pages()
         reference.release_pages()
 
         started = perf_counter()
         result = process_audio(
-            song.samples,
+            mix.samples,
             reference.samples,
             sample_rate,
             0.75,
@@ -66,4 +66,4 @@ def test_fifteen_minute_stereo_rss_length_and_seams():
     finally:
         output.cleanup()
         reference.cleanup()
-        song.cleanup()
+        mix.cleanup()

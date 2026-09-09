@@ -271,8 +271,8 @@ def test_reference_start_rejects_same_input_before_worker(qtbot, tmp_path: Path,
     window = MainWindow()
     qtbot.addWidget(window)
     song = tmp_path / "song.wav"
-    window.mr.song_edit.setText(str(song))
-    window.mr.acc_edit.setText(str(song))
+    window.mr.stage_edit.setText(str(song))
+    window.mr.source_edit.setText(str(song))
     window.mr.output_edit.setText(str(tmp_path / "output.wav"))
     warnings = []
     monkeypatch.setattr(window, "_warning", warnings.append)
@@ -291,8 +291,8 @@ def test_reference_start_forwards_fixed_job_settings(qtbot, tmp_path: Path, monk
     load_config()
     window = MainWindow()
     qtbot.addWidget(window)
-    window.mr.song_edit.setText(str(tmp_path / "song.wav"))
-    window.mr.acc_edit.setText(str(tmp_path / "reference.wav"))
+    window.mr.stage_edit.setText(str(tmp_path / "song.wav"))
+    window.mr.source_edit.setText(str(tmp_path / "reference.wav"))
     window.mr.output_edit.setText(str(tmp_path / "output.wav"))
     started = []
     monkeypatch.setattr(window, "_start_worker", lambda page, operation: started.append(operation))
@@ -321,7 +321,7 @@ def test_mr_output_rename_preview_and_audio_data(qtbot, tmp_path: Path):
     qtbot.addWidget(page)
     assert page.audio_output.device().id() == QMediaDevices.defaultAudioOutput().id()
     page.retranslate()
-    page.song_edit.setText(str(tmp_path / "concert.wav"))
+    page.stage_edit.setText(str(tmp_path / "concert.wav"))
     page.output_edit.setText("自定义消音结果")
     output = page.normalized_output_path()
     assert output == (tmp_path / "自定义消音结果.wav").resolve()
@@ -347,7 +347,7 @@ def test_empty_output_uses_default_next_to_song(qtbot, tmp_path: Path):
     page = MrPage()
     qtbot.addWidget(page)
     song = tmp_path / "concert.performance.m4a"
-    page.song_edit.setText(str(song))
+    page.stage_edit.setText(str(song))
     page.output_edit.clear()
 
     output = page.normalized_output_path()
@@ -420,8 +420,8 @@ def test_choosing_files_sets_up_the_page(qtbot, tmp_path: Path):
     qtbot.addWidget(window)
     song = tmp_path / "live.wav"
 
-    window.mr.set_song(str(song))
-    assert window.mr.song_edit.text() == str(song)
+    window.mr.set_stage(str(song))
+    assert window.mr.stage_edit.text() == str(song)
     assert Path(window.mr.output_edit.text()).name == "live_vocals.wav"
 
     window.full_stage.set_stage(str(song))
@@ -637,7 +637,7 @@ def test_export_choice_renames_the_default_output_until_the_user_names_it(qtbot,
     page = MrPage()
     qtbot.addWidget(page)
     page.retranslate()
-    page.set_song(str(tmp_path / "concert.wav"))
+    page.set_stage(str(tmp_path / "concert.wav"))
     assert Path(page.output_edit.text()).name == "concert_vocals.wav"
 
     page.tracks.setCurrentIndex(page.tracks.findData(OutputTracks.BACKING.value))
@@ -705,12 +705,12 @@ def test_a_fetched_file_lands_in_the_field_that_asked_for_it(qtbot, tmp_path: Pa
 
     monkeypatch.setattr(window, "_fetch_audio", fetch_audio)
 
-    window.mr.song_download.click()
-    assert window.mr.song_edit.text() == str(fetched[0])
+    window.mr.stage_download.click()
+    assert window.mr.stage_edit.text() == str(fetched[0])
     assert Path(window.mr.output_edit.text()).name == "one_vocals.wav"
 
-    window.mr.acc_download.click()
-    assert window.mr.acc_edit.text() == str(fetched[0])
+    window.mr.source_download.click()
+    assert window.mr.source_edit.text() == str(fetched[0])
 
     window.full_stage.stage_download.click()
     assert window.full_stage.stage_edit.text() == str(fetched[0])
@@ -725,8 +725,8 @@ def test_a_cancelled_fetch_leaves_every_field_alone(qtbot, monkeypatch):
     qtbot.addWidget(window)
     monkeypatch.setattr(window, "_fetch_audio", lambda multiple: [])
 
-    window.mr.song_download.click()
+    window.mr.stage_download.click()
     window.full_stage.download_sources.click()
 
-    assert window.mr.song_edit.text() == ""
+    assert window.mr.stage_edit.text() == ""
     assert window.full_stage.source_paths() == ()

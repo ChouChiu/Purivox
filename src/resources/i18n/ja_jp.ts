@@ -12,15 +12,11 @@
         <translation>オーディオを選択</translation>
     </message>
     <message>
-        <source>song_label</source>
-        <translation>入力オーディオ:</translation>
-    </message>
-    <message>
         <source>mr_audio_label</source>
         <translation>ステージ / ライブ音声:</translation>
     </message>
     <message>
-        <source>acc_label</source>
+        <source>source_label</source>
         <translation>楽曲音源:</translation>
     </message>
     <message>
@@ -172,11 +168,11 @@
         <translation>キャンセル</translation>
     </message>
     <message>
-        <source>warn_no_song</source>
+        <source>warn_no_stage</source>
         <translation>ステージ / ライブ音声を選択してください。</translation>
     </message>
     <message>
-        <source>warn_no_acc</source>
+        <source>warn_no_source</source>
         <translation>ステージ内容に合う楽曲音源を選択してください。</translation>
     </message>
     <message>
@@ -204,11 +200,11 @@
         <translation>処理に失敗しました: {msg}</translation>
     </message>
     <message>
-        <source>loading_song</source>
+        <source>loading_stage</source>
         <translation>ステージ / ライブ音声を読み込み中...</translation>
     </message>
     <message>
-        <source>loading_acc</source>
+        <source>loading_source</source>
         <translation>楽曲音源を読み込み中...</translation>
     </message>
     <message>

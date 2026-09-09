@@ -12,15 +12,11 @@
         <translation>選擇音訊</translation>
     </message>
     <message>
-        <source>song_label</source>
-        <translation>輸入音訊:</translation>
-    </message>
-    <message>
         <source>mr_audio_label</source>
         <translation>舞台 / 現場音訊:</translation>
     </message>
     <message>
-        <source>acc_label</source>
+        <source>source_label</source>
         <translation>歌曲音源:</translation>
     </message>
     <message>
@@ -172,11 +168,11 @@
         <translation>取消</translation>
     </message>
     <message>
-        <source>warn_no_song</source>
+        <source>warn_no_stage</source>
         <translation>請先選擇舞台 / 現場音訊。</translation>
     </message>
     <message>
-        <source>warn_no_acc</source>
+        <source>warn_no_source</source>
         <translation>請選擇與舞台內容對應的歌曲音源。</translation>
     </message>
     <message>
@@ -204,11 +200,11 @@
         <translation>處理失敗：{msg}</translation>
     </message>
     <message>
-        <source>loading_song</source>
+        <source>loading_stage</source>
         <translation>正在讀取舞台 / 現場音訊...</translation>
     </message>
     <message>
-        <source>loading_acc</source>
+        <source>loading_source</source>
         <translation>正在讀取歌曲音源...</translation>
     </message>
     <message>

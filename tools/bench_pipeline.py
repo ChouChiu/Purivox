@@ -99,8 +99,8 @@ def measure(arguments: argparse.Namespace) -> dict[str, object]:
             sf.write(reference_path, reference.T, SAMPLE_RATE, subtype="PCM_24")
             del song, reference
         job = ReferenceJob(
-            song=song_path,
-            accompaniment=reference_path,
+            stage=song_path,
+            source=reference_path,
             output=work / "result.wav",
             strength=arguments.strength,
             sigma=arguments.sigma,

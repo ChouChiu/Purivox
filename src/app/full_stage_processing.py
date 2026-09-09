@@ -38,7 +38,7 @@ def analyze_full_stage_job(
     return FullStageResult(analyze_full_stage(job, token, progress))
 
 
-def _alignment_quality(song: np.ndarray, reference: np.ndarray, sample_rate: int) -> float:
+def _alignment_quality(mix: np.ndarray, reference: np.ndarray, sample_rate: int) -> float:
     """Estimate how much of the stage a time-aligned stereo reference explains.
 
     Full-stage matching already supplies a close source position.  A second drift
@@ -46,7 +46,7 @@ def _alignment_quality(song: np.ndarray, reference: np.ndarray, sample_rate: int
     make an already-correct match worse.  Compare both candidates with small direct
     2x2 fits and keep the robust median.
     """
-    length = min(song.shape[1], reference.shape[1])
+    length = min(mix.shape[1], reference.shape[1])
     window = min(max(4 * sample_rate, 4096), length)
     if window < 64:
         return 0.0
@@ -57,16 +57,16 @@ def _alignment_quality(song: np.ndarray, reference: np.ndarray, sample_rate: int
     epsilon = 1e-12
     for start in starts:
         end = int(start) + window
-        mix = np.asarray(song[:, int(start) : end : stride], dtype=np.float64)
-        accompaniment = np.asarray(reference[:, int(start) : end : stride], dtype=np.float64)
-        mix -= np.mean(mix, axis=1, keepdims=True)
-        accompaniment -= np.mean(accompaniment, axis=1, keepdims=True)
-        covariance = accompaniment @ accompaniment.T
-        regularizer = 2e-4 * float(np.trace(covariance)) / max(accompaniment.shape[0], 1)
-        loaded = covariance + (regularizer + epsilon) * np.eye(accompaniment.shape[0])
-        transfer = np.linalg.solve(loaded.T, (mix @ accompaniment.T).T).T
-        residual = mix - transfer @ accompaniment
-        energy = float(np.sum(mix * mix))
+        mix_window = np.asarray(mix[:, int(start) : end : stride], dtype=np.float64)
+        reference_window = np.asarray(reference[:, int(start) : end : stride], dtype=np.float64)
+        mix_window -= np.mean(mix_window, axis=1, keepdims=True)
+        reference_window -= np.mean(reference_window, axis=1, keepdims=True)
+        covariance = reference_window @ reference_window.T
+        regularizer = 2e-4 * float(np.trace(covariance)) / max(reference_window.shape[0], 1)
+        loaded = covariance + (regularizer + epsilon) * np.eye(reference_window.shape[0])
+        transfer = np.linalg.solve(loaded.T, (mix_window @ reference_window.T).T).T
+        residual = mix_window - transfer @ reference_window
+        energy = float(np.sum(mix_window * mix_window))
         scores.append(1.0 - float(np.sum(residual * residual)) / max(energy, epsilon))
     return float(np.median(scores))
 

@@ -61,25 +61,25 @@ def written_bytes(sample_rate: int, seconds: float, channels: int = 2) -> int:
 
 def reference_peak_bytes(
     sample_rate: int,
-    song_seconds: float,
-    accompaniment_seconds: float,
+    stage_seconds: float,
+    source_seconds: float,
     file_bytes: int = 0,
     both_tracks: bool = False,
 ) -> MemoryEstimate:
     """Estimate the peak for `run_reference_job`.
 
-    It holds the song, the reference resampled onto the song's timeline and one
-    more full-length buffer at once - the alignment scratch first, then the
-    processed output - on top of the block working set.  A tempo-corrected
-    reference is stretched into a second full-length buffer before the
-    alignment reads it.  The backing track is formed in that same output
-    buffer, so exporting both stems costs no extra buffer, only the first
-    stem's file staying on the filesystem.
+    It holds the stage recording, the song source resampled onto that
+    recording's timeline and one more full-length buffer at once - the
+    alignment scratch first, then the processed output - on top of the block
+    working set.  A tempo-corrected source is stretched into a second
+    full-length buffer before the alignment reads it.  The backing track is
+    formed in that same output buffer, so exporting both stems costs no extra
+    buffer, only the first stem's file staying on the filesystem.
     """
-    song = buffer_bytes(sample_rate, song_seconds)
-    reference = buffer_bytes(sample_rate, accompaniment_seconds)
-    written = written_bytes(sample_rate, song_seconds) if both_tracks else 0
-    peak = file_bytes + song + 2 * reference + max(song, reference) + written
+    stage = buffer_bytes(sample_rate, stage_seconds)
+    reference = buffer_bytes(sample_rate, source_seconds)
+    written = written_bytes(sample_rate, stage_seconds) if both_tracks else 0
+    peak = file_bytes + stage + 2 * reference + max(stage, reference) + written
     return MemoryEstimate(peak + DSP_WORKING_SET_BYTES)
 
 

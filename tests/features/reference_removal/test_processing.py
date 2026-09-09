@@ -15,14 +15,14 @@ def test_reference_pipeline_end_to_end(tmp_path: Path):
     time = np.arange(sample_rate) / sample_rate
     vocal = 0.3 * np.sin(2 * np.pi * 440 * time)
     reference = 0.2 * np.sin(2 * np.pi * 110 * time)
-    song = tmp_path / "song.wav"
-    accompaniment = tmp_path / "instrumental.wav"
+    stage = tmp_path / "stage.wav"
+    source = tmp_path / "instrumental.wav"
     output = tmp_path / "vocals.wav"
-    sf.write(song, np.stack([vocal + reference] * 2, axis=1), sample_rate)
-    sf.write(accompaniment, np.stack([reference] * 2, axis=1), sample_rate)
+    sf.write(stage, np.stack([vocal + reference] * 2, axis=1), sample_rate)
+    sf.write(source, np.stack([reference] * 2, axis=1), sample_rate)
     events = []
     result = run_reference_job(
-        ReferenceJob(song, accompaniment, output, 100, 8, False),
+        ReferenceJob(stage, source, output, 100, 8, False),
         CancellationToken(),
         events.append,
     )
@@ -43,21 +43,21 @@ def test_reference_pipeline_end_to_end(tmp_path: Path):
     assert events[-1].value == 100
 
 
-def test_reference_pipeline_retains_song_duration_with_a_short_reference(tmp_path: Path):
+def test_reference_pipeline_retains_stage_duration_with_a_short_reference(tmp_path: Path):
     sample_rate = 8_000
-    song_time = np.arange(2 * sample_rate) / sample_rate
+    stage_time = np.arange(2 * sample_rate) / sample_rate
     reference_time = np.arange(sample_rate) / sample_rate
-    vocal = 0.2 * np.sin(2 * np.pi * 440 * song_time)
+    vocal = 0.2 * np.sin(2 * np.pi * 440 * stage_time)
     reference = 0.15 * np.sin(2 * np.pi * 110 * reference_time)
     padded_reference = np.pad(reference, (0, sample_rate))
-    song = tmp_path / "long-song.wav"
-    accompaniment = tmp_path / "short-reference.wav"
+    stage = tmp_path / "long-stage.wav"
+    source = tmp_path / "short-reference.wav"
     output = tmp_path / "full-length-output.wav"
-    sf.write(song, np.stack([vocal + padded_reference] * 2, axis=1), sample_rate)
-    sf.write(accompaniment, np.stack([reference] * 2, axis=1), sample_rate)
+    sf.write(stage, np.stack([vocal + padded_reference] * 2, axis=1), sample_rate)
+    sf.write(source, np.stack([reference] * 2, axis=1), sample_rate)
 
     run_reference_job(
-        ReferenceJob(song, accompaniment, output, 100, 8, False),
+        ReferenceJob(stage, source, output, 100, 8, False),
         CancellationToken(),
     )
 
@@ -66,19 +66,19 @@ def test_reference_pipeline_retains_song_duration_with_a_short_reference(tmp_pat
     assert data.shape == (2 * sample_rate, 2)
 
 
-def test_reference_pipeline_rejects_same_song_and_accompaniment(tmp_path: Path):
-    song = tmp_path / "song.wav"
-    song.touch()
+def test_reference_pipeline_rejects_same_stage_and_source(tmp_path: Path):
+    stage = tmp_path / "stage.wav"
+    stage.touch()
     job = ReferenceJob(
-        song,
-        song,
+        stage,
+        stage,
         tmp_path / "output.wav",
         100,
         8,
         False,
     )
 
-    with pytest.raises(ValueError, match="song and accompaniment must be different"):
+    with pytest.raises(ValueError, match="stage and source must be different"):
         run_reference_job(job, CancellationToken())
 
 
@@ -88,36 +88,36 @@ def _cancellation_inputs(tmp_path: Path) -> tuple[Path, Path]:
     time = np.arange(sample_rate) / sample_rate
     backing = 0.2 * np.sin(2 * np.pi * 110 * time)
     vocal = 0.3 * np.sin(2 * np.pi * 440 * time)
-    song = tmp_path / "stage.wav"
-    accompaniment = tmp_path / "instrumental.wav"
-    sf.write(song, np.stack([vocal + backing] * 2, axis=1), sample_rate, subtype="PCM_24")
-    sf.write(accompaniment, np.stack([backing] * 2, axis=1), sample_rate, subtype="PCM_24")
-    return song, accompaniment
+    stage = tmp_path / "stage.wav"
+    source = tmp_path / "instrumental.wav"
+    sf.write(stage, np.stack([vocal + backing] * 2, axis=1), sample_rate, subtype="PCM_24")
+    sf.write(source, np.stack([backing] * 2, axis=1), sample_rate, subtype="PCM_24")
+    return stage, source
 
 
 def test_both_tracks_add_back_up_to_the_stage_recording(tmp_path: Path):
     """The backing track is defined as the stage less the vocal, so the two sum."""
-    song, accompaniment = _cancellation_inputs(tmp_path)
+    stage, source = _cancellation_inputs(tmp_path)
     output = tmp_path / "stage_vocals.wav"
     result = run_reference_job(
-        ReferenceJob(song, accompaniment, output, 100, 8, False, OutputTracks.BOTH),
+        ReferenceJob(stage, source, output, 100, 8, False, OutputTracks.BOTH),
         CancellationToken(),
     )
     assert result.outputs == (output.resolve(), (tmp_path / "stage_backing.wav").resolve())
     assert len(result.audio_stats) == 2
     vocal, _ = sf.read(result.outputs[0], always_2d=True)
     backing, _ = sf.read(result.outputs[1], always_2d=True)
-    stage, _ = sf.read(song, always_2d=True)
+    stage, _ = sf.read(stage, always_2d=True)
     # Two 24-bit quantisations plus a float32 subtraction; nothing else may drift.
     assert np.allclose(vocal + backing, stage, atol=1e-6)
 
 
 def test_backing_only_writes_the_named_path_and_nothing_else(tmp_path: Path):
     """`output` is whichever stem was asked for, so the CLI cannot answer elsewhere."""
-    song, accompaniment = _cancellation_inputs(tmp_path)
+    stage, source = _cancellation_inputs(tmp_path)
     output = tmp_path / "just_the_backing.wav"
     result = run_reference_job(
-        ReferenceJob(song, accompaniment, output, 100, 8, False, OutputTracks.BACKING),
+        ReferenceJob(stage, source, output, 100, 8, False, OutputTracks.BACKING),
         CancellationToken(),
     )
     assert result.outputs == (output.resolve(),)
@@ -126,13 +126,13 @@ def test_backing_only_writes_the_named_path_and_nothing_else(tmp_path: Path):
 
 
 def test_a_derived_backing_path_may_not_overwrite_an_input(tmp_path: Path):
-    song, accompaniment = _cancellation_inputs(tmp_path)
+    stage, source = _cancellation_inputs(tmp_path)
     collision = tmp_path / "instrumental_vocals.wav"
-    accompaniment.replace(tmp_path / "instrumental_backing.wav")
+    source.replace(tmp_path / "instrumental_backing.wav")
     with pytest.raises(ValueError):
         run_reference_job(
             ReferenceJob(
-                song,
+                stage,
                 tmp_path / "instrumental_backing.wav",
                 collision,
                 100,

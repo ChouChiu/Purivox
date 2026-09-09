@@ -53,7 +53,7 @@ def _proxy(channels: np.ndarray, length: int, source_rate: int, target_rate: int
     """Create an anti-aliased low-rate proxy for long-range alignment.
 
     Plain strided sampling folds high-frequency vocals, cymbals and crowd noise
-    into the accompaniment band.  A high-quality resampler keeps those unrelated
+    into the reference band.  A high-quality resampler keeps those unrelated
     components from steering the local lag track and gives the proxy an exact
     rate, so proxy positions map back to source samples without clock error.
     soxr is the resampler the audio path already uses, and it measured about 7%
@@ -86,11 +86,11 @@ def _parabolic_offset(scores: np.ndarray, index: int) -> float:
     return float(np.clip(0.5 * (left - right) / denominator, -1.0, 1.0))
 
 
-def _gcc_phat_lag(song: np.ndarray, reference: np.ndarray, max_lag: int) -> float | None:
-    size = 1 << int(np.ceil(np.log2(song.size + reference.size - 1)))
-    song_fft = rfft(song, size)
+def _gcc_phat_lag(mix: np.ndarray, reference: np.ndarray, max_lag: int) -> float | None:
+    size = 1 << int(np.ceil(np.log2(mix.size + reference.size - 1)))
+    mix_fft = rfft(mix, size)
     reference_fft = rfft(reference, size)
-    cross = song_fft * np.conj(reference_fft)
+    cross = mix_fft * np.conj(reference_fft)
     magnitude = np.abs(cross)
     valid = magnitude > np.finfo(np.float64).eps
     if not np.any(valid):
@@ -107,9 +107,9 @@ def _gcc_phat_lag(song: np.ndarray, reference: np.ndarray, max_lag: int) -> floa
     return float(index - max_lag) + _parabolic_offset(score, index)
 
 
-def _raw_lag(song: np.ndarray, reference: np.ndarray, max_lag: int) -> float | None:
-    raw = correlate(song, reference, mode="full", method="fft")
-    lags = correlation_lags(song.size, reference.size)
+def _raw_lag(mix: np.ndarray, reference: np.ndarray, max_lag: int) -> float | None:
+    raw = correlate(mix, reference, mode="full", method="fft")
+    lags = correlation_lags(mix.size, reference.size)
     valid = np.abs(lags) <= max_lag
     score = np.abs(raw)
     if not np.any(valid) or np.max(score[valid]) <= 1e-5:
@@ -120,7 +120,7 @@ def _raw_lag(song: np.ndarray, reference: np.ndarray, max_lag: int) -> float | N
 
 
 def _spectral_flux_lag(
-    song: np.ndarray,
+    mix: np.ndarray,
     reference: np.ndarray,
     sample_rate: int,
     max_lag_seconds: float = 20.0,
@@ -134,7 +134,7 @@ def _spectral_flux_lag(
     confident-looking offset merely because a long correlation was searched.
     """
     feature_rate = min(8000, sample_rate)
-    common = min(song.shape[1], reference.shape[1], sample_rate * 60)
+    common = min(mix.shape[1], reference.shape[1], sample_rate * 60)
     if common < max(sample_rate // 2, 2048):
         return None
 
@@ -158,15 +158,15 @@ def _spectral_flux_lag(
             channel_features.append(bands)
         return np.concatenate(channel_features, axis=0)
 
-    song_features = extract(song)
+    mix_features = extract(mix)
     reference_features = extract(reference)
-    if song_features is None or reference_features is None:
+    if mix_features is None or reference_features is None:
         return None
     scores = None
-    for song_band, reference_band in zip(song_features, reference_features, strict=True):
-        correlation = correlate(song_band, reference_band, mode="full", method="fft")
+    for mix_band, reference_band in zip(mix_features, reference_features, strict=True):
+        correlation = correlate(mix_band, reference_band, mode="full", method="fft")
         scores = correlation if scores is None else scores + correlation
-    lags = correlation_lags(song_features.shape[1], reference_features.shape[1])
+    lags = correlation_lags(mix_features.shape[1], reference_features.shape[1])
     hop_seconds = max(round(0.02 * feature_rate), 1) / feature_rate
     valid = np.abs(lags) <= round(max_lag_seconds / hop_seconds)
     valid_lags = lags[valid]
@@ -187,17 +187,17 @@ def _sliding_energy(values: np.ndarray, window: int) -> np.ndarray:
     return cumulative[window:] - cumulative[:-window]
 
 
-def _local_track(song: np.ndarray, reference: np.ndarray, rate: int, initial: float):
+def _local_track(mix: np.ndarray, reference: np.ndarray, rate: int, initial: float):
     step = max(rate // 10, 1)
     half_window = max(rate // 20, 1)
     search = max(rate // 16, 2)
     positions = [0.0]
     lags = [initial]
     predicted = initial
-    for center in range(half_window, min(song.size, reference.size), step):
+    for center in range(half_window, min(mix.size, reference.size), step):
         begin = max(center - half_window, 0)
-        end = min(center + half_window, song.size)
-        segment = song[begin:end]
+        end = min(center + half_window, mix.size)
+        segment = mix[begin:end]
         low = max(0, round(begin - predicted - search))
         high = min(reference.size, round(end - predicted + search))
         candidate = reference[low:high]
@@ -227,7 +227,7 @@ def _local_track(song: np.ndarray, reference: np.ndarray, rate: int, initial: fl
         predicted = lag
     if len(lags) >= 3:
         lags = median_filter(np.asarray(lags), size=3, mode="nearest").tolist()
-    positions.append(float(song.size - 1))
+    positions.append(float(mix.size - 1))
     lags.append(lags[-1])
     return np.asarray(positions), np.asarray(lags)
 
@@ -329,11 +329,11 @@ def _warp(
 
 def _rate_corrected(
     mix: np.ndarray,
-    accompaniment: np.ndarray,
+    reference_audio: np.ndarray,
     sample_rate: int,
     token: CancellationToken,
 ) -> np.ndarray:
-    """Stretch the reference onto the song's tempo when it was uploaded shifted.
+    """Stretch the reference onto the stage recording's tempo when it was uploaded shifted.
 
     A stage recording whose playback speed was changed carries the same music at
     a different tempo and an unchanged pitch, which the local drift tracker
@@ -341,27 +341,27 @@ def _rate_corrected(
     behind for the whole take.  Recovering the ratio once and stretching the
     reference removes the part that is a constant before the tracker sees it.
     """
-    common = min(mix.shape[1], accompaniment.shape[1], round(sample_rate * _RATE_SEARCH_SECONDS))
+    common = min(mix.shape[1], reference_audio.shape[1], round(sample_rate * _RATE_SEARCH_SECONDS))
     rate_proxy = min(_RATE_PROXY_RATE, sample_rate)
     estimate = estimate_rate(
         _proxy(mix, common, sample_rate, rate_proxy),
-        _proxy(accompaniment, common, sample_rate, rate_proxy),
+        _proxy(reference_audio, common, sample_rate, rate_proxy),
         rate_proxy,
         token,
     )
     if estimate is None or not estimate.reliable:
-        return accompaniment
+        return reference_audio
     logger.info(
-        "stretching the reference by %.4f to match the song's tempo (score %.3f, improvement %.3f)",
+        "stretching the reference by %.4f to match the stage tempo (score %.3f, improvement %.3f)",
         estimate.ratio,
         estimate.score,
         estimate.improvement,
     )
-    return time_stretch(accompaniment, sample_rate, estimate.ratio, token)
+    return time_stretch(reference_audio, sample_rate, estimate.ratio, token)
 
 
 def align_audio(
-    song: np.ndarray,
+    mix: np.ndarray,
     reference: np.ndarray,
     sample_rate: int,
     token: CancellationToken | None = None,
@@ -369,34 +369,34 @@ def align_audio(
     detect_speed: bool = True,
 ) -> np.ndarray:
     cancel = token or CancellationToken()
-    mix = np.asarray(song, dtype=np.float32)
-    accompaniment = np.asarray(reference, dtype=np.float32)
-    if mix.ndim != 2 or accompaniment.ndim != 2 or sample_rate <= 0:
-        return accompaniment
+    mix = np.asarray(mix, dtype=np.float32)
+    reference_audio = np.asarray(reference, dtype=np.float32)
+    if mix.ndim != 2 or reference_audio.ndim != 2 or sample_rate <= 0:
+        return reference_audio
     cancel.raise_if_cancelled()
-    common = min(mix.shape[1], accompaniment.shape[1])
+    common = min(mix.shape[1], reference_audio.shape[1])
     if common < 64:
-        return accompaniment
+        return reference_audio
     if detect_speed:
-        accompaniment = _rate_corrected(mix, accompaniment, sample_rate, cancel)
-        common = min(mix.shape[1], accompaniment.shape[1])
+        reference_audio = _rate_corrected(mix, reference_audio, sample_rate, cancel)
+        common = min(mix.shape[1], reference_audio.shape[1])
         if common < 64:
-            return accompaniment
+            return reference_audio
     proxy_rate = min(_PROXY_RATE, sample_rate)
     mix_proxy = _proxy(mix, common, sample_rate, proxy_rate)
-    ref_proxy = _proxy(accompaniment, common, sample_rate, proxy_rate)
+    ref_proxy = _proxy(reference_audio, common, sample_rate, proxy_rate)
     mix_norm = _normalize(mix_proxy)
     ref_norm = _normalize(ref_proxy)
     if mix_norm is None or ref_norm is None:
-        return accompaniment
+        return reference_audio
     full_check = min(common, sample_rate * 8)
     full_mix = _normalize(_mono(mix[:, :full_check]))
-    full_reference = _normalize(_mono(accompaniment[:, :full_check]))
+    full_reference = _normalize(_mono(reference_audio[:, :full_check]))
     if full_mix is None or full_reference is None:
-        return accompaniment
+        return reference_audio
     max_lag = min(sample_rate * 20, full_check - 1)
     near_limit = min(sample_rate // 2, max_lag)
-    lag_samples = _spectral_flux_lag(mix, accompaniment, sample_rate)
+    lag_samples = _spectral_flux_lag(mix, reference_audio, sample_rate)
     if lag_samples is not None:
         logger.info(
             "spectral-flux coarse alignment selected %.1f samples (%.3f s)",
@@ -410,7 +410,7 @@ def align_audio(
     if lag_samples is None:
         lag_samples = _raw_lag(full_mix[:full_check], full_reference[:full_check], max_lag)
     if lag_samples is None:
-        return accompaniment
+        return reference_audio
     scale = sample_rate / proxy_rate
     positions, lags = _local_track(mix_norm, ref_norm, proxy_rate, lag_samples / scale)
     logger.info(
@@ -421,7 +421,7 @@ def align_audio(
     )
     cancel.raise_if_cancelled()
     return _warp(
-        accompaniment,
+        reference_audio,
         positions * scale,
         lags * scale,
         mix.shape[1],

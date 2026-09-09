@@ -8,8 +8,8 @@ from shared.jobs import OutputTracks, validate_reference_settings
 
 @dataclass(frozen=True, slots=True)
 class ReferenceJob:
-    song: Path
-    accompaniment: Path
+    stage: Path
+    source: Path
     output: Path
     strength: int = 75
     sigma: int = 3

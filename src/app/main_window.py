@@ -142,7 +142,7 @@ class MainWindow(FluentWindow):
         self.full_stage.analyze_requested.connect(self.analyze_full_stage)
         self.full_stage.start_requested.connect(self.start_full_stage)
         self.full_stage.cancel_requested.connect(self.cancel)
-        self.mr.song_changed.connect(self._auto_find)
+        self.mr.stage_changed.connect(self._auto_find)
         self.mr.download_requested.connect(self._download_for_mr)
         self.full_stage.download_requested.connect(self._download_for_full_stage)
         cfg.language.valueChanged.connect(self._language_changed)
@@ -203,7 +203,7 @@ class MainWindow(FluentWindow):
     def _apply_shortcut_hints(self) -> None:
         """Append each binding to the tooltip of the control it triggers."""
         for control, shortcut in (
-            (self.mr.song_button, self.open_shortcut),
+            (self.mr.stage_button, self.open_shortcut),
             (self.full_stage.stage_button, self.open_shortcut),
             (self.mr.start_button, self.start_shortcut),
             (self.full_stage.start_button, self.start_shortcut),
@@ -297,10 +297,10 @@ class MainWindow(FluentWindow):
         chosen = self._fetch_audio(multiple=False)
         if not chosen:
             return
-        if target == "song":
-            self.mr.set_song(str(chosen[0]))
+        if target == "stage":
+            self.mr.set_stage(str(chosen[0]))
         else:
-            self.mr.set_accompaniment(str(chosen[0]))
+            self.mr.set_source(str(chosen[0]))
 
     def _download_for_full_stage(self, target: str) -> None:
         if self.jobs.running:
@@ -314,44 +314,44 @@ class MainWindow(FluentWindow):
         else:
             self.full_stage.set_stage(str(chosen[0]))
 
-    def _auto_find(self, song: str) -> None:
+    def _auto_find(self, stage: str) -> None:
         if not self.mr.auto_find.isChecked():
             return
-        match = find_best_match(Path(song))
+        match = find_best_match(Path(stage))
         if match.found:
-            self.mr.acc_edit.setText(str(match.path))
+            self.mr.source_edit.setText(str(match.path))
             self.mr.status.setText(tr("auto_found"))
         else:
-            self.mr.acc_edit.clear()
+            self.mr.source_edit.clear()
             self.mr.status.setText(tr("auto_not_found"))
 
     def start_reference(self) -> None:
         if self.jobs.running:
             return
-        if not self.mr.song_edit.text():
-            self._warning("warn_no_song")
+        if not self.mr.stage_edit.text():
+            self._warning("warn_no_stage")
             return
-        if not self.mr.acc_edit.text():
-            self._warning("warn_no_acc")
+        if not self.mr.source_edit.text():
+            self._warning("warn_no_source")
             return
         output = self.mr.normalized_output_path()
         if output is None:
             self._warning("warn_no_out")
             return
-        song = Path(self.mr.song_edit.text()).expanduser().resolve()
-        accompaniment = Path(self.mr.acc_edit.text()).expanduser().resolve()
-        if song == accompaniment:
+        stage = Path(self.mr.stage_edit.text()).expanduser().resolve()
+        source = Path(self.mr.source_edit.text()).expanduser().resolve()
+        if stage == source:
             self._warning("warn_same_inputs")
             return
         tracks = self.mr.selected_tracks()
-        inputs = {song, accompaniment}
+        inputs = {stage, source}
         if any(path in inputs for path in planned_outputs(output, tracks)):
             self._warning("warn_output_conflict")
             return
         try:
             job = ReferenceJob(
-                song=song,
-                accompaniment=accompaniment,
+                stage=stage,
+                source=source,
                 output=output,
                 strength=self.mr.strength.value(),
                 sigma=_GUI_REFERENCE_SIGMA_SECONDS,

@@ -109,8 +109,8 @@ def estimate_reference(request: str) -> str:
         _estimate_to_dict(
             reference_peak_bytes(
                 int(data["sample_rate"]),
-                float(data["song_seconds"]),
-                float(data["accompaniment_seconds"]),
+                float(data["stage_seconds"]),
+                float(data["source_seconds"]),
                 int(data.get("file_bytes", 0)),
                 bool(data.get("both_tracks", False)),
             )
@@ -138,8 +138,8 @@ def run_reference(request: str, on_progress: JsonCallback | None = None) -> str:
     """Run one single-song cancellation over files already in the Pyodide filesystem."""
     data = json.loads(request)
     job = ReferenceJob(
-        song=Path(data["song"]),
-        accompaniment=Path(data["accompaniment"]),
+        stage=Path(data["stage"]),
+        source=Path(data["source"]),
         output=Path(data["output"]),
         strength=int(data.get("strength", 75)),
         sigma=int(data.get("sigma", 3)),

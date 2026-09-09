@@ -56,9 +56,9 @@ STAT_COLUMNS = 4
 class MrPage(PageScrollArea):
     start_requested = Signal()
     cancel_requested = Signal()
-    song_changed = Signal(str)
+    stage_changed = Signal(str)
     download_requested = Signal(str)
-    """Which field a fetched file should land in: `song` or `acc`."""
+    """Which field a fetched file should land in: `stage` or `source`."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -66,12 +66,12 @@ class MrPage(PageScrollArea):
         self.title = TitleLabel()
         self.layout.addWidget(self.title)
         self.files = FormCard()
-        self.song_label, self.song_edit, self.song_button = (
+        self.stage_label, self.stage_edit, self.stage_button = (
             BodyLabel(),
             LineEdit(),
             PushButton(),
         )
-        self.acc_label, self.acc_edit, self.acc_button = (
+        self.source_label, self.source_edit, self.source_button = (
             BodyLabel(),
             LineEdit(),
             PushButton(),
@@ -81,21 +81,27 @@ class MrPage(PageScrollArea):
             LineEdit(),
             PushButton(),
         )
-        self.song_download = PushButton(FluentIcon.CLOUD_DOWNLOAD, "")
-        self.acc_download = PushButton(FluentIcon.CLOUD_DOWNLOAD, "")
-        for edit in (self.song_edit, self.acc_edit):
+        self.stage_download = PushButton(FluentIcon.CLOUD_DOWNLOAD, "")
+        self.source_download = PushButton(FluentIcon.CLOUD_DOWNLOAD, "")
+        for edit in (self.stage_edit, self.source_edit):
             edit.setReadOnly(True)
         # A path field beside both a browse and a fetch button is wider than a
         # phone-narrow row can hold: the field gives way, never the page.
-        for edit in (self.song_edit, self.acc_edit, self.output_edit):
+        for edit in (self.stage_edit, self.source_edit, self.output_edit):
             allow_shrinking(edit)
         self.output_edit.setClearButtonEnabled(True)
         self._output_user_edited = False
         self.auto_find = SwitchButton()
         self.auto_find.setChecked(bool(cfg.auto_find.value))
-        self.files.add_row(self.song_label, self.song_edit, self.song_button, self.song_download)
         self.files.add_row(
-            self.acc_label, self.acc_edit, self.acc_button, self.acc_download, self.auto_find
+            self.stage_label, self.stage_edit, self.stage_button, self.stage_download
+        )
+        self.files.add_row(
+            self.source_label,
+            self.source_edit,
+            self.source_button,
+            self.source_download,
+            self.auto_find,
         )
         self.files.add_row(self.output_label, self.output_edit, self.output_button)
         self.add_card(self.files)
@@ -197,10 +203,10 @@ class MrPage(PageScrollArea):
         self.layout.addLayout(actions)
         self.layout.addStretch()
 
-        self.song_button.clicked.connect(self._select_song)
-        self.acc_button.clicked.connect(self._select_acc)
-        self.song_download.clicked.connect(lambda: self.download_requested.emit("song"))
-        self.acc_download.clicked.connect(lambda: self.download_requested.emit("acc"))
+        self.stage_button.clicked.connect(self._select_stage)
+        self.source_button.clicked.connect(self._select_source)
+        self.stage_download.clicked.connect(lambda: self.download_requested.emit("stage"))
+        self.source_download.clicked.connect(lambda: self.download_requested.emit("source"))
         self.output_button.clicked.connect(self._select_output)
         self.output_edit.textEdited.connect(self._output_edited)
         self.output_edit.editingFinished.connect(self.normalized_output_path)
@@ -247,16 +253,16 @@ class MrPage(PageScrollArea):
         self.retranslate_status_card()
         self.preview_card.title_label.setText(tr("preview_title"))
         self.data_card.title_label.setText(tr("audio_data_title"))
-        self.song_label.setText(tr("mr_audio_label"))
-        self.acc_label.setText(tr("acc_label"))
+        self.stage_label.setText(tr("mr_audio_label"))
+        self.source_label.setText(tr("source_label"))
         self.output_label.setText(tr("output_file"))
         self.output_edit.setPlaceholderText(tr("output_name_hint"))
         self.strength_label.setText(tr("strength"))
         self.tracks_label.setText(tr("output_tracks"))
         self._retranslate_tracks()
-        for button in (self.song_button, self.acc_button, self.output_button):
+        for button in (self.stage_button, self.source_button, self.output_button):
             button.setText(tr("browse"))
-        for button in (self.song_download, self.acc_download):
+        for button in (self.stage_download, self.source_download):
             button.setText(tr("download_fetch"))
         self.auto_find.setOnText(tr("auto_find_on"))
         self.auto_find.setOffText(tr("auto_find_off"))
@@ -277,10 +283,10 @@ class MrPage(PageScrollArea):
         self.start_button.setEnabled(not running)
         self.cancel_button.setEnabled(running)
         for control in (
-            self.song_button,
-            self.acc_button,
-            self.song_download,
-            self.acc_download,
+            self.stage_button,
+            self.source_button,
+            self.stage_download,
+            self.source_download,
             self.output_button,
             self.output_edit,
             self.tracks,
@@ -291,23 +297,23 @@ class MrPage(PageScrollArea):
 
     def browse_primary_input(self) -> None:
         """Open the file dialog a page-level shortcut should reach."""
-        self._select_song()
+        self._select_stage()
 
-    def _select_song(self) -> None:
+    def _select_stage(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
             self,
             tr("mr_audio_label"),
             filter=AUDIO_FILE_FILTER,
         )
         if path:
-            self.set_song(path)
+            self.set_stage(path)
 
-    def set_song(self, path: str) -> None:
+    def set_stage(self, path: str) -> None:
         self.clear_result()
-        self.song_edit.setText(path)
+        self.stage_edit.setText(path)
         if not self._output_user_edited or not self.output_edit.text().strip():
             self._apply_default_output()
-        self.song_changed.emit(path)
+        self.stage_changed.emit(path)
 
     def selected_tracks(self) -> OutputTracks:
         return OutputTracks(str(self.tracks.currentData() or OutputTracks.VOCAL.value))
@@ -317,10 +323,10 @@ class MrPage(PageScrollArea):
         return f"{marker}.wav"
 
     def _apply_default_output(self) -> None:
-        song = self.song_edit.text().strip()
-        if not song:
+        stage = self.stage_edit.text().strip()
+        if not stage:
             return
-        origin = Path(song)
+        origin = Path(stage)
         self.output_edit.setText(str(origin.with_name(origin.stem + self._default_output_suffix())))
         self._output_user_edited = False
 
@@ -340,18 +346,18 @@ class MrPage(PageScrollArea):
         if not self._output_user_edited:
             self._apply_default_output()
 
-    def _select_acc(self) -> None:
+    def _select_source(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
             self,
-            tr("acc_label"),
+            tr("source_label"),
             filter=AUDIO_FILE_FILTER,
         )
         if path:
-            self.set_accompaniment(path)
+            self.set_source(path)
 
-    def set_accompaniment(self, path: str) -> None:
+    def set_source(self, path: str) -> None:
         self.clear_result()
-        self.acc_edit.setText(path)
+        self.source_edit.setText(path)
 
     def _select_output(self) -> None:
         path, _ = QFileDialog.getSaveFileName(
@@ -368,12 +374,12 @@ class MrPage(PageScrollArea):
 
     def normalized_output_path(self) -> Path | None:
         path = normalized_wav_path(
-            self.output_edit.text(), self.song_edit.text(), self._default_output_suffix()
+            self.output_edit.text(), self.stage_edit.text(), self._default_output_suffix()
         )
         if path is None:
             return None
         if not self.output_edit.text().strip():
-            # The name came from the song, so it is not the user's own choice.
+            # The name came from the stage recording, so it is not the user's choice.
             self._output_user_edited = False
         self.output_edit.setText(str(path))
         return path

@@ -12,15 +12,11 @@
         <translation>오디오 선택</translation>
     </message>
     <message>
-        <source>song_label</source>
-        <translation>입력 오디오:</translation>
-    </message>
-    <message>
         <source>mr_audio_label</source>
         <translation>무대 / 라이브 오디오:</translation>
     </message>
     <message>
-        <source>acc_label</source>
+        <source>source_label</source>
         <translation>곡 음원:</translation>
     </message>
     <message>
@@ -172,11 +168,11 @@
         <translation>취소</translation>
     </message>
     <message>
-        <source>warn_no_song</source>
+        <source>warn_no_stage</source>
         <translation>무대 / 라이브 오디오를 먼저 선택해 주세요.</translation>
     </message>
     <message>
-        <source>warn_no_acc</source>
+        <source>warn_no_source</source>
         <translation>무대 내용과 일치하는 곡 음원을 선택해 주세요.</translation>
     </message>
     <message>
@@ -204,11 +200,11 @@
         <translation>처리 실패: {msg}</translation>
     </message>
     <message>
-        <source>loading_song</source>
+        <source>loading_stage</source>
         <translation>무대 / 라이브 오디오 읽는 중...</translation>
     </message>
     <message>
-        <source>loading_acc</source>
+        <source>loading_source</source>
         <translation>곡 음원 읽는 중...</translation>
     </message>
     <message>

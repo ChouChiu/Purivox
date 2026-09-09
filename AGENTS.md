@@ -37,9 +37,9 @@ is the file being processed, the **song source** is the released song it is canc
 the song source explains, and the second export track.
 
 Backing is not *accompaniment*. The accompaniment is a song's instrumental; the backing is
-whatever of the song source the stage playback actually carried, source vocals included. The legacy
-names are the confusing part: `ReferenceJob.song` is the stage/live recording,
-`ReferenceJob.accompaniment` is the song source, and the CLI positionals follow those fields.
+whatever of the song source the stage playback actually carried, source vocals included. The code
+uses the same names: `ReferenceJob.stage` is the stage/live recording, `ReferenceJob.source` is the
+song source, and the CLI positionals follow them.
 
 **Reference cancellation** aligns the stage/live recording against the song source (GCC-PHAT plus
 clock-drift tracking), estimates a complex transfer, subtracts the prediction and soft-masks the

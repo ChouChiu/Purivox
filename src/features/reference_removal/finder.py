@@ -25,15 +25,15 @@ def filename_similarity(first: str, second: str) -> float:
     return SequenceMatcher(None, first.casefold(), second.casefold()).ratio()
 
 
-def find_best_match(song: Path, minimum_score: float = 0.5) -> Match:
-    source = song.expanduser().resolve()
-    if not source.is_file():
+def find_best_match(stage: Path, minimum_score: float = 0.5) -> Match:
+    recording = stage.expanduser().resolve()
+    if not recording.is_file():
         return Match()
     best = Match()
-    for candidate in sorted(source.parent.iterdir()):
+    for candidate in sorted(recording.parent.iterdir()):
         resolved_candidate = candidate.expanduser().resolve()
         if (
-            resolved_candidate == source
+            resolved_candidate == recording
             or not candidate.is_file()
             or candidate.suffix.casefold() not in _EXTENSIONS
         ):
@@ -41,7 +41,7 @@ def find_best_match(song: Path, minimum_score: float = 0.5) -> Match:
         name = candidate.stem.casefold()
         if any(marker in name for marker in _OUTPUT_MARKERS):
             continue
-        score = filename_similarity(source.stem, name)
+        score = filename_similarity(recording.stem, name)
         if any(keyword in name for keyword in _KEYWORDS):
             score += 0.2
         if score > best.score:

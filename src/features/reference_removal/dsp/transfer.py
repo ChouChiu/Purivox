@@ -202,7 +202,7 @@ def effective_observations(sigma_frames: float, frames: int) -> float:
 
 
 def predict_reference_spectra(
-    song_spectra: list[np.ndarray],
+    mix_spectra: list[np.ndarray],
     reference_spectra: list[np.ndarray],
     sigma_frames: float,
     token: CancellationToken,
@@ -242,7 +242,7 @@ def predict_reference_spectra(
     # Every product below is consumed by the smoothing pass it is handed to, so
     # they share one buffer rather than allocating a spectrum apiece.  Its dtype
     # is the one the products would have promoted to on their own.
-    spectrum_dtype = np.result_type(song_spectra[0], reference_spectra[0])
+    spectrum_dtype = np.result_type(mix_spectra[0], reference_spectra[0])
     real_dtype = np.empty(0, spectrum_dtype).real.dtype
     product = np.empty(reference_spectra[0].shape, dtype=spectrum_dtype)
     # A diagonal entry is E[|x|²]: real, so smoothing it as a complex spectrum
@@ -297,15 +297,15 @@ def predict_reference_spectra(
     # order/observations.  Subtracting it turns the raw coherence into the
     # adjusted one, which reaches zero for a reference that shares nothing with
     # the mixture instead of settling on a small positive floor.
-    observations = effective_observations(sigma_frames, song_spectra[0].shape[0])
+    observations = effective_observations(sigma_frames, mix_spectra[0].shape[0])
     overfit_scale = observations / (observations - TRANSFER_ORDER)
     predicted: list[np.ndarray] = []
     explained: list[np.ndarray] = []
-    magnitude = np.empty(song_spectra[0].shape, dtype=real_dtype) if coherence else None
+    magnitude = np.empty(mix_spectra[0].shape, dtype=real_dtype) if coherence else None
     lower = inverse_pivot = None
     if not diagonal:
         lower, inverse_pivot = _factorize_hermitian(covariance)
-    for channel in song_spectra:
+    for channel in mix_spectra:
         token.raise_if_cancelled()
         cross = []
         for reference in reference_spectra:
@@ -367,13 +367,13 @@ def power_transfer(
     reference_power: np.ndarray,
     sigma_frames: float,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Fit the accompaniment power the reference explains without using phase.
+    """Fit the backing power the reference explains without using phase.
 
     A stage capture can carry the song source through a PA, a room and a
     broadcast limiter.  Measured on real material that whole path leaves the
     magnitudes correlated at around 0.5 while the complex coherence collapses
     to 0.04 above 500 Hz, so the transfer estimate has almost nothing to
-    subtract even though the accompaniment is plainly audible.  Regressing
+    subtract even though the backing is plainly audible.  Regressing
     power on power recovers what phase cannot reach.
 
     The regression carries an intercept on purpose: `P_y ~ g P_x + c` splits the
@@ -399,7 +399,7 @@ def power_transfer(
     del mean_x, mean_y, scratch
     np.maximum(variance_x, 0.0, out=variance_x)
     np.maximum(variance_y, 0.0, out=variance_y)
-    # Only a positive slope is physical: more accompaniment in the source cannot
+    # Only a positive slope is physical: more backing in the source cannot
     # mean less of it on stage.
     slope = np.maximum(covariance, 0.0)
     slope /= variance_x + epsilon

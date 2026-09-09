@@ -51,14 +51,14 @@ def reference_scene(tmp_path: Path):
 
 
 def test_run_reference_returns_outputs_and_json_progress(reference_scene):
-    song, accompaniment, output = reference_scene
+    stage, source, output = reference_scene
     updates: list[str] = []
 
     payload = bridge.run_reference(
         json.dumps(
             {
-                "song": str(song),
-                "accompaniment": str(accompaniment),
+                "stage": str(stage),
+                "source": str(source),
                 "output": str(output),
                 "strength": 75,
                 "sigma": 3,
@@ -77,7 +77,7 @@ def test_run_reference_returns_outputs_and_json_progress(reference_scene):
     assert stats["file_size"] > 0
 
     events = [json.loads(update) for update in updates]
-    assert events[0]["key"] == "loading_song"
+    assert events[0]["key"] == "loading_stage"
     assert events[-1]["value"] == 100
     # The key travels untranslated because Pyodide has no Qt catalogue.
     assert events[-1]["values"]["path"] == str(output)
@@ -87,15 +87,15 @@ def test_silent_audio_reports_null_rather_than_negative_infinity(tmp_path: Path)
     """JSON has no infinity, and a fully cancelled stem analyses to -inf dBFS."""
     sample_rate = 8_000
     silence = np.zeros((sample_rate, 2), dtype=np.float32)
-    song = _write(tmp_path / "song.wav", silence, sample_rate)
-    accompaniment = _write(tmp_path / "acc.wav", silence, sample_rate)
+    stage = _write(tmp_path / "stage.wav", silence, sample_rate)
+    source = _write(tmp_path / "source.wav", silence, sample_rate)
     output = tmp_path / "out.wav"
 
     payload = bridge.run_reference(
         json.dumps(
             {
-                "song": str(song),
-                "accompaniment": str(accompaniment),
+                "stage": str(stage),
+                "source": str(source),
                 "output": str(output),
                 "auto_align": False,
             }
@@ -209,8 +209,8 @@ def test_a_single_song_of_ordinary_length_fits_comfortably():
             json.dumps(
                 {
                     "sample_rate": 44_100,
-                    "song_seconds": 300.0,
-                    "accompaniment_seconds": 300.0,
+                    "stage_seconds": 300.0,
+                    "source_seconds": 300.0,
                     "file_bytes": 60_000_000,
                 }
             )
@@ -296,13 +296,13 @@ def test_probe_reports_an_unreadable_container_instead_of_raising(tmp_path: Path
 
 
 def test_run_reference_exports_both_stems(reference_scene):
-    song, accompaniment, output = reference_scene
+    stage, source, output = reference_scene
 
     payload = bridge.run_reference(
         json.dumps(
             {
-                "song": str(song),
-                "accompaniment": str(accompaniment),
+                "stage": str(stage),
+                "source": str(source),
                 "output": str(output),
                 "strength": 75,
                 "sigma": 3,
@@ -323,8 +323,8 @@ def test_estimate_reference_charges_for_the_second_exported_file(reference_scene
     request = json.dumps(
         {
             "sample_rate": 44_100,
-            "song_seconds": 300.0,
-            "accompaniment_seconds": 300.0,
+            "stage_seconds": 300.0,
+            "source_seconds": 300.0,
             "file_bytes": 0,
         }
     )

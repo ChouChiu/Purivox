@@ -66,8 +66,8 @@ export function MrPage({ client, ready, active, onBind }: Props) {
 	const { t } = useLanguage();
 	const { state, start, cancel, reset } = useJob(client);
 
-	const [song, setSong] = useState<PreparedFile | null>(null);
-	const [accompaniment, setAccompaniment] = useState<PreparedFile | null>(null);
+	const [stage, setStage] = useState<PreparedFile | null>(null);
+	const [source, setSource] = useState<PreparedFile | null>(null);
 	const [outputName, setOutputName] = useState("purivox.wav");
 	const [strength, setStrength] = useState(DEFAULT_STRENGTH);
 	const [budget, setBudget] = useState<Estimate | null>(null);
@@ -118,15 +118,15 @@ export function MrPage({ client, ready, active, onBind }: Props) {
 	// Exporting both stems keeps one more file in the browser filesystem, which
 	// is the same heap the budget is measured against.
 	useEffect(() => {
-		void refreshEstimate(song, accompaniment);
-	}, [accompaniment, refreshEstimate, song]);
+		void refreshEstimate(stage, source);
+	}, [source, refreshEstimate, stage]);
 
 	const run = useCallback(async () => {
-		if (song === null || accompaniment === null) return;
+		if (stage === null || source === null) return;
 		setResult([]);
 		const payload = await start<ReferenceResult>(
 			"run_reference",
-			request(song, accompaniment, outputName, strength, tracks),
+			request(stage, source, outputName, strength, tracks),
 		);
 		if (payload === null) return;
 		const names =
@@ -149,16 +149,16 @@ export function MrPage({ client, ready, active, onBind }: Props) {
 			});
 		}
 		setResult(downloaded);
-	}, [accompaniment, client, outputName, song, start, strength, tracks]);
+	}, [source, client, outputName, stage, start, strength, tracks]);
 
-	const openSong = useRef<(() => void) | null>(null);
+	const openStage = useRef<(() => void) | null>(null);
 	const togglePreview = useRef<(() => void) | null>(null);
 	// The desktop names the missing input rather than only disabling Start.
 	const missing =
-		song === null
-			? "warn_no_song"
-			: accompaniment === null
-				? "warn_no_acc"
+		stage === null
+			? "warn_no_stage"
+			: source === null
+				? "warn_no_source"
 				: outputName.trim() === ""
 					? "warn_no_out"
 					: null;
@@ -168,7 +168,7 @@ export function MrPage({ client, ready, active, onBind }: Props) {
 	useEffect(() => {
 		if (!active) return;
 		onBind({
-			choose: () => openSong.current?.(),
+			choose: () => openStage.current?.(),
 			start: () => {
 				if (canStart && !state.running) {
 					reset();
@@ -187,26 +187,22 @@ export function MrPage({ client, ready, active, onBind }: Props) {
 				<FilePicker
 					label={t("mr_audio_label")}
 					registerOpen={(open) => {
-						openSong.current = open;
+						openStage.current = open;
 					}}
-					value={song?.label ?? null}
-					detail={song === null ? undefined : <AudioSummary file={song} />}
+					value={stage?.label ?? null}
+					detail={stage === null ? undefined : <AudioSummary file={stage} />}
 					disabled={!ready || state.running}
 					onPick={([file]) =>
-						void pick(file, 0, (prepared) => setSong(prepared))
+						void pick(file, 0, (prepared) => setStage(prepared))
 					}
 				/>
 				<FilePicker
-					label={t("acc_label")}
-					value={accompaniment?.label ?? null}
-					detail={
-						accompaniment === null ? undefined : (
-							<AudioSummary file={accompaniment} />
-						)
-					}
+					label={t("source_label")}
+					value={source?.label ?? null}
+					detail={source === null ? undefined : <AudioSummary file={source} />}
 					disabled={!ready || state.running}
 					onPick={([file]) =>
-						void pick(file, 1, (prepared) => setAccompaniment(prepared))
+						void pick(file, 1, (prepared) => setSource(prepared))
 					}
 				/>
 				<Field label={t("output_file")} hint={t("web_output_hint")}>

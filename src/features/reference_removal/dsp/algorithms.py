@@ -120,7 +120,7 @@ def _processing_layout(sample_rate: int, sigma: float, length: int) -> tuple[int
 
 
 def _reference_cancel(
-    song: np.ndarray,
+    mix: np.ndarray,
     reference: np.ndarray,
     sample_rate: int,
     strength: float,
@@ -130,11 +130,11 @@ def _reference_cancel(
     """Cancel reference-correlated content coherently, then suppress what is left.
 
     A real mask can only attenuate a whole time-frequency cell.  Where a live
-    voice and the accompaniment share a cell - which in the vocal range is the
+    voice and the backing share a cell - which in the vocal range is the
     normal case, not the exception - the mask has to choose between removing
     both and keeping both, so depth is always paid for with the voice.  The
     transfer estimate is a complex vector, and subtracting it removes the
-    accompaniment vector from inside the cell while the live vector survives.
+    backing vector from inside the cell while the live vector survives.
 
     This is the linear-canceller-then-residual-suppressor arrangement acoustic
     echo cancellers use.  It is not the direct residual this project removed
@@ -142,14 +142,14 @@ def _reference_cancel(
     with no per-bin projection, no confidence and no bound on the result, which
     is why a word present only in the reference ended up inverted in the output.
     """
-    length = min(song.shape[1], reference.shape[1])
-    mix = np.asarray(song[:, :length], dtype=np.float32)
-    accompaniment = np.asarray(reference[:, :length], dtype=np.float32)
+    length = min(mix.shape[1], reference.shape[1])
+    mix = np.asarray(mix[:, :length], dtype=np.float32)
+    reference_audio = np.asarray(reference[:, :length], dtype=np.float32)
     n_fft = _analysis_fft_size(sample_rate)
     hop = n_fft // 4
-    song_spectra = [stft(channel, n_fft=n_fft, hop=hop) for channel in mix]
+    mix_spectra = [stft(channel, n_fft=n_fft, hop=hop) for channel in mix]
     token.raise_if_cancelled()
-    reference_spectra = [stft(channel, n_fft=n_fft, hop=hop) for channel in accompaniment[:2]]
+    reference_spectra = [stft(channel, n_fft=n_fft, hop=hop) for channel in reference_audio[:2]]
     if not reference_spectra:
         return mix.copy()
     if len(reference_spectra) == 1:
@@ -160,8 +160,8 @@ def _reference_cancel(
     # operators would put half a dozen of them in the block working set at once.
     # One real and one complex buffer carry all the intermediates instead; what
     # a line reads is still exactly the expression it spells out.
-    power = np.empty(song_spectra[0].shape, dtype=song_spectra[0].real.dtype)
-    spectrum = np.empty(song_spectra[0].shape, dtype=song_spectra[0].dtype)
+    power = np.empty(mix_spectra[0].shape, dtype=mix_spectra[0].real.dtype)
+    spectrum = np.empty(mix_spectra[0].shape, dtype=mix_spectra[0].dtype)
 
     # The robust weights need a prediction, not the best prediction: they only
     # weigh how the residual power fluctuates against its own local mean, so a
@@ -169,15 +169,15 @@ def _reference_cancel(
     # pass that actually subtracts still fits the full two-channel system, and
     # the coherence is not measured in either pass of the first one.
     predicted, _ = predict_reference_spectra(
-        song_spectra,
+        mix_spectra,
         reference_spectra,
         sigma_frames,
         token,
         coherence=False,
         diagonal=True,
     )
-    residual_power = np.zeros(song_spectra[0].shape, dtype=np.float32)
-    for mixture_channel, predicted_channel in zip(song_spectra, predicted, strict=True):
+    residual_power = np.zeros(mix_spectra[0].shape, dtype=np.float32)
+    for mixture_channel, predicted_channel in zip(mix_spectra, predicted, strict=True):
         np.subtract(mixture_channel, predicted_channel, out=spectrum)
         np.abs(spectrum, out=power)
         np.square(power, out=power)
@@ -198,7 +198,7 @@ def _reference_cancel(
     robust_weights = local_residual.astype(np.float32, copy=False)
     del residual_power, local_residual, predicted
     predicted, explained = predict_reference_spectra(
-        song_spectra,
+        mix_spectra,
         reference_spectra,
         sigma_frames,
         token,
@@ -213,11 +213,11 @@ def _reference_cancel(
     # minimises the mean square error of the subtraction follows from that
     # alone.  It reaches zero for a reference that explains nothing, which is
     # what keeps an unrelated reference from being subtracted at all.
-    variance_ratio = TRANSFER_ORDER / effective_observations(sigma_frames, song_spectra[0].shape[0])
-    alignment = np.zeros(song_spectra[0].shape, dtype=np.float32)
+    variance_ratio = TRANSFER_ORDER / effective_observations(sigma_frames, mix_spectra[0].shape[0])
+    alignment = np.zeros(mix_spectra[0].shape, dtype=np.float32)
     predicted_power = np.zeros_like(alignment)
     for mixture_channel, predicted_channel, confidence in zip(
-        song_spectra, predicted, explained, strict=True
+        mix_spectra, predicted, explained, strict=True
     ):
         # confidence / (confidence + variance_ratio * (1 - confidence) + 1e-12)
         np.subtract(1.0, confidence, out=power)
@@ -244,9 +244,9 @@ def _reference_cancel(
     alignment /= predicted_power
     step = np.clip(alignment, 0.0, 1.0, out=alignment)
     del predicted_power
-    removable_power = np.zeros(song_spectra[0].shape, dtype=np.float32)
+    removable_power = np.zeros(mix_spectra[0].shape, dtype=np.float32)
     residual_spectra: list[np.ndarray] = []
-    for mixture_channel, predicted_channel in zip(song_spectra, predicted, strict=True):
+    for mixture_channel, predicted_channel in zip(mix_spectra, predicted, strict=True):
         removed = np.multiply(step, predicted_channel, out=spectrum)
         np.abs(removed, out=power)
         np.square(power, out=power)
@@ -260,13 +260,13 @@ def _reference_cancel(
 
     # What survives the subtraction is not only the live source: reverberation
     # ringing past the analysis window, residual misalignment and level moves
-    # all leave accompaniment behind that the narrowband transfer could not
+    # all leave backing behind that the narrowband transfer could not
     # describe.  How much is a regression of the residual power on the power
     # that was removed, carrying an intercept:
     #
     #     P_e = rho P_d + c
     #
-    # `rho P_d` follows the accompaniment that was there, so it is leakage; the
+    # `rho P_d` follows the backing that was there, so it is leakage; the
     # slowly varying `c` does not, so it is the live source, and only the first
     # term may be taken out.  This is the same split the incoherent path below
     # makes for the same reason.
@@ -283,7 +283,7 @@ def _reference_cancel(
     del leakage_confidence
 
     # Where the capture path destroyed phase, the coherent stage has nothing to
-    # subtract and `removable_power` is far smaller than the accompaniment that
+    # subtract and `removable_power` is far smaller than the backing that
     # is actually present.  The power-domain fit sees that content, so the mask
     # removes whichever of the two explains more, minus what has already gone.
     reference_power = np.zeros_like(residual_power)
@@ -292,7 +292,7 @@ def _reference_cancel(
         np.square(power, out=power)
         reference_power += power
     mixture_power = np.zeros_like(residual_power)
-    for mixture_channel in song_spectra:
+    for mixture_channel in mix_spectra:
         np.abs(mixture_channel, out=power)
         np.square(power, out=power)
         mixture_power += power
@@ -342,12 +342,12 @@ def _reference_cancel(
     # Strength interpolates towards the fully processed spectrum.  With nothing
     # subtracted this is exactly the mask blend it replaces, 1 - a(1 - M), so
     # bypass at zero and monotonicity are unchanged.
-    for mixture_channel, residual in zip(song_spectra, residual_spectra, strict=True):
+    for mixture_channel, residual in zip(mix_spectra, residual_spectra, strict=True):
         np.multiply(mask, residual, out=residual)
         residual -= mixture_channel
         residual *= strength
         residual += mixture_channel
-    del song_spectra, mask, spectrum
+    del mix_spectra, mask, spectrum
     return np.asarray(
         [istft(channel, hop=hop, length=length) for channel in residual_spectra],
         dtype=np.float32,
@@ -355,7 +355,7 @@ def _reference_cancel(
 
 
 def process_audio(
-    song: np.ndarray,
+    mix: np.ndarray,
     reference: np.ndarray,
     sample_rate: int,
     strength: float,
@@ -364,9 +364,9 @@ def process_audio(
     output: np.ndarray | None = None,
 ) -> np.ndarray:
     cancel = token or CancellationToken()
-    mix = np.asarray(song, dtype=np.float32)
-    accompaniment = np.asarray(reference, dtype=np.float32)
-    if mix.ndim != 2 or accompaniment.ndim != 2 or sample_rate <= 0:
+    mix = np.asarray(mix, dtype=np.float32)
+    reference_audio = np.asarray(reference, dtype=np.float32)
+    if mix.ndim != 2 or reference_audio.ndim != 2 or sample_rate <= 0:
         raise ValueError("audio must have shape [channels, frames] and a positive sample rate")
     strength = float(np.clip(strength, 0.0, 1.0))
     length = mix.shape[1]
@@ -392,14 +392,16 @@ def process_audio(
     def process_block(index: int, start: int) -> tuple[int, int, int, np.ndarray]:
         cancel.raise_if_cancelled()
         end = min(start + block, length)
-        reference_end = min(end, accompaniment.shape[1])
+        reference_end = min(end, reference_audio.shape[1])
         if reference_end < end:
             # The reference ran out inside this block: pad the rest with silence.
-            reference_block = np.zeros((accompaniment.shape[0], end - start), dtype=np.float32)
+            reference_block = np.zeros((reference_audio.shape[0], end - start), dtype=np.float32)
             if start < reference_end:
-                reference_block[:, : reference_end - start] = accompaniment[:, start:reference_end]
+                reference_block[:, : reference_end - start] = reference_audio[
+                    :, start:reference_end
+                ]
         else:
-            reference_block = accompaniment[:, start:end]
+            reference_block = reference_audio[:, start:end]
         processed = _reference_cancel(
             mix[:, start:end],
             reference_block,
@@ -423,7 +425,7 @@ def process_audio(
 
     def release_batch() -> None:
         release_mapped_pages(mix)
-        release_mapped_pages(accompaniment)
+        release_mapped_pages(reference_audio)
         release_mapped_pages(result)
 
     indexed_starts = list(enumerate(starts))

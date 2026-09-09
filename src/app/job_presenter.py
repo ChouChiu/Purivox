@@ -42,7 +42,7 @@ class JobPresenter(QObject):
         page.progress.setValue(0)
         page.set_running(True)
         page.start_clock()
-        self._state_tip = StateToolTip(tr("processing"), tr("loading_song"), self._parent)
+        self._state_tip = StateToolTip(tr("processing"), tr("loading_stage"), self._parent)
         self._state_tip.move(self._state_tip.getSuitablePos())
         self._state_tip.show()
         try:

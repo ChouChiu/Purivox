@@ -20,12 +20,12 @@ from shared.progress import report_progress
 logger = logging.getLogger(__name__)
 
 
-def _validate_reference_paths(song: Path, accompaniment: Path, outputs: tuple[Path, ...]) -> None:
-    resolved_song = song.expanduser().resolve()
-    resolved_accompaniment = accompaniment.expanduser().resolve()
-    if resolved_song == resolved_accompaniment:
-        raise ValueError("song and accompaniment must be different files")
-    inputs = {resolved_song, resolved_accompaniment}
+def _validate_reference_paths(stage: Path, source: Path, outputs: tuple[Path, ...]) -> None:
+    resolved_stage = stage.expanduser().resolve()
+    resolved_source = source.expanduser().resolve()
+    if resolved_stage == resolved_source:
+        raise ValueError("stage and source must be different files")
+    inputs = {resolved_stage, resolved_source}
     if any(output.expanduser().resolve() in inputs for output in outputs):
         raise ValueError("output path must not overwrite an input file")
 
@@ -36,34 +36,34 @@ def run_reference_job(
     progress: ProgressCallback = lambda _event: None,
 ) -> ProcessingResult:
     logger.info(
-        "starting reference job: song=%s accompaniment=%s",
-        job.song,
-        job.accompaniment,
+        "starting reference job: stage=%s source=%s",
+        job.stage,
+        job.source,
     )
     tracks = OutputTracks(job.tracks)
     planned = planned_outputs(job.output, tracks)
-    _validate_reference_paths(job.song, job.accompaniment, planned)
-    song = reference = processed_audio = None
+    _validate_reference_paths(job.stage, job.source, planned)
+    stage = reference = processed_audio = None
     try:
-        report_progress(progress, 0, "loading_song")
-        song = read_audio(job.song, token).stereo()
+        report_progress(progress, 0, "loading_stage")
+        stage = read_audio(job.stage, token).stereo()
         token.raise_if_cancelled()
-        report_progress(progress, 10, "loading_acc")
-        reference = read_audio(job.accompaniment, token).stereo()
-        if reference.sample_rate != song.sample_rate:
+        report_progress(progress, 10, "loading_source")
+        reference = read_audio(job.source, token).stereo()
+        if reference.sample_rate != stage.sample_rate:
             report_progress(progress, 18, "resampling")
-            resampled = resample_audio(reference, song.sample_rate, token)
+            resampled = resample_audio(reference, stage.sample_rate, token)
             reference.cleanup()
             reference = resampled
         token.raise_if_cancelled()
         if job.auto_align:
             report_progress(progress, 25, "aligning")
-            alignment = create_pcm_audio(reference.channels, song.frames, song.sample_rate)
+            alignment = create_pcm_audio(reference.channels, stage.frames, stage.sample_rate)
             try:
                 aligned = align_audio(
-                    song.samples,
+                    stage.samples,
                     reference.samples,
-                    song.sample_rate,
+                    stage.sample_rate,
                     token,
                     alignment.samples,
                 )
@@ -79,16 +79,18 @@ def run_reference_job(
             except BaseException:
                 alignment.cleanup()
                 raise
-        length = song.frames
+        length = stage.frames
         # The result is the stage recording with the backing taken out of it,
         # so it keeps that recording's own rate and depth rather than a fixed
         # export format: resampling it up would only make the file larger.
-        processed_audio = create_pcm_audio(song.channels, length, song.sample_rate, song.bit_depth)
+        processed_audio = create_pcm_audio(
+            stage.channels, length, stage.sample_rate, stage.bit_depth
+        )
         report_progress(progress, 32, "processing")
         process_audio(
-            song.samples,
+            stage.samples,
             reference.samples,
-            song.sample_rate,
+            stage.sample_rate,
             job.strength / 100.0,
             job.sigma,
             token,
@@ -104,7 +106,7 @@ def run_reference_job(
             # recording less the vocal - which also gives it the level it
             # actually had on stage.  The vocal is already on disk
             # (or was never asked for), so the difference overwrites it in place.
-            subtract_into(song, processed_audio, token)
+            subtract_into(stage, processed_audio, token)
             backing = planned[-1]
             stats.append(export_audio(processed_audio, backing, token, progress, 93, 96))
             outputs.append(backing.resolve())
@@ -112,6 +114,6 @@ def run_reference_job(
         logger.info("reference job completed: %s", ", ".join(str(path) for path in outputs))
         return ProcessingResult(tuple(outputs), tuple(stats))
     finally:
-        for audio in (processed_audio, reference, song):
+        for audio in (processed_audio, reference, stage):
             if audio is not None:
                 audio.cleanup()
