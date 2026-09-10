@@ -30,16 +30,49 @@ const KIND_KEYS: Record<ClipKind, string> = {
 	unmatched: "stage_type_unmatched",
 };
 
+// The table lays out fixed, so every column is exactly as wide as its header
+// cell claims and nothing negotiates on the content's behalf: seven columns
+// otherwise just split the width evenly, and a `td` does not clip what
+// overflows it - which is how the time fields, each carrying two clocks and a
+// dash, came to sit on top of the column beside them.  Each width below is what
+// that column's widest header and content measure across the five languages,
+// with room to spare; every column is claimed, because one left to `auto` keeps
+// only what the others did not want.  They add up, with the cells' own padding,
+// to 968px, which is what the page has to give at its 1100px content width.
 const useStyles = makeStyles({
 	wrapper: { overflowX: "auto" },
-	table: { minWidth: "760px" },
-	range: { minWidth: "180px" },
+	enabled: { width: "56px" },
+	kind: { width: "104px" },
+	range: { width: "188px" },
+	speed: { width: "56px" },
+	confidence: { width: "96px" },
+	source: { width: "168px" },
+	sourceName: {
+		display: "block",
+		overflow: "hidden",
+		textOverflow: "ellipsis",
+		whiteSpace: "nowrap",
+	},
+	rangeInput: { width: "100%" },
+	// Without this the field keeps the browser's default twenty-character
+	// intrinsic width, which no column width can talk it out of.
+	rangeField: { minWidth: 0 },
+	// The field paints its own text colour, so a colour on the wrapper never
+	// reaches it; the border is the wrapper's own, and says the same thing to a
+	// reader who cannot separate the two colours.
+	invalidText: { color: tokens.colorPaletteRedForeground1 },
+	// Fluent repaints the underline on hover and on focus, so the invalid colour
+	// has to be stated for those states too or it vanishes under the pointer.
+	invalidBorder: {
+		borderBottomColor: tokens.colorPaletteRedBorder2,
+		":hover": { borderBottomColor: tokens.colorPaletteRedBorder2 },
+		":focus-within": { borderBottomColor: tokens.colorPaletteRedBorder2 },
+	},
 	actions: {
 		display: "flex",
 		gap: tokens.spacingHorizontalS,
 		marginTop: tokens.spacingVerticalM,
 	},
-	invalid: { color: tokens.colorPaletteRedForeground1 },
 });
 
 /** One editable time range that only commits a value the parser accepts. */
@@ -74,7 +107,16 @@ function RangeCell({
 
 	return (
 		<Input
-			className={mergeClasses(styles.range, invalid && styles.invalid)}
+			className={mergeClasses(
+				styles.rangeInput,
+				invalid && styles.invalidBorder,
+			)}
+			input={{
+				className: mergeClasses(
+					styles.rangeField,
+					invalid && styles.invalidText,
+				),
+			}}
 			value={draft ?? formatRange(start, end)}
 			onChange={(_event, data) => setDraft(data.value)}
 			onBlur={commit}
@@ -111,21 +153,39 @@ export function Timeline({
 	return (
 		<div>
 			<div className={styles.wrapper}>
-				<Table className={styles.table} size="small">
+				<Table size="small">
 					<TableHeader>
 						<TableRow>
-							<TableHeaderCell>{t("stage_clip_enabled")}</TableHeaderCell>
-							<TableHeaderCell>{t("stage_clip_type")}</TableHeaderCell>
-							<TableHeaderCell>{t("stage_clip_time")}</TableHeaderCell>
-							<TableHeaderCell>{t("stage_source_time")}</TableHeaderCell>
-							<TableHeaderCell>{t("stage_clip_speed")}</TableHeaderCell>
-							<TableHeaderCell>{t("stage_confidence")}</TableHeaderCell>
-							<TableHeaderCell>{t("stage_clip_source")}</TableHeaderCell>
+							<TableHeaderCell className={styles.enabled}>
+								{t("stage_clip_enabled")}
+							</TableHeaderCell>
+							<TableHeaderCell className={styles.kind}>
+								{t("stage_clip_type")}
+							</TableHeaderCell>
+							<TableHeaderCell className={styles.range}>
+								{t("stage_clip_time")}
+							</TableHeaderCell>
+							<TableHeaderCell className={styles.range}>
+								{t("stage_source_time")}
+							</TableHeaderCell>
+							<TableHeaderCell className={styles.speed}>
+								{t("stage_clip_speed")}
+							</TableHeaderCell>
+							<TableHeaderCell className={styles.confidence}>
+								{t("stage_confidence")}
+							</TableHeaderCell>
+							<TableHeaderCell className={styles.source}>
+								{t("stage_clip_source")}
+							</TableHeaderCell>
 						</TableRow>
 					</TableHeader>
 					<TableBody>
 						{analysis.clips.map((clip, index) => {
 							const unmatched = clip.kind === "unmatched";
+							const sourceName =
+								clip.source === null
+									? t("stage_unmatched_label")
+									: (clip.source.split("/").pop() ?? clip.source);
 							return (
 								<TableRow
 									key={`${clip.kind}-${clip.stage_start}-${clip.stage_end}`}
@@ -174,10 +234,10 @@ export function Timeline({
 												? "—"
 												: `${Math.round(clip.confidence * 100)}%`}
 									</TableCell>
-									<TableCell>
-										{clip.source === null
-											? t("stage_unmatched_label")
-											: clip.source.split("/").pop()}
+									<TableCell className={styles.source}>
+										<span className={styles.sourceName} title={sourceName}>
+											{sourceName}
+										</span>
 									</TableCell>
 								</TableRow>
 							);
