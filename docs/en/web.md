@@ -99,6 +99,12 @@ scope by `shared/progress.py`, which every pipeline uses through `report_progres
   first and keeping every `hop`-th row made an intermediate view `hop` times taller, and numpy
   refuses a view whose nominal size does not fit a pointer — which under wasm32 is 32 bits, a
   ceiling that a few seconds of 44.1 kHz audio passes. Both formulations give identical results.
+- `log_flux_bands` frames at the hop the same way, and reduces each block of the magnitude
+  spectrum to its bands as it goes. It used to call `scipy.signal.stft`, which frames every offset
+  too: the 4 kHz matching proxy hits the same ceiling past 131 seconds, so every recording longer
+  than two minutes failed in the browser at the first step of the analysis. Blocking also keeps
+  peak memory off the duration — 19 MB against 55 MB over a three-minute analysis — and both
+  formulations are identical bit for bit.
 
 ## Choices the page makes
 
