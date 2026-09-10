@@ -17,3 +17,5 @@ pysidedeploy-macos.spec
 *.part
 *.tmp.wav
 web/public/__probe__
+.evalold
+tmp*
