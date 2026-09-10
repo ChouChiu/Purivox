@@ -355,18 +355,35 @@ audience sound.
 
 ## Exported Stems
 
-One cancellation can export two tracks. The vocal is what the pipeline produces; the backing
-track is defined as the stage/live audio minus that vocal, formed by a block-wise subtraction in
-the time domain. That definition buys two things: the backing carries the level it actually had on
-stage rather than the level of the song source file, and the two stems add back up
-to the original recording exactly - a constructive identity that does not depend on how well
-cancellation worked.
+One cancellation can export two tracks. The vocal is what the pipeline produces; the backing is
+not subtracted from the recording but re-rendered from the song source through the transfer the
+cancellation estimated. Each time-frequency cell gets a real power gain
+
+$$
+g(f,n)=\sqrt{\frac{\widehat P_b(f,n)}{P_x(f,n)}}
+$$
+
+The numerator is the source power the playback carried — what the linear stage removed, or the
+larger of the leakage regression's and the incoherent path's estimates, bounded by the mixture's
+own power. The denominator is the source's own smoothed power. Both sides are smoothed over the
+same statistical context before the root is taken, which leaves a slowly varying real gain, and it
+is multiplied onto the source's own spectrum. That choice has two reasons: the backing keeps the
+source's phase, transients and fine structure, so its quality is the source's rather than the
+capture's; and the complex transfer's phase is itself noise where the coherence is low, so
+rendering it would smear exactly the content the power path recovered. The gain is capped at 2,
+because the playback chain can be louder than the master but a gain fitted on weak evidence must
+not run away.
+
+Strength $\alpha$ scales the backing too, so $\alpha=0$ exports silence rather than a backing
+nothing was taken from.
 
 When only one stem is exported it is written to the path the user named. When both are, the second
 name is derived from the first: a trailing `_vocals` becomes `_backing`, and a name without that
-marker simply gains it. The subtraction overwrites the same buffer once the first stem is on disk,
-so exporting both costs no additional full-length buffer.
+marker simply gains it. The backing is rendered into its own full-length buffer, so exporting both
+costs one more of them rather than overwriting the vocal's. Peak protection scales each track on
+its own peak: the synthesised backing can be louder than the vocal, and clipping one to protect the
+other would trade a level for a distortion.
 
-Note the peak protection above: where the vocal exceeds -1 dBFS and is scaled down as a whole, the
-vocal energy removed by that scaling lands in the backing track. The identity still holds, but the
-backing is then not purely the backing. The protection itself rarely triggers.
+Because the backing is no longer formed by subtraction, the two stems no longer add back up to the
+original recording. What that buys is source-grade quality in the backing, and clean silence in the
+ranges no clip covered — nothing was cancelled out of them.

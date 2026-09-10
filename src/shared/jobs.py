@@ -25,9 +25,10 @@ def validate_reference_settings(strength: int, sigma: int) -> None:
 class OutputTracks(StrEnum):
     """Which stems one reference cancellation writes.
 
-    The vocal is what the pipelines produce; the backing track is the stage
-    recording minus that vocal, so the two always add back up to the recording
-    and the backing carries the level it actually had on stage.
+    The vocal is what the pipelines produce; the backing is the song source as
+    the playback carried it, rendered from the source through the transfer the
+    cancellation estimated, so it keeps the source's quality rather than the
+    capture's and carries the level it actually had on stage.
     """
 
     VOCAL = "vocal"
@@ -40,7 +41,7 @@ BACKING_MARKER = "_backing"
 
 
 def backing_path(output: Path) -> Path:
-    """Name the backing file beside the vocal one it is derived from."""
+    """Name the backing file beside the vocal one it is exported with."""
     stem = output.stem
     if stem.endswith(VOCAL_MARKER):
         stem = stem[: -len(VOCAL_MARKER)]

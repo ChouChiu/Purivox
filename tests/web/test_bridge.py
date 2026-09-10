@@ -335,3 +335,20 @@ def test_estimate_charges_for_the_second_exported_file(reference_scene):
     )
     # The stem sitting in the Emscripten filesystem is heap like everything else.
     assert both["peak_bytes"] > single["peak_bytes"]
+
+
+def test_estimate_charges_for_the_synthesised_backing(reference_scene):
+    request = json.dumps(
+        {
+            "sample_rate": 44_100,
+            "stage_seconds": 300.0,
+            "longest_source_seconds": 300.0,
+            "file_bytes": 0,
+        }
+    )
+    vocal = json.loads(bridge.estimate_isolation(request))
+    backing = json.loads(
+        bridge.estimate_isolation(json.dumps({**json.loads(request), "tracks": "backing"}))
+    )
+    # The backing is rendered from the source, so it needs a buffer of its own.
+    assert backing["peak_bytes"] > vocal["peak_bytes"]

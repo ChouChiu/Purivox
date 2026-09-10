@@ -91,8 +91,9 @@ uv run --locked purivox
 4. If necessary, double-click to edit recording times or source ranges, or clear the checkbox for
    a segment that should not be processed.
 5. Under **Export**, choose which stems to save: the vocal only, the backing track only, or
-   both. The backing track is the stage/live audio minus the vocal, so it carries the level it
-   actually had on stage, and the two stems add back up to the original recording.
+   both. The backing track is not subtracted from the recording; it is the song source re-rendered
+   through the transfer the cancellation estimated, so it keeps the source's own quality while
+   carrying the level and response the backing actually had on stage.
 6. Confirm the output location and the processing options, then start. Preview the result before
    adjusting the strength. If you hear obvious pumping or thinning of the live vocal, reduce the
    strength or confirm that the song source is correct.

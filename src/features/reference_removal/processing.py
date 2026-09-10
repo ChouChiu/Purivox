@@ -22,7 +22,6 @@ from shared.audio import (
     export_audio,
     read_audio,
     resample_audio,
-    subtract_into,
 )
 from shared.jobs import OutputTracks, planned_outputs
 from shared.processing import (
@@ -63,7 +62,7 @@ def run_reference_job(
     tracks = OutputTracks(job.tracks)
     planned = planned_outputs(job.output, tracks)
     _validate_reference_paths(job.stage, job.source, planned)
-    stage = reference = processed_audio = None
+    stage = reference = processed_audio = backing_audio = None
     try:
         report_progress(progress, 0, "loading_stage")
         stage = read_audio(job.stage, token).stereo()
@@ -106,6 +105,11 @@ def run_reference_job(
         processed_audio = create_pcm_audio(
             stage.channels, length, stage.sample_rate, stage.bit_depth
         )
+        backing_audio = (
+            create_pcm_audio(stage.channels, length, stage.sample_rate, stage.bit_depth)
+            if tracks is not OutputTracks.VOCAL
+            else None
+        )
         report_progress(progress, 32, "processing")
         process_audio(
             stage.samples,
@@ -115,26 +119,21 @@ def run_reference_job(
             job.sigma,
             token,
             processed_audio.samples,
+            backing_audio.samples if backing_audio is not None else None,
         )
         outputs: list[Path] = []
         stats: list[AudioStats] = []
         if tracks is not OutputTracks.BACKING:
             stats.append(export_audio(processed_audio, job.output, token, progress, 86, 89))
             outputs.append(job.output.resolve())
-        if tracks is not OutputTracks.VOCAL:
-            # The backing track is what cancellation took out, so it is the stage
-            # recording less the vocal - which also gives it the level it
-            # actually had on stage.  The vocal is already on disk
-            # (or was never asked for), so the difference overwrites it in place.
-            subtract_into(stage, processed_audio, token)
-            backing = planned[-1]
-            stats.append(export_audio(processed_audio, backing, token, progress, 93, 96))
-            outputs.append(backing.resolve())
+        if backing_audio is not None:
+            stats.append(export_audio(backing_audio, planned[-1], token, progress, 93, 96))
+            outputs.append(planned[-1].resolve())
         report_progress(progress, 100, "done_status", path=outputs[0])
         logger.info("reference job completed: %s", ", ".join(str(path) for path in outputs))
         return ProcessingResult(tuple(outputs), tuple(stats))
     finally:
-        for audio in (processed_audio, reference, stage):
+        for audio in (backing_audio, processed_audio, reference, stage):
             if audio is not None:
                 audio.cleanup()
 

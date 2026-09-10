@@ -318,7 +318,7 @@ def test_long_processing_uses_two_spectral_workers(monkeypatch):
             calls += 1
         if call_index < 2:
             rendezvous.wait(timeout=5)
-        return song.copy()
+        return song.copy(), None
 
     monkeypatch.setattr(
         "features.reference_removal.dsp.algorithms._reference_cancel",
@@ -357,6 +357,72 @@ def test_process_audio_uses_reference_cancellation(monkeypatch):
     assert calls
     assert corr(output[0], vocal) > 0.99
     assert abs(corr(output[0], reference)) < 0.08
+
+
+def _backing_scene(seconds: float = 3.0):
+    sample_rate = 8_000
+    time = np.arange(int(sample_rate * seconds)) / sample_rate
+    source = 0.25 * np.sin(2 * np.pi * 110 * time) + 0.12 * np.sin(2 * np.pi * 220 * time)
+    live = 0.3 * np.sin(2 * np.pi * 440 * time)
+    accompaniment = np.stack([0.9 * source, 0.85 * source])
+    mixture = (accompaniment + np.stack([live, 0.95 * live])).astype(np.float32)
+    return sample_rate, np.stack([source, source]).astype(np.float32), accompaniment, live, mixture
+
+
+def test_process_audio_renders_the_backing_from_the_source():
+    """The backing is the estimate applied to the source, not the stage less the vocal."""
+    sample_rate, reference, accompaniment, live, mixture = _backing_scene()
+    output = np.empty_like(mixture)
+    backing = np.empty_like(mixture)
+
+    process_audio(mixture, reference, sample_rate, 1.0, 8, None, output, backing)
+
+    body = slice(sample_rate // 2, -sample_rate // 2)
+    # The source's own waveform, at the level the stage carried it.
+    assert corr(backing[0, body], reference[0, body]) > 0.99
+    level_db = 10 * np.log10(np.mean(backing[:, body] ** 2) / np.mean(accompaniment[:, body] ** 2))
+    assert abs(level_db) < 1.0
+    # And none of the live voice, which the source does not contain.
+    assert abs(float(np.dot(backing[0, body], live[body]) / np.dot(live[body], live[body]))) < 0.01
+
+
+def test_process_audio_bypass_leaves_the_backing_silent():
+    """Nothing was cancelled, so there is no estimate to render."""
+    sample_rate, reference, _accompaniment, _live, mixture = _backing_scene()
+    backing = np.ones_like(mixture)
+
+    output = process_audio(mixture, reference, sample_rate, 0.0, 8, None, None, backing)
+
+    assert np.array_equal(output, mixture)
+    assert not np.any(backing)
+
+
+def test_process_audio_backs_nothing_off_an_unrelated_source():
+    sample_rate = 8_000
+    rng = np.random.default_rng(404)
+    mixture = rng.normal(0.0, 0.1, (2, sample_rate * 3)).astype(np.float32)
+    unrelated = rng.normal(0.0, 0.1, mixture.shape).astype(np.float32)
+    backing = np.empty_like(mixture)
+
+    process_audio(mixture, unrelated, sample_rate, 1.0, 3, None, None, backing)
+
+    quiet = 10 * np.log10(np.mean(backing**2) / np.mean(unrelated**2))
+    assert quiet < -40.0
+
+
+def test_process_audio_rejects_a_mismatched_backing_buffer():
+    sample_rate, reference, _accompaniment, _live, mixture = _backing_scene(0.5)
+    with pytest.raises(ValueError, match="backing must be a float32"):
+        process_audio(
+            mixture,
+            reference,
+            sample_rate,
+            1.0,
+            3,
+            None,
+            None,
+            np.zeros((2, 16), dtype=np.float32),
+        )
 
 
 def test_reference_mask_does_not_inject_reference_only_lyrics():

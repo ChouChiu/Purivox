@@ -25,6 +25,7 @@ export function estimate(
 		longest_source_seconds: Math.max(0, ...sources.map(seconds)),
 		file_bytes: totalBytes([stage, ...sources]),
 		both_tracks: tracks === "both",
+		tracks,
 	});
 }
 

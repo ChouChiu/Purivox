@@ -113,8 +113,8 @@ def _cancellation_inputs(
     return stage, source
 
 
-def test_both_tracks_add_back_up_to_the_stage_recording(tmp_path: Path):
-    """The backing track is defined as the stage less the vocal, so the two sum."""
+def test_the_backing_track_is_the_source_the_playback_carried(tmp_path: Path):
+    """The backing is rendered from the source, not from the stage less the vocal."""
     stage, source = _cancellation_inputs(tmp_path)
     output = tmp_path / "stage_vocals.wav"
     result = run_reference_job(
@@ -125,9 +125,19 @@ def test_both_tracks_add_back_up_to_the_stage_recording(tmp_path: Path):
     assert len(result.audio_stats) == 2
     vocal, _ = sf.read(result.outputs[0], always_2d=True)
     backing, _ = sf.read(result.outputs[1], always_2d=True)
-    stage, _ = sf.read(stage, always_2d=True)
-    # Two 24-bit quantisations plus a float32 subtraction; nothing else may drift.
-    assert np.allclose(vocal + backing, stage, atol=1e-6)
+    reference, _ = sf.read(source, always_2d=True)
+    body = slice(100, -100)
+    # The source's own waveform, at the level the stage carried it.
+    assert np.corrcoef(backing[body].ravel(), reference[body].ravel())[0, 1] > 0.99
+    assert np.isclose(
+        np.sqrt(np.mean(backing[body] ** 2)),
+        np.sqrt(np.mean(reference[body] ** 2)),
+        rtol=0.05,
+    )
+    # And none of the live voice, which the source does not contain.
+    live = np.sin(2 * np.pi * 440 * np.arange(vocal.shape[0]) / 8_000)
+    tone = np.tile(live[body], 2)
+    assert abs(float(np.dot(backing[body].ravel(), tone) / np.dot(tone, tone))) < 0.01
 
 
 def test_backing_only_writes_the_named_path_and_nothing_else(tmp_path: Path):
@@ -141,6 +151,8 @@ def test_backing_only_writes_the_named_path_and_nothing_else(tmp_path: Path):
     assert result.outputs == (output.resolve(),)
     assert not (tmp_path / "just_the_backing_backing.wav").exists()
     assert not (tmp_path / "stage_vocals.wav").exists()
+    backing, _ = sf.read(output, always_2d=True)
+    assert np.max(np.abs(backing)) > 0.1
 
 
 def test_a_derived_backing_path_may_not_overwrite_an_input(tmp_path: Path):

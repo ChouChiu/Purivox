@@ -107,6 +107,7 @@ def _estimate_to_dict(estimate: MemoryEstimate) -> dict[str, Any]:
 def estimate_isolation(request: str) -> str:
     """Report whether one isolation job fits in the browser's memory budget."""
     data = json.loads(request)
+    tracks = OutputTracks(data.get("tracks", OutputTracks.VOCAL))
     return _dump(
         _estimate_to_dict(
             isolation_peak_bytes(
@@ -115,6 +116,7 @@ def estimate_isolation(request: str) -> str:
                 float(data["longest_source_seconds"]),
                 int(data.get("file_bytes", 0)),
                 bool(data.get("both_tracks", False)),
+                tracks is not OutputTracks.VOCAL,
             )
         )
     )

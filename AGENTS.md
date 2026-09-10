@@ -33,8 +33,9 @@ One pipeline, one workflow over it. The GUI, the CLI and the browser build are s
 
 Four names mean one thing each, and the UI strings already use them: the **stage/live recording**
 is the file being processed, the **song source** is the released song it is cancelled against, the
-**live vocal** is what survives, and the **backing** is what was removed — the part of the recording
-the song source explains, and the second export track.
+**live vocal** is what survives, and the **backing** is the song source as the playback carried it
+— the second export track, rendered from the source through the transfer the cancellation
+estimated, so it keeps the source's quality instead of the capture's.
 
 Backing is not *accompaniment*. The accompaniment is a song's instrumental; the backing is
 whatever of the song source the stage playback actually carried, source vocals included. The code
@@ -82,7 +83,7 @@ other, `app`/`web` never import `entrypoints`. `tests/test_architecture.py` and
 feature is one new directory under `src/features/`. Anything two features — or the GUI and the
 CLI — both need moves down into `shared`: `BLOCK_FRAMES`, `AUDIO_EXTENSIONS`,
 `validate_reference_settings`, `log_flux_bands`, `AUDIO_FILE_FILTER`, `normalized_wav_path`,
-`branding.user_agent`, `OutputTracks`, `subtract_into`, `export_audio`, `download/`,
+`branding.user_agent`, `OutputTracks`, `export_audio`, `download/`,
 `DownloadDialog`.
 
 | Path | What lives there |
@@ -91,7 +92,7 @@ CLI — both need moves down into `shared`: `BLOCK_FRAMES`, `AUDIO_EXTENSIONS`,
 | `src/features/reference_removal/` | `dsp/algorithms.py` (complex subtraction + residual mask, linked peak protection), `dsp/transfer.py` (smoothed spectra, vectorised LDL^H solve, adjusted multiple coherence), `dsp/alignment.py` (tempo correction + GCC-PHAT + drift tracking + Lanczos warp), `matching.py` (multi-source fingerprint matching, candidate clustering, manual clip edits), `timeline_model.py` (`QAbstractTableModel` behind the editable timeline, `clip_edited`/`edit_rejected`), `rendering.py` (segmented per-clip render), `processing.py` (both engines and `run_isolation_job`), `models.py`, `page.py`, `preview.py` |
 | `src/features/home/`, `settings/` | Brand and entry cards; language/theme/log level, `updates.py` (GitHub release query + version compare) and `dialog.py`. The app never installs an update — the dialog opens the release page |
 | `src/shared/` (root) | `config.py` (the `cfg` `QConfig`), `i18n.py` (`tr()`, `install_language()`, `SUPPORTED_LANGUAGES`), `jobs.py` (the settings contract behind `ReferenceJob`, `IsolationJob` and the CLI: `SIGMA_CHOICES`, `STRENGTH_RANGE`, `validate_reference_settings`, `OutputTracks`, `planned_outputs`), `logging.py`, `processing.py` (`CancellationToken`, `ProgressEvent`, `ProcessingResult`), `progress.py`, `branding.py` |
-| `src/shared/audio/` | `io.py`: mapped I/O, soxr resample, atomic WAV write, `BLOCK_FRAMES` (262 144), `AUDIO_EXTENSIONS`, `release_mapped_pages()`; `analysis.py`: `AudioStats`, peak/RMS, block-wise `copy_audio`/`subtract_into`, `export_audio` |
+| `src/shared/audio/` | `io.py`: mapped I/O, soxr resample, atomic WAV write, `BLOCK_FRAMES` (262 144), `AUDIO_EXTENSIONS`, `release_mapped_pages()`; `analysis.py`: `AudioStats`, peak/RMS, block-wise `copy_audio`, `export_audio` |
 | `src/shared/download/` | `media.py`: the yt-dlp wrapper — `search()` (`ytsearch`, flat), `fetch()` (best audio, `noplaylist` — a watch URL carrying a radio `list` is hundreds of entries — WAV through ffmpeg when it is there, the container as it arrived when it is not, cancellable in extraction through `match_filter` as well as in transfer through the progress hook), `looks_like_url`, `ffmpeg_available`; `cache.py`: the `downloads.json` index under AppLocalData, so a link is fetched once — matched by video id as well as by URL, because the link pasted is rarely the canonical one recorded; `runner.py`: the `QThread` behind one search or download. YouTube Music is link-only — its search answers with channels, not songs |
 | `src/shared/dsp/` | `spectral.py`: librosa-compatible `stft`/`istft` (`n_fft=2048`, `hop=512`) and `log_flux_bands()`, shared by source matching and coarse alignment; `rate.py`: the global tempo scale search the pipeline runs before matching; `stretch.py`: pitch-preserving WSOLA, numpy/scipy only because Pyodide runs the same pipeline |
 | `src/shared/ui/` | `responsive.py` (`LayoutMode`/`LayoutMetrics`, `ResponsiveColumns`, `FoldingRow`, `allow_shrinking`, `HeightForWidth`, `ElidedLabel`), `cards.py` (`FormCard`, `PageScrollArea`, `format_clock`), `widgets.py` (`SmoothComboBox`, file filters, `normalized_wav_path`), `download_dialog.py` (the fetch dialog the page opens, imported in the slot rather than at module scope — yt-dlp is a tenth of a second of startup) |

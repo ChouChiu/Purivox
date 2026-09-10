@@ -22,6 +22,10 @@ from .transfer import (
 )
 
 _MASK_FLOOR = 0.05
+# The synthesised backing may be louder than the source file, because the
+# playback can carry more gain than the master does.  A gain fitted on weak
+# evidence must not run away, so it is bounded like the transfer itself.
+_MAX_BACKING_GAIN = 2.0
 # A geometric mean sits at about 0.56 of the arithmetic mean for the residual's
 # distribution, so the threshold is scaled up to keep the same amount of
 # down-weighting as the mean-based form it replaced.
@@ -126,7 +130,8 @@ def _reference_cancel(
     strength: float,
     sigma: float,
     token: CancellationToken,
-) -> np.ndarray:
+    backing: bool = False,
+) -> tuple[np.ndarray, np.ndarray | None]:
     """Cancel reference-correlated content coherently, then suppress what is left.
 
     A real mask can only attenuate a whole time-frequency cell.  Where a live
@@ -141,6 +146,10 @@ def _reference_cancel(
     earlier: that one subtracted a broadband real 2x2 matrix in the time domain
     with no per-bin projection, no confidence and no bound on the result, which
     is why a word present only in the reference ended up inverted in the output.
+
+    With `backing=True` the same pass renders the second export track as well:
+    the source as the playback carried it, from the estimate this canceller
+    built, rather than from the stage minus the vocal.
     """
     length = min(mix.shape[1], reference.shape[1])
     mix = np.asarray(mix[:, :length], dtype=np.float32)
@@ -151,7 +160,7 @@ def _reference_cancel(
     token.raise_if_cancelled()
     reference_spectra = [stft(channel, n_fft=n_fft, hop=hop) for channel in reference_audio[:2]]
     if not reference_spectra:
-        return mix.copy()
+        return mix.copy(), None
     if len(reference_spectra) == 1:
         reference_spectra.append(reference_spectra[0])
     sigma_frames = max(float(sigma) * sample_rate / hop / 6.0, 1.0)
@@ -281,6 +290,16 @@ def _reference_cancel(
     # Leakage cannot exceed the residual it was found in.
     np.minimum(leaked_power, residual_power, out=leaked_power)
     del leakage_confidence
+    # The backing track is rendered from the source, so it needs the source's
+    # share of each cell rather than the amount the mask happens to remove.  Two
+    # estimates answer that question and the larger is taken: the coherent stage
+    # plus this leakage regression describes what the subtraction left behind,
+    # while the incoherent path below fits the source's power in the mixture
+    # directly.
+    backing_power = None
+    if backing:
+        backing_power = removable_power.copy()
+        backing_power += leaked_power
 
     # Where the capture path destroyed phase, the coherent stage has nothing to
     # subtract and `removable_power` is far smaller than the backing that
@@ -299,8 +318,18 @@ def _reference_cancel(
     incoherent_power, incoherent_confidence = power_transfer(
         mixture_power, reference_power, sigma_frames
     )
-    del reference_power, mixture_power, reference_spectra
+    del reference_power
+    if backing_power is None:
+        del mixture_power, reference_spectra
     incoherent_power *= smoothstep(_POWER_FIT_LOW, _POWER_FIT_HIGH, incoherent_confidence)
+    if backing_power is not None:
+        np.maximum(backing_power, incoherent_power, out=backing_power)
+        # No backing can carry more power than the mixture it was fitted on.
+        # The bound is what keeps a take whose level barely moves honest: with
+        # no variance to regress on, the fit's slope is noise, and without this
+        # the rendered backing turns into a wild equaliser.
+        np.minimum(backing_power, mixture_power, out=backing_power)
+        del mixture_power
     incoherent_power -= removable_power
     np.maximum(incoherent_power, 0.0, out=incoherent_power)
     del incoherent_confidence
@@ -328,6 +357,34 @@ def _reference_cancel(
     mask /= mask_residual
     np.clip(mask, _MASK_FLOOR**2, 1.0, out=mask)
     np.sqrt(mask, out=mask)
+    # The backing track is the estimate applied to the source, not the stage
+    # minus the vocal, so it carries the source's own quality instead of the
+    # capture's.  `backing_gain` is the share of the source's local power the
+    # playback carried: the estimated backing power over the source's own power.
+    # Both sides are smoothed over the same context before they are divided,
+    # which leaves a slowly varying real gain; applied to the source's own
+    # spectrum it keeps the source's phase, transients and fine structure.  The
+    # complex transfer cannot be used for this: where the coherence is low its
+    # phase is noise, and rendering it would smear exactly the content the power
+    # path recovered.
+    backing_gain = None
+    if backing_power is not None:
+        source_power = np.zeros_like(backing_power)
+        for reference_channel in reference_spectra:
+            np.abs(reference_channel, out=power)
+            np.square(power, out=power)
+            source_power += power
+        spectral_smooth(backing_power, sigma_frames, out=backing_power)
+        spectral_smooth(source_power, sigma_frames, out=source_power)
+        source_power += 1e-20
+        np.divide(backing_power, source_power, out=backing_power)
+        del source_power
+        # A ratio of powers, and the running sum inside the smoother, can both
+        # round below zero where the content is silent; the root may not.
+        np.maximum(backing_power, 0.0, out=backing_power)
+        np.sqrt(backing_power, out=backing_power)
+        backing_gain = np.clip(backing_power, 0.0, _MAX_BACKING_GAIN, out=backing_power)
+        del backing_power
     del mask_residual, remaining_power, removable_power, residual_power, power
     # The narrow Gaussian pass catches what the power-domain smoothing left:
     # isolated-bin musical noise, without refilling tonal notches from
@@ -348,8 +405,20 @@ def _reference_cancel(
         residual *= strength
         residual += mixture_channel
     del mix_spectra, mask, spectrum
-    return np.asarray(
+    processed = np.asarray(
         [istft(channel, hop=hop, length=length) for channel in residual_spectra],
+        dtype=np.float32,
+    )
+    if backing_gain is None:
+        return processed, None
+    # Strength scales the backing the way it scales the subtraction, so a
+    # bypass exports silence rather than a backing nothing was taken from.
+    backing_gain *= strength
+    return processed, np.asarray(
+        [
+            istft(reference_channel * backing_gain, hop=hop, length=length)
+            for reference_channel in reference_spectra
+        ],
         dtype=np.float32,
     )
 
@@ -362,7 +431,15 @@ def process_audio(
     sigma: float,
     token: CancellationToken | None = None,
     output: np.ndarray | None = None,
+    backing: np.ndarray | None = None,
 ) -> np.ndarray:
+    """Cancel the reference out of the mix, optionally rendering the backing too.
+
+    `output` receives the vocal and is returned.  `backing`, when given, receives
+    the second export track: the source as the playback carried it, synthesised
+    from the cancellation's own estimate rather than from the stage minus the
+    vocal, so it carries the source's quality instead of the capture's.
+    """
     cancel = token or CancellationToken()
     mix = np.asarray(mix, dtype=np.float32)
     reference_audio = np.asarray(reference, dtype=np.float32)
@@ -376,8 +453,15 @@ def process_audio(
         if output.shape != (mix.shape[0], length) or output.dtype != np.float32:
             raise ValueError("output must be a float32 [channels, frames] array")
         result = output
+    if backing is not None and (
+        backing.shape != (mix.shape[0], length) or backing.dtype != np.float32
+    ):
+        raise ValueError("backing must be a float32 [channels, frames] array")
     if strength == 0:
         result[:] = mix
+        if backing is not None:
+            # Nothing was cancelled, so there is no estimate to render.
+            backing[:] = 0.0
         return result
     # Long recordings scale across independent spectral workers.  The layout
     # divides the working-set budget; large contexts automatically use fewer.
@@ -389,7 +473,9 @@ def process_audio(
     step = block - overlap
     starts = list(range(0, length, step))
 
-    def process_block(index: int, start: int) -> tuple[int, int, int, np.ndarray]:
+    def process_block(
+        start: int,
+    ) -> tuple[int, int, np.ndarray, np.ndarray | None]:
         cancel.raise_if_cancelled()
         end = min(start + block, length)
         reference_end = min(end, reference_audio.shape[1])
@@ -402,38 +488,51 @@ def process_audio(
                 ]
         else:
             reference_block = reference_audio[:, start:end]
-        processed = _reference_cancel(
+        processed, processed_backing = _reference_cancel(
             mix[:, start:end],
             reference_block,
             sample_rate,
             strength,
             sigma,
             cancel,
+            backing is not None,
         )
-        return index, start, end, processed
+        return start, end, processed, processed_backing
 
-    def blend_block(index: int, start: int, end: int, processed: np.ndarray) -> None:
-        fade = min(overlap, end - start) if index > 0 else 0
+    def blend_into(destination: np.ndarray, processed: np.ndarray, start: int, end: int) -> None:
+        fade = min(overlap, end - start) if start > 0 else 0
         if fade:
             phase = np.linspace(0, np.pi / 2, fade, dtype=np.float32)
             old_weight = np.cos(phase) ** 2
             new_weight = np.sin(phase) ** 2
-            result[:, start : start + fade] = (
-                result[:, start : start + fade] * old_weight + processed[:, :fade] * new_weight
+            destination[:, start : start + fade] = (
+                destination[:, start : start + fade] * old_weight + processed[:, :fade] * new_weight
             )
-        result[:, start + fade : end] = processed[:, fade : end - start]
+        destination[:, start + fade : end] = processed[:, fade : end - start]
+
+    def blend_block(
+        start: int,
+        end: int,
+        processed: np.ndarray,
+        processed_backing: np.ndarray | None,
+    ) -> None:
+        blend_into(result, processed, start, end)
+        if processed_backing is not None and backing is not None:
+            blend_into(backing, processed_backing, start, end)
 
     def release_batch() -> None:
         release_mapped_pages(mix)
         release_mapped_pages(reference_audio)
         release_mapped_pages(result)
+        if backing is not None:
+            release_mapped_pages(backing)
 
     indexed_starts = list(enumerate(starts))
     if _THREADS_AVAILABLE:
         with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="purivox-dsp") as executor:
             for batch_start in range(0, len(indexed_starts), workers):
                 batch = indexed_starts[batch_start : batch_start + workers]
-                futures = [executor.submit(process_block, index, start) for index, start in batch]
+                futures = [executor.submit(process_block, start) for _index, start in batch]
                 for future in futures:
                     blend_block(*future.result())
                 release_batch()
@@ -442,18 +541,28 @@ def process_audio(
         # scheduled, so running them inline gives the same result one core at a
         # time.  Pages are released per block rather than per batch: the browser
         # has no disk to page out to and needs the hint sooner.
-        for index, start in indexed_starts:
-            blend_block(*process_block(index, start))
+        for _index, start in indexed_starts:
+            blend_block(*process_block(start))
             release_batch()
     peak = 0.0
+    backing_peak = 0.0
     cleanup_block = BLOCK_FRAMES
     for start in range(0, length, cleanup_block):
         view = result[:, start : start + cleanup_block]
         np.nan_to_num(view, copy=False)
         peak = max(peak, float(np.max(np.abs(view), initial=0.0)))
+        if backing is not None:
+            backing_view = backing[:, start : start + cleanup_block]
+            np.nan_to_num(backing_view, copy=False)
+            backing_peak = max(backing_peak, float(np.max(np.abs(backing_view), initial=0.0)))
     peak_ceiling = 10 ** (-1.0 / 20.0)
-    if peak > peak_ceiling:
-        scale = peak_ceiling / peak
+    # Each track is bounded on its own peak: the synthesised backing can be
+    # louder than the vocal it was estimated alongside, and clipping one to
+    # protect the other would trade a level for a distortion.
+    for values, value in ((result, peak), (backing, backing_peak)):
+        if values is None or value <= peak_ceiling:
+            continue
+        scale = peak_ceiling / value
         for start in range(0, length, cleanup_block):
-            result[:, start : start + cleanup_block] *= scale
+            values[:, start : start + cleanup_block] *= scale
     return result

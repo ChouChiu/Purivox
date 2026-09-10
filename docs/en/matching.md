@@ -211,12 +211,10 @@ recording's own sample rate and bit depth (`analyzing_output`, then `saving`). U
 already a bit-exact copy of the original, so raising the export to a fixed floor would only enlarge
 the file without adding spectral detail absent from the original recording.
 
-When the backing track is also requested, the stage recording less the render is written as a
-second file once the vocal is on disk, subtracted in place. The render buffer started as a copy of
-the stage and had each segment blended over it, so the difference is exactly what was cancelled:
-across unmatched ranges the two are identical and the backing is silent there - nothing was
-cancelled out of them. The 50 ms fades at the segment boundaries stay consistent too, with the
-backing fading under the same weights.
+When the backing is also requested, each clip's pass renders that stretch's backing from its own
+aligned source as it goes, and blends it into the backing buffer under the same weights; the buffer
+starts silent, so unmatched ranges are silent in the backing too - nothing was cancelled out of
+them. The 50 ms fades at the segment boundaries are the same for both tracks.
 
 Explanatory power is calculated by fitting small $2\times2$ direct models in multiple windows,
 measuring their residual ratios, and taking the median, so that one abnormal window cannot

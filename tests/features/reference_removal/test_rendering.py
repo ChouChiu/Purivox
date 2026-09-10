@@ -108,7 +108,7 @@ def test_alignment_quality_rejects_a_shift_that_damages_an_existing_match():
 
 
 def test_backing_export_is_silent_where_nothing_was_cancelled(tmp_path: Path):
-    """The render starts as a copy of the stage, so untouched ranges cancel to zero."""
+    """The backing is synthesised per clip, so a range no clip covers has none."""
     sample_rate = 8_000
     reference = _source(sample_rate, 4, 7)
     stage = np.random.default_rng(8).normal(0, 0.01, (8 * sample_rate, 2)).astype(np.float32)
@@ -140,12 +140,14 @@ def test_backing_export_is_silent_where_nothing_was_cancelled(tmp_path: Path):
     backing_output = tmp_path / "stage_backing.wav"
     assert result.outputs == (output_path.resolve(), backing_output.resolve())
     assert len(result.audio_stats) == 2
-    vocal, _ = sf.read(output_path, always_2d=True, dtype="float32")
     backing, _ = sf.read(backing_output, always_2d=True, dtype="float32")
-    original, _ = sf.read(stage_path, always_2d=True, dtype="float32")
-    assert np.allclose(vocal + backing, original, atol=1e-6)
     # Nothing was cancelled out of the unmatched head and tail.
     assert np.max(np.abs(backing[: 2 * sample_rate])) < 1e-6
     assert np.max(np.abs(backing[6 * sample_rate :])) < 1e-6
-    # The song range is where the backing track actually lives.
-    assert np.max(np.abs(backing[3 * sample_rate : 5 * sample_rate])) > 0.01
+    # The song range is where the backing track actually lives, and it is the
+    # source's own waveform rather than what the stage carried of it.  The clip
+    # maps stage 2-6 s onto the source's own 0-4 s.
+    song = slice(3 * sample_rate, 5 * sample_rate)
+    source_song = slice(sample_rate, 3 * sample_rate)
+    assert np.max(np.abs(backing[song])) > 0.01
+    assert np.corrcoef(backing[song].ravel(), reference[source_song].ravel())[0, 1] > 0.99

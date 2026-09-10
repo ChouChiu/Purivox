@@ -65,26 +65,29 @@ def isolation_peak_bytes(
     longest_source_seconds: float,
     file_bytes: int = 0,
     both_tracks: bool = False,
+    backing: bool = False,
 ) -> MemoryEstimate:
     """Estimate the peak for `run_isolation_job`, whichever path it takes.
 
     The render keeps the stage recording and a full-length copy of the output
-    for its whole duration, and adds one decoded source plus three clip-length
+    for its whole duration, and adds one decoded source plus clip-length
     buffers while it works through a clip - the stretched slice, the aligned
-    reference and the processed block.  A clip is never longer than the source
-    it came from, so the longest source bounds all of them.  The whole-file
-    fallback holds the recording, the source resampled onto that recording's
-    timeline and one more full-length buffer - the alignment scratch first,
-    then the processed output; a tempo-corrected source is stretched into a
-    second full-length buffer before the alignment reads it.  Which one runs
-    depends on the material, so the estimate is the larger of the two.  The
-    backing track is formed in the output buffer either way, so exporting both
-    stems costs no extra buffer, only the first stem's file staying on the
-    filesystem.
+    reference, the processed block and, when the backing is exported, the
+    synthesised backing block.  A clip is never longer than the source it came
+    from, so the longest source bounds all of them.  The whole-file fallback
+    holds the recording, the source resampled onto that recording's timeline
+    and one more full-length buffer - the alignment scratch first, then the
+    processed output; a tempo-corrected source is stretched into a second
+    full-length buffer before the alignment reads it.  Which one runs depends
+    on the material, so the estimate is the larger of the two.  The backing
+    track is rendered from the source rather than subtracted from the stage, so
+    exporting it holds one more full-length buffer; `both_tracks` adds the first
+    stem's file staying on the filesystem.
     """
     stage = buffer_bytes(sample_rate, stage_seconds)
     source = buffer_bytes(sample_rate, longest_source_seconds)
     written = written_bytes(sample_rate, stage_seconds) if both_tracks else 0
-    render = file_bytes + 2 * stage + 4 * source + written
-    fallback = file_bytes + stage + 2 * source + max(stage, source) + written
+    synthesised = stage if backing else 0
+    render = file_bytes + 2 * stage + (5 if backing else 4) * source + synthesised + written
+    fallback = file_bytes + stage + 2 * source + max(stage, source) + synthesised + written
     return MemoryEstimate(max(render, fallback) + DSP_WORKING_SET_BYTES)

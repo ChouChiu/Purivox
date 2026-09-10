@@ -285,19 +285,37 @@ def _projection(output: np.ndarray, target: np.ndarray) -> float:
     return float(np.dot(output.ravel(), target.ravel()) / np.dot(target.ravel(), target.ravel()))
 
 
+def _level_db(measured: np.ndarray, target: np.ndarray) -> float:
+    """How far the measured level sits from the one the scene put on stage."""
+    return float(
+        10.0
+        * np.log10(max(float(np.mean(measured**2)), 1e-20) / max(float(np.mean(target**2)), 1e-20))
+    )
+
+
 def measure(scene: Scene, strength: float, sigma: int) -> dict[str, float]:
-    """Score one scene.  Edges are trimmed: STFT boundaries are not the subject."""
+    """Score one scene.  Edges are trimmed: STFT boundaries are not the subject.
+
+    Two exports are scored: the vocal, on how much of the accompaniment it lost
+    and how much of the live source it kept, and the backing, on how close the
+    source rendered through the estimate comes to what the playback carried.
+    """
     reference = scene.reference.astype(np.float32)
     if scene.align:
         # The drift scenes measure what survives alignment, which is what the
         # real pipeline hands to the canceller.
         reference = align_audio(scene.mixture.astype(np.float32), reference, SAMPLE_RATE)
-    output = process_audio(
+    output = np.empty_like(scene.mixture, dtype=np.float32)
+    backing = np.empty_like(output)
+    process_audio(
         scene.mixture.astype(np.float32),
         reference,
         SAMPLE_RATE,
         strength,
         sigma,
+        None,
+        output,
+        backing,
     )
     body = slice(SAMPLE_RATE // 2, scene.mixture.shape[1] - SAMPLE_RATE // 2)
     # process_audio caps the output at -1 dBFS, which would otherwise show up as
@@ -307,6 +325,8 @@ def measure(scene: Scene, strength: float, sigma: int) -> dict[str, float]:
         return {
             "preserved": _correlation(output[:, body], scene.mixture[:, body]),
             "rmse": float(np.sqrt(np.mean((output[:, body] - scene.mixture[:, body]) ** 2))),
+            # An unrelated source must back nothing at all.
+            "backing_db": _level_db(backing[:, body], scene.mixture[:, body]),
         }
     residual = output[:, body] - scale * scene.live[:, body]
     depth = 10.0 * np.log10(
@@ -316,9 +336,12 @@ def measure(scene: Scene, strength: float, sigma: int) -> dict[str, float]:
         "depth_db": float(depth),
         "fidelity": _correlation(output[:, body], scene.live[:, body]),
         "live_gain": scale,
+        "backing_corr": _correlation(backing[:, body], scene.accompaniment[:, body]),
+        "backing_db": _level_db(backing[:, body], scene.accompaniment[:, body]),
     }
     if scene.extra is not None:
         result["injection"] = abs(_projection(output[:, body], scene.extra[:, body]))
+        result["backing_injection"] = abs(_projection(backing[:, body], scene.extra[:, body]))
     return result
 
 

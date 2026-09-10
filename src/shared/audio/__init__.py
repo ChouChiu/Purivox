@@ -1,4 +1,4 @@
-from .analysis import AudioStats, analyze_audio, copy_audio, export_audio, subtract_into
+from .analysis import AudioStats, analyze_audio, copy_audio, export_audio
 from .io import (
     AUDIO_EXTENSIONS,
     BLOCK_FRAMES,
@@ -22,6 +22,5 @@ __all__ = [
     "read_audio",
     "release_mapped_pages",
     "resample_audio",
-    "subtract_into",
     "write_wav_atomic",
 ]

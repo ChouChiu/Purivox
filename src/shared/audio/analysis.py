@@ -83,26 +83,6 @@ def copy_audio(
         destination.samples[:, start:end] = source.samples[:, start:end]
 
 
-def subtract_into(
-    minuend: AudioData,
-    target: AudioData,
-    token: CancellationToken | None = None,
-) -> None:
-    """Replace `target` with `minuend - target`, in cancellable blocks.
-
-    The difference overwrites the subtrahend rather than filling a third buffer:
-    both callers want what is left of a mix once a stem they already wrote out
-    is taken away, and under Emscripten a second full-length buffer is resident
-    heap rather than a mapped file.
-    """
-    _require_matching_formats(minuend, target)
-    token = token or CancellationToken()
-    for start in range(0, minuend.frames, BLOCK_FRAMES):
-        token.raise_if_cancelled()
-        end = min(start + BLOCK_FRAMES, minuend.frames)
-        target.samples[:, start:end] = minuend.samples[:, start:end] - target.samples[:, start:end]
-
-
 def export_audio(
     audio: AudioData,
     destination: Path,
@@ -115,8 +95,8 @@ def export_audio(
     report_progress(progress, analysing, "analyzing_output")
     stats = analyze_audio(audio, token)
     if stats.peak_dbfs > 0.0:
-        # A stem formed by subtraction can exceed full scale where the one taken
-        # out of it was scaled to the output ceiling.  libsndfile clips on write,
+        # A synthesised stem can exceed full scale where the estimate behind it
+        # is larger than the recording it came from.  libsndfile clips on write,
         # so say so rather than let a flattened peak read as a cancellation fault.
         logger.warning("%s peaks at %+.2f dBFS and will clip", destination, stats.peak_dbfs)
     report_progress(progress, saving, "saving")

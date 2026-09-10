@@ -18,7 +18,6 @@ from shared.audio import (
     export_audio,
     read_audio,
     resample_audio,
-    subtract_into,
 )
 from shared.dsp import time_stretch
 from shared.jobs import OutputTracks, planned_outputs
@@ -90,7 +89,9 @@ def render_stage_job(
     if not matched:
         raise ValueError("no source could be matched to the stage audio")
 
-    stage = output = None
+    tracks = OutputTracks(job.tracks)
+    planned = planned_outputs(job.output, tracks)
+    stage = output = backing_audio = None
     try:
         report_progress(progress, 31, "stage_render_loading")
         stage = read_audio(job.stage, token).stereo()
@@ -98,6 +99,12 @@ def render_stage_job(
         # it, so it keeps the stage's own rate and depth on the way back out.
         output = create_pcm_audio(stage.channels, stage.frames, stage.sample_rate, stage.bit_depth)
         copy_audio(stage, output, token)
+        if tracks is not OutputTracks.VOCAL:
+            # The backing track is synthesised from each clip's source, so it
+            # starts silent: a range no clip covers carries no estimate.
+            backing_audio = create_pcm_audio(
+                stage.channels, stage.frames, stage.sample_rate, stage.bit_depth
+            )
         for index, clip in enumerate(matched):
             token.raise_if_cancelled()
             report_progress(
@@ -108,7 +115,7 @@ def render_stage_job(
                 total=len(matched),
                 name=clip.source.name if clip.source else "",
             )
-            reference = aligned_audio = processed_audio = None
+            reference = aligned_audio = processed_audio = processed_backing = None
             try:
                 reference = read_audio(clip.source, token).stereo()
                 if reference.sample_rate != stage.sample_rate:
@@ -176,6 +183,8 @@ def render_stage_job(
                     common = min(length, aligned.shape[1])
                     aligned_audio.samples[:, :common] = aligned[:, :common]
                 processed_audio = create_pcm_audio(stage.channels, length, stage.sample_rate)
+                if backing_audio is not None:
+                    processed_backing = create_pcm_audio(stage.channels, length, stage.sample_rate)
                 process_audio(
                     stage.samples[:, stage_start:stage_end],
                     aligned_audio.samples,
@@ -184,40 +193,38 @@ def render_stage_job(
                     job.sigma,
                     token,
                     processed_audio.samples,
+                    processed_backing.samples if processed_backing is not None else None,
                 )
                 _blend_segment(
                     output.samples[:, stage_start:stage_end],
                     processed_audio.samples,
                     stage.sample_rate,
                 )
+                if processed_backing is not None:
+                    _blend_segment(
+                        backing_audio.samples[:, stage_start:stage_end],
+                        processed_backing.samples,
+                        stage.sample_rate,
+                    )
             finally:
-                for audio in (processed_audio, aligned_audio, reference):
+                for audio in (processed_backing, processed_audio, aligned_audio, reference):
                     if audio is not None:
                         audio.cleanup()
 
-        tracks = OutputTracks(job.tracks)
-        planned = planned_outputs(job.output, tracks)
         outputs: list[Path] = []
         stats: list[AudioStats] = []
         if tracks is not OutputTracks.BACKING:
             stats.append(export_audio(output, job.output, token, progress, 86, 89))
             output.release_pages()
             outputs.append(job.output.resolve())
-        if tracks is not OutputTracks.VOCAL:
-            # The render started as a copy of the stage and had each enabled clip
-            # blended over it, so the stage less the render is exactly what
-            # cancellation removed.  Ranges no clip covered are identical in both,
-            # which leaves the backing silent there - as it should be, nothing was
-            # cancelled out of them.
-            subtract_into(stage, output, token)
-            backing = planned[-1]
-            stats.append(export_audio(output, backing, token, progress, 94, 96))
-            output.release_pages()
-            outputs.append(backing.resolve())
+        if backing_audio is not None:
+            stats.append(export_audio(backing_audio, planned[-1], token, progress, 94, 96))
+            backing_audio.release_pages()
+            outputs.append(planned[-1].resolve())
         report_progress(progress, 100, "done_status", path=outputs[0])
         logger.info("stage render completed: %s", ", ".join(str(path) for path in outputs))
         return IsolationResult(analysis, tuple(outputs), tuple(stats))
     finally:
-        for audio in (output, stage):
+        for audio in (backing_audio, output, stage):
             if audio is not None:
                 audio.cleanup()

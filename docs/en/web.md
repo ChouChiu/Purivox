@@ -192,17 +192,19 @@ file.
 2.6 GB - 4 GB less room for the interpreter, numpy/scipy and allocator fragmentation:
 
 ```text
-render:     input bytes + 2 x stage buffer + 4 x longest source buffer + export + DSP working set
-whole file: input bytes + stage buffer + 2 x source buffer + max(stage, source) + export
-            + DSP working set
+render:     input bytes + 2 x stage buffer + (5 or 4) x longest source buffer + backing buffer
+            + export + DSP working set
+whole file: input bytes + stage buffer + 2 x source buffer + max(stage, source)
+            + backing buffer + export + DSP working set
 estimate:   the larger of the two, because which path runs depends on the material
 where:      buffer bytes = channels(2) x sample rate x 4 x seconds
+            backing buffer = 1 x stage buffer when the backing is exported, else 0
             export bytes = channels(2) x sample rate x 3 x seconds, only when both stems are written
 ```
 
-Exporting the backing track costs no extra buffer of its own - the subtraction overwrites the same
-memory. What is charged is the first WAV staying in the Emscripten filesystem while the second is
-written, because that filesystem is the same heap.
+Exporting the backing costs one more full-length buffer: it is re-rendered from the source rather
+than subtracted in place. What is also charged is the first WAV staying in the Emscripten
+filesystem while the second is written, because that filesystem is the same heap.
 
 A job over the budget is refused outright, pointing at the desktop app; past 60% it warns. At
 44.1 kHz stereo that works out at roughly 35 minutes of stage recording; a longer source lowers the
