@@ -7,6 +7,54 @@ Each released version gets one section. The release workflow uses the section
 matching the tag as the GitHub Release notes, which is also what the in-app
 update dialog shows.
 
+## v1.1.1 — 2026-09-10
+
+**改进**
+
+- **垫音轨改为从歌曲音源渲染**：以前的垫音是舞台 / 现场录音减去消音结果，音质跟着现场拾音走；
+  现在是把对消估计出的传递套回歌曲音源重新渲染，因此保留音源本身的音质，同时带着垫音在舞台上
+  实际的音量与频响。未识别的区间仍然是静音，强度为 0 时垫音也是静音
+
+**修复**
+
+- **网页版：超过两分钟的录音识别不了**。频谱特征在浏览器里会撞上 wasm32 两 GB 的视图上限，
+  分析的第一步就抛错。现在逐块计算，峰值内存也不再随录音长度增长
+- **网页版：时间轴里的时间输入框压住右边一列**，音源范围和倍速被遮住；输入不合法的时间也没有
+  任何提示。现在每一列有自己的宽度，不合法的值标成红色
+
+---
+
+**Improved**
+
+- **The backing track is rendered from the song source**: it used to be the
+  stage/live recording with the vocal taken back out of it, which meant it
+  carried the capture rather than the music. It is now the source re-rendered
+  through the transfer the cancellation estimated, so it keeps the source's own
+  quality while carrying the level and response the backing actually had on
+  stage. Unmatched ranges are still silent, and so is the backing at zero
+  strength
+
+**Fixed**
+
+- **Browser: a recording longer than two minutes could not be analysed**. The
+  spectral feature hit wasm32's two-gigabyte ceiling on a strided view and threw
+  at the first step of the analysis. It is computed block by block now, which
+  also keeps peak memory off the recording's length
+- **Browser: the timeline's time fields covered the column beside them**, hiding
+  the source range and the speed, and a time the parser rejected showed nothing
+  at all. Every column has a width of its own now, and a rejected value is
+  marked in red
+
+**下载 / Downloads**
+
+- Windows：`Purivox.exe`
+- macOS（arm64）：`purivox-macos-arm64.tar.gz`
+- Linux：`purivox_1.1.1-1_amd64.deb`、`purivox-1.1.1-1.x86_64.rpm`，
+  或免安装的 `purivox-linux-x86_64.tar.gz`
+- Python 包：`purivox-1.1.1-py3-none-any.whl` / `purivox-1.1.1.tar.gz`
+- 校验：`SHA256SUMS-windows`、`SHA256SUMS-macos`、`SHA256SUMS-linux`、
+  `SHA256SUMS-python`
+
 ## v1.1.0 — 2026-09-06
 
 **新增**
