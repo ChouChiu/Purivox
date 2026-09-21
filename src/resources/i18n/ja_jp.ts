@@ -667,5 +667,149 @@
         <source>download_stopping</source>
         <translation>停止しています...</translation>
     </message>
+    <message>
+        <source>nav_stems</source>
+        <translation>ステム分離</translation>
+    </message>
+    <message>
+        <source>home_stems_meta</source>
+        <translation>音声ファイル1つ · 楽曲ソース不要</translation>
+    </message>
+    <message>
+        <source>home_stems_description</source>
+        <translation>音響マトリクスによる分離：定位からセンターと伴奏を、相補フィルターから帯域を取り出します。サラウンドマスターはチャンネルごとにデコードします。</translation>
+    </message>
+    <message>
+        <source>home_open_stems</source>
+        <translation>分離を開始</translation>
+    </message>
+    <message>
+        <source>stem_source_label</source>
+        <translation>分離する音声:</translation>
+    </message>
+    <message>
+        <source>stem_output_label</source>
+        <translation>出力フォルダー:</translation>
+    </message>
+    <message>
+        <source>stem_output_hint</source>
+        <translation>空欄なら音声の隣に「名前_stems」フォルダーを作成します</translation>
+    </message>
+    <message>
+        <source>stem_pick_source</source>
+        <translation>分離する音声を選択</translation>
+    </message>
+    <message>
+        <source>stem_pick_output</source>
+        <translation>出力フォルダーを選択</translation>
+    </message>
+    <message>
+        <source>stem_crossover_label</source>
+        <translation>低域クロスオーバー:</translation>
+    </message>
+    <message>
+        <source>stem_crossover_hint</source>
+        <translation>低域トラックと中高域トラックの分かれ目です。2つは相補的で、足すと元の音声に戻ります。</translation>
+    </message>
+    <message>
+        <source>stem_hertz</source>
+        <translation>{hz} Hz</translation>
+    </message>
+    <message>
+        <source>stem_result_group</source>
+        <translation>ステム</translation>
+    </message>
+    <message>
+        <source>stem_layout_hint</source>
+        <translation>チャンネル数で内容が決まります：サラウンド {surround} 本、ステレオ {stereo} 本、モノラル {mono} 本。</translation>
+    </message>
+    <message>
+        <source>stem_open_output</source>
+        <translation>フォルダーを開く</translation>
+    </message>
+    <message>
+        <source>stem_start</source>
+        <translation>分離を開始</translation>
+    </message>
+    <message>
+        <source>stem_result_row</source>
+        <translation>{name} · {file} · {channels} ch · ピーク {peak} dBFS</translation>
+    </message>
+    <message>
+        <source>stem_reading</source>
+        <translation>音声を読み込んでいます...</translation>
+    </message>
+    <message>
+        <source>stem_rendering</source>
+        <translation>生成中 {current}/{total}：{name}</translation>
+    </message>
+    <message>
+        <source>stem_layout_surround</source>
+        <translation>サラウンドマスター：チャンネルごとにデコード</translation>
+    </message>
+    <message>
+        <source>stem_layout_stereo</source>
+        <translation>ステレオマスター：定位で分離</translation>
+    </message>
+    <message>
+        <source>stem_layout_mono</source>
+        <translation>モノラル：帯域で分離</translation>
+    </message>
+    <message>
+        <source>stem_done_status</source>
+        <translation>{count} 本のステムを書き出しました</translation>
+    </message>
+    <message>
+        <source>warn_no_stem_source</source>
+        <translation>先に分離する音声を選んでください</translation>
+    </message>
+    <message>
+        <source>stem_center</source>
+        <translation>センター（リードと中央の音）</translation>
+    </message>
+    <message>
+        <source>stem_instrumental</source>
+        <translation>伴奏（センター除去済み）</translation>
+    </message>
+    <message>
+        <source>stem_side</source>
+        <translation>サイド差分 (L−R)/2</translation>
+    </message>
+    <message>
+        <source>stem_mid</source>
+        <translation>ミッド和 (L+R)/2</translation>
+    </message>
+    <message>
+        <source>stem_low</source>
+        <translation>低域と 808</translation>
+    </message>
+    <message>
+        <source>stem_mid_band</source>
+        <translation>中域（ボーカルと主要楽器）</translation>
+    </message>
+    <message>
+        <source>stem_high</source>
+        <translation>高域と空気感</translation>
+    </message>
+    <message>
+        <source>stem_surround</source>
+        <translation>サラウンドチャンネル（空間とコーラス）</translation>
+    </message>
+    <message>
+        <source>stem_lfe</source>
+        <translation>LFE（重低音）</translation>
+    </message>
+    <message>
+        <source>stem_front</source>
+        <translation>フロント2ch</translation>
+    </message>
+    <message>
+        <source>stem_front_no_center</source>
+        <translation>フロントからセンターを除去</translation>
+    </message>
+    <message>
+        <source>stem_downmix</source>
+        <translation>ステレオダウンミックス参照</translation>
+    </message>
 </context>
 </TS>

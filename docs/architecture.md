@@ -17,6 +17,7 @@ src/entrypoints/                 程序入口，只负责启动 GUI 或解析 CL
 src/app/                         主窗口、任务运行器与后台线程
 src/features/                    各功能自包含的页面、模型与处理逻辑
 ├── reference_removal/           垫音消除：音源匹配、时间线、两种引擎、页面与 DSP
+├── stem_split/                  声学分轨：声道布局分派、互补分频、声像自适应分离、页面
 ├── home/                        首页
 └── settings/                    设置页与版本检查
 src/shared/                      音频、频谱、任务参数校验、配置、日志、任务协议、链接下载和通用控件
@@ -49,6 +50,11 @@ Pyodide 作业，两者都可以自由使用 `features` 和 `shared`，都不得
 - 需要联合多个功能的逻辑放在 `app`。垫音消除的匹配与对消同属一个功能包，因此入口
   `run_isolation_job` 留在 `features/reference_removal/processing.py`，`app` 只把它交给后台线程；
   把整条管线挪到 `app` 会让功能反过来依赖外壳。
+
+两个功能包互不导入。声学分轨用的是 `shared.dsp.stft`/`istft`——和音源匹配用的是同一套频谱实现——
+而不是 `features/reference_removal/dsp/transfer.py` 的复数传递估计：跨功能包用它就得先把它下沉到
+`shared`，那是对现有对消管线的改动，要另外用 `eval_cancellation.py --compare` 交代。分轨完整说明见
+[声学分轨](stem-split.md)。
 
 公共数据模型按使用方归属，而不是按最先出现的位置归属。例如 `AudioStats` 同时用于整文件路径与分段渲染，
 定义在 `shared.audio`；`ReferenceJob` 只服务整文件路径，与匹配用的 `IsolationJob` 一起保留在

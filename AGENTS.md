@@ -29,7 +29,10 @@ exist because skipping one cost someone time.
 
 ## The Product
 
-One pipeline, one workflow over it. The GUI, the CLI and the browser build are shells.
+Two workflows over one shared layer. The GUI, the CLI and the browser build are shells.
+
+**Reference-guided vocal isolation** is the first and the larger of the two, and the only one the
+browser build runs.
 
 Four names mean one thing each, and the UI strings already use them: the **stage/live recording**
 is the file being processed, the **song source** is the released song it is cancelled against, the
@@ -58,9 +61,18 @@ cancellation depth where it applies, while the matched clips are 2–4 dB better
 starts inside a longer take. `run_isolation_job` is the one entry point, and the GUI, the CLI and
 the browser bridge all call it.
 
+**Acoustic stem split** (`features/stem_split`, `docs/stem-split.md`) is the second, and takes no
+song source at all: one file in, and the stems its channel layout allows out. The channel count
+picks the path - a surround master is decoded channel by channel, a stereo master separated by
+panning, a mono one by frequency - because that is what decides what can honestly be separated.
+`run_stem_split_job` is its one entry point; the GUI's stem page and `purivox split` both call it.
+Two rules carry the design: bands are complementary (`high = x - low`), so a set of band stems adds
+back up to the recording, and stems that add back up share one gain (`fit_group`), never a
+normalisation each.
+
 Neural separation was removed in favour of dedicated tools such as UVR5: it carried onnxruntime,
 58 MB of the packaged binary, for a workflow that does not use a song source at all. Do not bring it
-back.
+back - the split above is matrices and filters, which is why it is allowed to exist.
 
 The **browser build** (`web/`) runs the same pipeline under Pyodide as a static site with no
 backend (<https://purivox.wwchun.top/>, `docs/web.md`).
@@ -90,6 +102,7 @@ CLI — both need moves down into `shared`: `BLOCK_FRAMES`, `AUDIO_EXTENSIONS`,
 |---|---|
 | `src/app/` | `main_window.py` (FluentWindow shell: navigation, i18n/theme, the window `QShortcut`s), `job_presenter.py` (page and result state), `job_runner.py`/`worker.py` (QThread lifecycle and adapter), `version.py` |
 | `src/features/reference_removal/` | `dsp/algorithms.py` (complex subtraction + residual mask, linked peak protection), `dsp/transfer.py` (smoothed spectra, vectorised LDL^H solve, adjusted multiple coherence), `dsp/alignment.py` (tempo correction + GCC-PHAT + drift tracking + Lanczos warp), `matching.py` (multi-source fingerprint matching, candidate clustering, manual clip edits), `timeline_model.py` (`QAbstractTableModel` behind the editable timeline, `clip_edited`/`edit_rejected`), `rendering.py` (segmented per-clip render), `processing.py` (both engines and `run_isolation_job`), `models.py`, `page.py`, `preview.py` |
+| `src/features/stem_split/` | `dsp/crossover.py` (Linkwitz-Riley low-pass, streamed with carried `zi`; every other band is a difference of low-passes), `dsp/matrix.py` (M/S, discrete channels, BS.775 fold-down, `fit_group` levels), `dsp/panning.py` (per-cell centre estimate with bass protection and per-channel tilt, per-bin complex front-minus-centre), `models.py` (`StemKind` values are the file markers *and* the i18n key suffixes), `processing.py` (one generator per layout, yielding a stem at a time), `page.py` |
 | `src/features/home/`, `settings/` | Brand and entry cards; language/theme/log level, `updates.py` (GitHub release query + version compare) and `dialog.py`. The app never installs an update — the dialog opens the release page |
 | `src/shared/` (root) | `config.py` (the `cfg` `QConfig`), `i18n.py` (`tr()`, `install_language()`, `SUPPORTED_LANGUAGES`), `jobs.py` (the settings contract behind `ReferenceJob`, `IsolationJob` and the CLI: `SIGMA_CHOICES`, `STRENGTH_RANGE`, `validate_reference_settings`, `OutputTracks`, `planned_outputs`), `logging.py`, `processing.py` (`CancellationToken`, `ProgressEvent`, `ProcessingResult`), `progress.py`, `branding.py` |
 | `src/shared/audio/` | `io.py`: mapped I/O, soxr resample, atomic WAV write, `BLOCK_FRAMES` (262 144), `AUDIO_EXTENSIONS`, `release_mapped_pages()`; `analysis.py`: `AudioStats`, peak/RMS, block-wise `copy_audio`, `export_audio` |
@@ -256,6 +269,7 @@ uv sync --locked
 
 uv run --locked purivox                            # GUI
 uv run --locked purivox mr <stage> <source>... <out.wav> --strength 75 --sigma 8 --align --lang zh_cn
+uv run --locked purivox split <recording> [out_dir] --crossover 150
 uv run --locked purivox fetch <link>                # or: <keywords> [--limit N] [--pick N]
 uv run --locked purivox fetch --list                # what has been downloaded
 uv run --locked purivox --selftest                 # pipeline smoke, offscreen-safe
@@ -267,6 +281,10 @@ uv run --locked python tools/eval_cancellation.py --compare baseline.json
 # pipeline A/B: both engines over the same scenes, so the geometry rule stays honest
 uv run --locked python tools/eval_isolation.py --save isolation-baseline.json
 uv run --locked python tools/eval_isolation.py --compare isolation-baseline.json
+
+# stem split: what each stem kept and what it let go, over known scenes
+uv run --locked python tools/eval_stems.py --save stems-baseline.json
+uv run --locked python tools/eval_stems.py --compare stems-baseline.json
 
 # what one job costs, phase by phase, with peak RSS
 uv run --locked python tools/bench_pipeline.py --save bench-baseline.json
@@ -310,8 +328,8 @@ Language keys: `zh_cn`, `zh_tw`, `en_us`, `ja_jp`, `ko_kr`.
 - No test reaches a real host — the update tests repoint `updates.RELEASES_API` at a localhost
   server.
 - DSP changes are accepted on measurement, not argument: run `purivox --selftest` and
-  `tools/eval_cancellation.py --compare` before committing, `tools/eval_isolation.py --compare`
-  when the change touches which engine runs, and `tools/bench_pipeline.py --compare` to show what
+  `tools/eval_cancellation.py --compare` before committing, `tools/eval_stems.py --compare` for the
+  stem split, `tools/eval_isolation.py --compare` when the change touches which engine runs, and `tools/bench_pipeline.py --compare` to show what
   the change bought. Synthetic metrics are regression evidence only and claim nothing
   about real music. `docs/reference-removal.md` documents the algorithm as it stands — no
   before/after, no trade-off tables.
@@ -320,9 +338,9 @@ Language keys: `zh_cn`, `zh_tw`, `en_us`, `ja_jp`, `ko_kr`.
 
 - `ruff check` and `ruff format --check` are clean, and `pytest` passes.
 - The new behaviour has a test at the mirrored path, or a reason why it cannot.
-- A DSP change carries an `eval_cancellation.py --compare` delta, a change to the engine choice an
-  `eval_isolation.py --compare` delta, and a performance change a `bench_pipeline.py --compare`
-  delta.
+- A DSP change carries an `eval_cancellation.py --compare` delta (or `eval_stems.py --compare`,
+  for the split), a change to the engine choice an `eval_isolation.py --compare` delta, and a
+  performance change a `bench_pipeline.py --compare` delta.
 - A UI change was looked at in `PORTRAIT` and `ULTRAWIDE`, not only at the default window size.
 - A new or reworded string exists in all five `.ts` files, and both `.qm` files were recompiled.
 - A new source directory is registered in the three packaging lists.

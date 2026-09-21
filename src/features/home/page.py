@@ -58,6 +58,7 @@ class FeatureCard(HeightForWidth, CardWidget):
 
 class HomePage(PageScrollArea):
     mr_requested = Signal()
+    stems_requested = Signal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -80,17 +81,21 @@ class HomePage(PageScrollArea):
         self.layout.addWidget(self.section_title)
         self.layout.addWidget(self.section_hint)
 
-        # One entry card: the second lane stays empty on a wide window rather
-        # than stretching one card's prose across it.
+        # One card per workflow: the reference-guided one, which needs a song
+        # source, and the split, which needs nothing but the recording.
         self.cards = ResponsiveColumns(self.content)
         self.mr_card = FeatureCard(FluentIcon.MUSIC, self.cards)
+        self.stems_card = FeatureCard(FluentIcon.ALBUM, self.cards)
         self.cards.add(self.mr_card, Lane.PRIMARY)
+        self.cards.add(self.stems_card, Lane.SECONDARY)
         self.cards.set_columns(2)
         self.layout.addWidget(self.cards)
         self.layout.addStretch()
 
         self.mr_card.clicked.connect(self.mr_requested.emit)
         self.mr_card.open_button.clicked.connect(self.mr_requested.emit)
+        self.stems_card.clicked.connect(self.stems_requested.emit)
+        self.stems_card.open_button.clicked.connect(self.stems_requested.emit)
 
     def apply_layout(self, metrics: LayoutMetrics) -> None:
         super().apply_layout(metrics)
@@ -108,4 +113,10 @@ class HomePage(PageScrollArea):
         self.mr_card.description.setText(tr("home_mr_description"))
         self.mr_card.open_button.setText(tr("home_open_mr"))
 
-        self.mr_card.setAccessibleName(self.mr_card.title.text())
+        self.stems_card.title.setText(tr("nav_stems"))
+        self.stems_card.meta.setText(tr("home_stems_meta"))
+        self.stems_card.description.setText(tr("home_stems_description"))
+        self.stems_card.open_button.setText(tr("home_open_stems"))
+
+        for card in (self.mr_card, self.stems_card):
+            card.setAccessibleName(card.title.text())

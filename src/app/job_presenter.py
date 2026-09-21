@@ -7,10 +7,12 @@ from qfluentwidgets import InfoBar, InfoBarPosition, StateToolTip
 from app.job_runner import JobRunner
 from features.reference_removal import ClipKind, IsolationResult, StageAnalysis
 from features.reference_removal.page import MrPage
+from features.stem_split import StemSplitResult
+from features.stem_split.page import StemPage
 from shared.i18n import tr
 from shared.processing import ProcessingOperation, ProcessingResultLike
 
-ProcessingPage = MrPage
+ProcessingPage = MrPage | StemPage
 
 
 class JobPresenter(QObject):
@@ -81,12 +83,17 @@ class JobPresenter(QObject):
         page = self._active_page
         if isinstance(result, StageAnalysis):
             # The Find songs button reports a timeline and writes nothing.
-            if page is not None:
+            if isinstance(page, MrPage):
                 page.set_analysis(result)
             message = self._summary(result)
+        elif isinstance(result, StemSplitResult):
+            if isinstance(page, StemPage):
+                page.set_result(result)
+                page.status.setText(tr("stem_done_status", count=len(result.outputs)))
+            message = "\n".join(map(str, result.outputs))
         else:
             analysis = result.analysis if isinstance(result, IsolationResult) else None
-            if page is not None and analysis is not None:
+            if isinstance(page, MrPage) and analysis is not None:
                 page.set_analysis(analysis)
                 if result.outputs:
                     stats = result.audio_stats[0] if result.audio_stats else None

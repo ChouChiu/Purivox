@@ -12,6 +12,7 @@ from PySide6.QtCore import QCoreApplication
 
 from app.version import __version__
 from features.reference_removal import IsolationJob, run_isolation_job
+from features.stem_split import DEFAULT_CROSSOVER_HZ, StemSplitJob, run_stem_split_job
 from shared.branding import APPLICATION_NAME, ORGANIZATION_NAME
 from shared.i18n import SUPPORTED_LANGUAGES, install_language
 from shared.jobs import (
@@ -58,6 +59,25 @@ def build_parser() -> argparse.ArgumentParser:
         default=OutputTracks.VOCAL,
     )
     reference.add_argument("--lang", choices=SUPPORTED_LANGUAGES, default=SUPPORTED_LANGUAGES[0])
+
+    split = commands.add_parser("split", help="split one recording into acoustic stems")
+    split.add_argument("source", type=Path, help="the recording to split")
+    # Named after the recording rather than required: a split writes several
+    # files, so what it needs is a folder, and there is an obvious one.
+    split.add_argument(
+        "output_dir",
+        type=Path,
+        nargs="?",
+        help="where to write the stems (default: <recording>_stems beside it)",
+    )
+    split.add_argument(
+        "--crossover",
+        type=float,
+        default=DEFAULT_CROSSOVER_HZ,
+        metavar="HZ",
+        help=f"the band stems are split at (default: {DEFAULT_CROSSOVER_HZ:g} Hz)",
+    )
+    split.add_argument("--lang", choices=SUPPORTED_LANGUAGES, default=SUPPORTED_LANGUAGES[0])
 
     download = commands.add_parser("fetch", help="download audio from a link")
     download.add_argument(
@@ -136,6 +156,16 @@ def _run_fetch(args: argparse.Namespace, token: CancellationToken) -> int:
     return 0
 
 
+def _run_split(args: argparse.Namespace, token: CancellationToken) -> int:
+    source = args.source.expanduser().resolve()
+    output_dir = args.output_dir or source.with_name(f"{source.stem}_stems")
+    job = StemSplitJob(source=source, output_dir=output_dir, crossover_hz=args.crossover)
+    result = run_stem_split_job(job, token, _print_progress)
+    for output in result.outputs:
+        print(output)
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     configure_logging()
     args = build_parser().parse_args(argv)
@@ -163,6 +193,8 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if args.command == "fetch":
             return _run_fetch(args, token)
+        if args.command == "split":
+            return _run_split(args, token)
         job = IsolationJob(
             stage=args.stage,
             sources=tuple(args.sources),

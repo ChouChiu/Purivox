@@ -16,6 +16,7 @@ mathematical models use LaTeX.
 | [Architecture and Data Flow](architecture.md) | Layer boundaries, task orchestration, audio storage, cancellation, and error handling |
 | [Reference Cancellation](reference-removal.md) | Time alignment, complex transfer estimation, residual masking, and chunk blending |
 | [Source Matching, the Timeline, and Segmented Rendering](matching.md) | Multi-source fingerprints, candidate clustering, the timeline model, segmented rendering, and how the engine is chosen |
+| [Stem Split](stem-split.md) | Dispatch by channel layout, the complementary crossover, panning-adaptive centre extraction, and grouped levels |
 | [Browser Build (WebAssembly)](web.md) | The Pyodide runtime, the changes for a Qt-free build, the memory ceiling, cancellation, and deployment |
 | [Contributing](CONTRIBUTING.md) | Environment setup, code conventions, translations, verifying a change, commit conventions, and release |
 
@@ -28,6 +29,8 @@ mathematical models use LaTeX.
 - To change automatic source placement, read **Source Matching, the Timeline, and Segmented
   Rendering** and the engine-choice rule in the architecture document's "One Pipeline, Two
   Engines".
+- To change how the stem split separates, read **Stem Split** and bring a
+  `tools/eval_stems.py --compare` delta for the change.
 - Before submitting code or building a release, read **Contributing**.
 
 These documents describe the current Python implementation. Synthetic regression results are not

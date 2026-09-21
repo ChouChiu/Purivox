@@ -36,7 +36,8 @@ Purivox 是一款面向舞台和现场录音的垫音消除工具，有桌面版
 - 常用操作有快捷键：`Ctrl+O` 选择输入、`Ctrl+Return` 开始、
   `F5` 识别歌曲、`Esc` 取消、`Ctrl+P` 试听播放 / 暂停
 - 可以直接从 YouTube / YouTube Music 链接获取音源，下载过的文件会记录下来供反复选用
-- 图形界面与命令行共用同一套 MR Remove 处理管线
+- 声学分轨：只给一个音频文件，不需要歌曲音源，按声道关系拆成中置、伴奏、频段等分轨
+- 图形界面与命令行共用同一套处理管线
 
 ## 安装
 
@@ -85,6 +86,16 @@ uv run --locked purivox
 
 未识别区间会按原样保留，时长不变，因此串场讲话、观众互动、广告和空场不会被自动剪掉。
 命令行只接受一份歌曲音源；要一次处理多首，请用图形界面或浏览器版。
+
+### 声学分轨
+
+1. 打开“声学分轨”，选择一个音频文件——这里不需要歌曲音源。
+2. 需要时调整低频分频点，默认 150 Hz。低频轨与中高频轨是互补的，两条相加能还原原曲。
+3. 开始分轨。分出哪些轨由声道数决定：多声道母带 8 条，立体声 6 条，单声道 3 条。
+4. 结果列表给出每条分轨的文件名、声道数和峰值电平，可以直接打开输出文件夹。
+
+立体声的中置与伴奏是按声像自适应分出来的，不是固定比例的相位抵消：主唱略微偏离正中或带混响时
+仍然跟得上，居中的底鼓和贝斯留在伴奏里。详见[声学分轨](docs/stem-split.md)。
 
 ### 从链接获取音源
 
@@ -136,6 +147,19 @@ uv run --locked purivox mr "现场录音.wav" "歌曲音源.wav" "现场人声.w
 | `--tracks` | `vocal`、`backing`、`both` | 导出内容，默认 `vocal`（仅消音结果）|
 | `--lang` | `zh_cn`、`zh_tw`、`en_us`、`ja_jp`、`ko_kr` | 进度信息语言 |
 
+声学分轨：
+
+```bash
+uv run --locked purivox split "录音.flac"                      # 写到 录音_stems/
+uv run --locked purivox split "录音.flac" "分轨" --crossover 180
+```
+
+| 参数 | 取值 | 说明 |
+|---|---:|---|
+| `output_dir` | 目录 | 输出文件夹，默认为音频旁的 `<文件名>_stems` |
+| `--crossover` | 赫兹 | 低频分频点，默认 `150`；图形界面提供 40–400 Hz |
+| `--lang` | `zh_cn`、`zh_tw`、`en_us`、`ja_jp`、`ko_kr` | 进度信息语言 |
+
 从链接获取音源：
 
 ```bash
@@ -173,6 +197,7 @@ uv run --locked purivox fetch --list                                  # 列出�
 - [架构与数据流](docs/architecture.md)
 - [参考对消](docs/reference-removal.md)
 - [音源匹配、时间线与分段渲染](docs/matching.md)
+- [声学分轨](docs/stem-split.md)
 - [浏览器版（WebAssembly）](docs/web.md)
 - [开发与贡献](docs/CONTRIBUTING.md)
 

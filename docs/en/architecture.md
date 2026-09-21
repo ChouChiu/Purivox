@@ -20,6 +20,8 @@ src/app/                         Main window, task runner, and background thread
 src/features/                    Self-contained pages, models, and processing logic
 ├── reference_removal/           Vocal isolation: source matching, the timeline, both engines,
 │                                the page, and the DSP
+├── stem_split/                  Stem split: dispatch by channel layout, the complementary
+│                                crossover, panning-adaptive separation, and the page
 ├── home/                        Home page
 └── settings/                    Settings page and the release check
 src/shared/                      Audio, spectra, job validation, configuration, logging,
@@ -55,6 +57,13 @@ neither may import `entrypoints`. The browser build is described in full in
   cancellation in one feature package, so its entry point `run_isolation_job` stays in
   `features/reference_removal/processing.py` and `app` only hands it to the background thread;
   moving the whole pipeline into `app` would make the feature depend on the shell.
+
+The two feature packages do not import each other. The stem split reads `shared.dsp.stft` and
+`istft` - the same spectral implementation source matching uses - rather than the complex transfer
+estimate in `features/reference_removal/dsp/transfer.py`: reaching that across packages would mean
+sinking it into `shared` first, which is a change to the cancellation pipeline and owes an
+`eval_cancellation.py --compare` delta of its own. The split is documented in
+[Stem Split](stem-split.md).
 
 A shared data model belongs to the layer that consumes it, not necessarily where it first
 appeared. `AudioStats`, for example, is used by both the whole-file path and the segmented render

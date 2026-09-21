@@ -1,8 +1,11 @@
 from pathlib import Path
 
+import numpy as np
 import pytest
+import soundfile as sf
 
-from entrypoints.cli import build_parser
+from entrypoints.cli import build_parser, main
+from features.stem_split import DEFAULT_CROSSOVER_HZ
 from shared.jobs import OutputTracks
 
 
@@ -48,6 +51,33 @@ def test_reference_command_rejects_an_unknown_export_choice():
     parser = build_parser()
     with pytest.raises(SystemExit):
         parser.parse_args(["mr", "song.wav", "reference.flac", "out.wav", "--tracks", "nope"])
+
+
+def test_split_command_takes_one_recording_and_an_optional_folder():
+    """A split writes several files, so what it needs is a folder, not a name."""
+    parser = build_parser()
+
+    defaults = parser.parse_args(["split", "show.flac"])
+    assert defaults.source == Path("show.flac")
+    assert defaults.output_dir is None
+    assert defaults.crossover == DEFAULT_CROSSOVER_HZ
+
+    custom = parser.parse_args(["split", "show.flac", "stems", "--crossover", "180"])
+    assert custom.output_dir == Path("stems")
+    assert custom.crossover == 180.0
+
+
+def test_split_writes_the_stems_of_a_recording(tmp_path: Path, capsys):
+    source = tmp_path / "show.wav"
+    time = np.arange(8_000) / 8_000
+    sf.write(source, np.stack([np.sin(2 * np.pi * 220 * time)] * 2, axis=1), 8_000)
+
+    assert main(["split", str(source)]) == 0
+
+    written = [Path(line) for line in capsys.readouterr().out.split()]
+    assert written == sorted(written, key=written.index)
+    assert all(path.is_file() for path in written)
+    assert {path.parent for path in written} == {tmp_path / "show_stems"}
 
 
 def test_fetch_command_parses_its_options():

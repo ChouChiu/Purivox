@@ -45,7 +45,9 @@ reference cancellation.
   start, `F5` to identify songs, `Esc` to cancel, `Ctrl+P` to play/pause the preview
 - Song sources can be fetched straight from a YouTube / YouTube Music link, and what was
   downloaded is remembered so it can be picked again
-- GUI and CLI reuse the same MR Remove task pipelines
+- A stem split that needs no song source: one audio file, separated into its centre,
+  instrumental and band stems along the relationships between its channels
+- GUI and CLI reuse the same task pipelines
 
 ## Installation
 
@@ -106,6 +108,20 @@ interaction, advertisements, and empty-stage audio are not removed automatically
 accepts one song source; use the graphical interface or the browser build to process several at
 once.
 
+### Stem Split
+
+1. Open **Stem Split** and choose one audio file — no song source is needed here.
+2. Adjust the bass crossover if you want to; it defaults to 150 Hz. The low and high band stems are
+   complementary, so adding them returns the recording.
+3. Start the split. The channel count decides the set: 8 stems from a surround master, 6 from
+   stereo, 3 from mono.
+4. The result list gives each stem's file name, channel count and peak level, and the output folder
+   opens from there.
+
+The centre and instrumental stems of a stereo mix are separated by panning rather than by a fixed
+phase cancellation, so a lead that sits slightly off centre or carries reverb is still followed,
+and the centred kick and bass stay in the instrumental. See [Stem Split](docs/en/stem-split.md).
+
 ### Fetching a Source from a Link
 
 The stage-recording row and the source list carry a **Fetch** button:
@@ -160,6 +176,19 @@ Common reference-cancellation options:
 | `--tracks` | `vocal`, `backing`, `both` | Which stems to export; default: `vocal` |
 | `--lang` | `zh_cn`, `zh_tw`, `en_us`, `ja_jp`, `ko_kr` | Language used for progress messages |
 
+Split one recording into stems:
+
+```bash
+uv run --locked purivox split "show.flac"                        # writes show_stems/
+uv run --locked purivox split "show.flac" "stems" --crossover 180
+```
+
+| Option | Value | Description |
+|---|---:|---|
+| `output_dir` | directory | Where the stems go; defaults to `<name>_stems` beside the recording |
+| `--crossover` | hertz | The bass crossover; default `150`, and the GUI offers 40–400 Hz |
+| `--lang` | `zh_cn`, `zh_tw`, `en_us`, `ja_jp`, `ko_kr` | Language used for progress messages |
+
 Fetch a source from a link:
 
 ```bash
@@ -202,6 +231,7 @@ Architecture, algorithms, testing, and release information are available in
 - [Architecture and Data Flow](docs/en/architecture.md)
 - [Reference Cancellation](docs/en/reference-removal.md)
 - [Source Matching, the Timeline, and Segmented Rendering](docs/en/matching.md)
+- [Stem Split](docs/en/stem-split.md)
 - [Browser Build (WebAssembly)](docs/en/web.md)
 - [Contributing](docs/en/CONTRIBUTING.md)
 

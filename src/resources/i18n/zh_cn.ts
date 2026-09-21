@@ -667,5 +667,149 @@
         <source>download_stopping</source>
         <translation>正在停止...</translation>
     </message>
+    <message>
+        <source>nav_stems</source>
+        <translation>声学分轨</translation>
+    </message>
+    <message>
+        <source>home_stems_meta</source>
+        <translation>一个音频文件 · 不需要歌曲音源</translation>
+    </message>
+    <message>
+        <source>home_stems_description</source>
+        <translation>纯声学矩阵拆分：按声像自适应分出中置与伴奏，按互补分频分出频段；多声道母带直接离散解码。</translation>
+    </message>
+    <message>
+        <source>home_open_stems</source>
+        <translation>开始分轨</translation>
+    </message>
+    <message>
+        <source>stem_source_label</source>
+        <translation>待分轨音频:</translation>
+    </message>
+    <message>
+        <source>stem_output_label</source>
+        <translation>输出文件夹:</translation>
+    </message>
+    <message>
+        <source>stem_output_hint</source>
+        <translation>留空则在音频旁新建「文件名_stems」文件夹</translation>
+    </message>
+    <message>
+        <source>stem_pick_source</source>
+        <translation>选择要分轨的音频</translation>
+    </message>
+    <message>
+        <source>stem_pick_output</source>
+        <translation>选择输出文件夹</translation>
+    </message>
+    <message>
+        <source>stem_crossover_label</source>
+        <translation>低频分频点:</translation>
+    </message>
+    <message>
+        <source>stem_crossover_hint</source>
+        <translation>低频轨与中高频轨在这里分开。两条是互补的，相加能还原原曲。</translation>
+    </message>
+    <message>
+        <source>stem_hertz</source>
+        <translation>{hz} Hz</translation>
+    </message>
+    <message>
+        <source>stem_result_group</source>
+        <translation>分轨结果</translation>
+    </message>
+    <message>
+        <source>stem_layout_hint</source>
+        <translation>分出哪些轨由声道数决定：多声道母带 {surround} 条，立体声 {stereo} 条，单声道 {mono} 条。</translation>
+    </message>
+    <message>
+        <source>stem_open_output</source>
+        <translation>打开文件夹</translation>
+    </message>
+    <message>
+        <source>stem_start</source>
+        <translation>开始分轨</translation>
+    </message>
+    <message>
+        <source>stem_result_row</source>
+        <translation>{name} · {file} · {channels} 声道 · 峰值 {peak} dBFS</translation>
+    </message>
+    <message>
+        <source>stem_reading</source>
+        <translation>正在读取音频...</translation>
+    </message>
+    <message>
+        <source>stem_rendering</source>
+        <translation>正在生成 {current}/{total}：{name}</translation>
+    </message>
+    <message>
+        <source>stem_layout_surround</source>
+        <translation>多声道母带，按声道离散解码</translation>
+    </message>
+    <message>
+        <source>stem_layout_stereo</source>
+        <translation>立体声母带，按声像自适应分离</translation>
+    </message>
+    <message>
+        <source>stem_layout_mono</source>
+        <translation>单声道，按频段分离</translation>
+    </message>
+    <message>
+        <source>stem_done_status</source>
+        <translation>已写出 {count} 条分轨</translation>
+    </message>
+    <message>
+        <source>warn_no_stem_source</source>
+        <translation>请先选择要分轨的音频</translation>
+    </message>
+    <message>
+        <source>stem_center</source>
+        <translation>中置内容（主唱与居中乐器）</translation>
+    </message>
+    <message>
+        <source>stem_instrumental</source>
+        <translation>伴奏（已去除中置）</translation>
+    </message>
+    <message>
+        <source>stem_side</source>
+        <translation>侧边差分 (L−R)/2</translation>
+    </message>
+    <message>
+        <source>stem_mid</source>
+        <translation>中间和 (L+R)/2</translation>
+    </message>
+    <message>
+        <source>stem_low</source>
+        <translation>低频与 808 骨架</translation>
+    </message>
+    <message>
+        <source>stem_mid_band</source>
+        <translation>中频（人声与配器主体）</translation>
+    </message>
+    <message>
+        <source>stem_high</source>
+        <translation>中高频与空气感</translation>
+    </message>
+    <message>
+        <source>stem_surround</source>
+        <translation>环绕声道（空间与和声）</translation>
+    </message>
+    <message>
+        <source>stem_lfe</source>
+        <translation>超低频 LFE</translation>
+    </message>
+    <message>
+        <source>stem_front</source>
+        <translation>前置立体声</translation>
+    </message>
+    <message>
+        <source>stem_front_no_center</source>
+        <translation>前置减中置（去主唱伴奏）</translation>
+    </message>
+    <message>
+        <source>stem_downmix</source>
+        <translation>立体声降混参考</translation>
+    </message>
 </context>
 </TS>

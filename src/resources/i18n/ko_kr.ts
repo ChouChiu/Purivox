@@ -667,5 +667,149 @@
         <source>download_stopping</source>
         <translation>중지하는 중...</translation>
     </message>
+    <message>
+        <source>nav_stems</source>
+        <translation>스템 분리</translation>
+    </message>
+    <message>
+        <source>home_stems_meta</source>
+        <translation>오디오 파일 하나 · 곡 음원 불필요</translation>
+    </message>
+    <message>
+        <source>home_stems_description</source>
+        <translation>음향 행렬 분리: 정위로 센터와 반주를, 상보 필터로 대역을 나눕니다. 서라운드 마스터는 채널별로 디코딩합니다.</translation>
+    </message>
+    <message>
+        <source>home_open_stems</source>
+        <translation>분리 시작</translation>
+    </message>
+    <message>
+        <source>stem_source_label</source>
+        <translation>분리할 오디오:</translation>
+    </message>
+    <message>
+        <source>stem_output_label</source>
+        <translation>출력 폴더:</translation>
+    </message>
+    <message>
+        <source>stem_output_hint</source>
+        <translation>비워 두면 오디오 옆에 '이름_stems' 폴더를 만듭니다</translation>
+    </message>
+    <message>
+        <source>stem_pick_source</source>
+        <translation>분리할 오디오 선택</translation>
+    </message>
+    <message>
+        <source>stem_pick_output</source>
+        <translation>출력 폴더 선택</translation>
+    </message>
+    <message>
+        <source>stem_crossover_label</source>
+        <translation>저역 크로스오버:</translation>
+    </message>
+    <message>
+        <source>stem_crossover_hint</source>
+        <translation>저역 트랙과 중고역 트랙이 나뉘는 지점입니다. 둘은 상보적이어서 더하면 원본이 됩니다.</translation>
+    </message>
+    <message>
+        <source>stem_hertz</source>
+        <translation>{hz} Hz</translation>
+    </message>
+    <message>
+        <source>stem_result_group</source>
+        <translation>스템</translation>
+    </message>
+    <message>
+        <source>stem_layout_hint</source>
+        <translation>채널 수가 구성을 정합니다: 서라운드 {surround}개, 스테레오 {stereo}개, 모노 {mono}개.</translation>
+    </message>
+    <message>
+        <source>stem_open_output</source>
+        <translation>폴더 열기</translation>
+    </message>
+    <message>
+        <source>stem_start</source>
+        <translation>분리 시작</translation>
+    </message>
+    <message>
+        <source>stem_result_row</source>
+        <translation>{name} · {file} · {channels}채널 · 피크 {peak} dBFS</translation>
+    </message>
+    <message>
+        <source>stem_reading</source>
+        <translation>오디오를 읽는 중...</translation>
+    </message>
+    <message>
+        <source>stem_rendering</source>
+        <translation>생성 중 {current}/{total}: {name}</translation>
+    </message>
+    <message>
+        <source>stem_layout_surround</source>
+        <translation>서라운드 마스터: 채널별로 디코딩</translation>
+    </message>
+    <message>
+        <source>stem_layout_stereo</source>
+        <translation>스테레오 마스터: 정위로 분리</translation>
+    </message>
+    <message>
+        <source>stem_layout_mono</source>
+        <translation>모노: 대역으로 분리</translation>
+    </message>
+    <message>
+        <source>stem_done_status</source>
+        <translation>스템 {count}개를 저장했습니다</translation>
+    </message>
+    <message>
+        <source>warn_no_stem_source</source>
+        <translation>먼저 분리할 오디오를 선택하세요</translation>
+    </message>
+    <message>
+        <source>stem_center</source>
+        <translation>센터(리드와 가운데 악기)</translation>
+    </message>
+    <message>
+        <source>stem_instrumental</source>
+        <translation>반주(센터 제거)</translation>
+    </message>
+    <message>
+        <source>stem_side</source>
+        <translation>사이드 차분 (L−R)/2</translation>
+    </message>
+    <message>
+        <source>stem_mid</source>
+        <translation>미드 합 (L+R)/2</translation>
+    </message>
+    <message>
+        <source>stem_low</source>
+        <translation>저역과 808</translation>
+    </message>
+    <message>
+        <source>stem_mid_band</source>
+        <translation>중역(보컬과 주요 악기)</translation>
+    </message>
+    <message>
+        <source>stem_high</source>
+        <translation>고역과 공기감</translation>
+    </message>
+    <message>
+        <source>stem_surround</source>
+        <translation>서라운드 채널(공간과 코러스)</translation>
+    </message>
+    <message>
+        <source>stem_lfe</source>
+        <translation>LFE(초저역)</translation>
+    </message>
+    <message>
+        <source>stem_front</source>
+        <translation>프런트 2채널</translation>
+    </message>
+    <message>
+        <source>stem_front_no_center</source>
+        <translation>프런트에서 센터 제거</translation>
+    </message>
+    <message>
+        <source>stem_downmix</source>
+        <translation>스테레오 다운믹스 참조</translation>
+    </message>
 </context>
 </TS>

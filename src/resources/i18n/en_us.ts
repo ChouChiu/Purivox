@@ -667,5 +667,149 @@
         <source>download_stopping</source>
         <translation>Stopping...</translation>
     </message>
+    <message>
+        <source>nav_stems</source>
+        <translation>Stem Split</translation>
+    </message>
+    <message>
+        <source>home_stems_meta</source>
+        <translation>One audio file · no song source needed</translation>
+    </message>
+    <message>
+        <source>home_stems_description</source>
+        <translation>An acoustic split: the centre and the instrumental are separated by panning, the bands by a complementary crossover, and a surround master is decoded channel by channel.</translation>
+    </message>
+    <message>
+        <source>home_open_stems</source>
+        <translation>Split it</translation>
+    </message>
+    <message>
+        <source>stem_source_label</source>
+        <translation>Recording to split:</translation>
+    </message>
+    <message>
+        <source>stem_output_label</source>
+        <translation>Output folder:</translation>
+    </message>
+    <message>
+        <source>stem_output_hint</source>
+        <translation>Empty writes a folder named after the recording, beside it</translation>
+    </message>
+    <message>
+        <source>stem_pick_source</source>
+        <translation>Choose the recording to split</translation>
+    </message>
+    <message>
+        <source>stem_pick_output</source>
+        <translation>Choose the output folder</translation>
+    </message>
+    <message>
+        <source>stem_crossover_label</source>
+        <translation>Bass crossover:</translation>
+    </message>
+    <message>
+        <source>stem_crossover_hint</source>
+        <translation>Where the low band parts from the rest. The two are complementary: adding them returns the recording.</translation>
+    </message>
+    <message>
+        <source>stem_hertz</source>
+        <translation>{hz} Hz</translation>
+    </message>
+    <message>
+        <source>stem_result_group</source>
+        <translation>Stems</translation>
+    </message>
+    <message>
+        <source>stem_layout_hint</source>
+        <translation>The channel count decides the set: {surround} stems from a surround master, {stereo} from stereo, {mono} from mono.</translation>
+    </message>
+    <message>
+        <source>stem_open_output</source>
+        <translation>Open folder</translation>
+    </message>
+    <message>
+        <source>stem_start</source>
+        <translation>Split</translation>
+    </message>
+    <message>
+        <source>stem_result_row</source>
+        <translation>{name} · {file} · {channels} ch · peak {peak} dBFS</translation>
+    </message>
+    <message>
+        <source>stem_reading</source>
+        <translation>Reading the recording...</translation>
+    </message>
+    <message>
+        <source>stem_rendering</source>
+        <translation>Rendering {current}/{total}: {name}</translation>
+    </message>
+    <message>
+        <source>stem_layout_surround</source>
+        <translation>Surround master: decoding it channel by channel</translation>
+    </message>
+    <message>
+        <source>stem_layout_stereo</source>
+        <translation>Stereo master: separating it by panning</translation>
+    </message>
+    <message>
+        <source>stem_layout_mono</source>
+        <translation>Mono: separating it by frequency</translation>
+    </message>
+    <message>
+        <source>stem_done_status</source>
+        <translation>Wrote {count} stems</translation>
+    </message>
+    <message>
+        <source>warn_no_stem_source</source>
+        <translation>Choose a recording to split first</translation>
+    </message>
+    <message>
+        <source>stem_center</source>
+        <translation>Centre (lead and centred parts)</translation>
+    </message>
+    <message>
+        <source>stem_instrumental</source>
+        <translation>Instrumental (centre removed)</translation>
+    </message>
+    <message>
+        <source>stem_side</source>
+        <translation>Side difference (L−R)/2</translation>
+    </message>
+    <message>
+        <source>stem_mid</source>
+        <translation>Mid sum (L+R)/2</translation>
+    </message>
+    <message>
+        <source>stem_low</source>
+        <translation>Low band and 808s</translation>
+    </message>
+    <message>
+        <source>stem_mid_band</source>
+        <translation>Presence band</translation>
+    </message>
+    <message>
+        <source>stem_high</source>
+        <translation>High band and air</translation>
+    </message>
+    <message>
+        <source>stem_surround</source>
+        <translation>Surround channels (space and backing vocals)</translation>
+    </message>
+    <message>
+        <source>stem_lfe</source>
+        <translation>LFE (sub)</translation>
+    </message>
+    <message>
+        <source>stem_front</source>
+        <translation>Front pair</translation>
+    </message>
+    <message>
+        <source>stem_front_no_center</source>
+        <translation>Front without the centre</translation>
+    </message>
+    <message>
+        <source>stem_downmix</source>
+        <translation>Stereo fold-down reference</translation>
+    </message>
 </context>
 </TS>
