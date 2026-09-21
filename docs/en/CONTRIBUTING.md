@@ -1,112 +1,73 @@
-# Contributing to Purivox
+# Contributing
 
 <p align="left">
   <a href="../CONTRIBUTING.md">简体中文</a> · <strong>English</strong>
 </p>
 
-This document is for people changing this repository: how to get it running, where code belongs,
-how to verify a change, and what a commit should look like. For the algorithms and the architecture
-themselves, see [Architecture and Data Flow](architecture.md) and the per-feature documents.
+This document outlines environment setup, architectural layering, code conventions, localization workflows, test verification, and CI/CD release procedures for the Purivox project.
 
-## Setting Up
+## Development Environment Setup
 
-The project uses uv to manage Python, the isolated environment, and the lock file. With uv
-installed, install the locked runtime and default development dependencies from the repository
-root; `.python-version` decides the interpreter and uv fetches it:
+Purivox uses [uv](https://docs.astral.sh/uv/) for Python packaging and virtual environment management. Synchronize dependencies from the repository root:
 
 ```bash
 uv sync --locked
 ```
 
-Confirm the environment works:
+The required Python version is pinned in `.python-version`. `uv` automatically manages the isolated environment.
+
+Verify local setup:
 
 ```bash
-uv run --locked purivox                                        # GUI
-QT_QPA_PLATFORM=offscreen uv run --locked purivox --selftest   # pipeline smoke test, headless
+uv run --locked purivox                                        # Launch desktop GUI
+QT_QPA_PLATFORM=offscreen uv run --locked purivox --selftest   # Headless pipeline smoke test
 ```
 
-Change dependencies with `uv add <package>`, `uv add --dev <package>`, or
-`uv add --group deploy <package>`, and commit the updated `pyproject.toml` and `uv.lock` together.
+Manage dependencies using `uv add <package>`, `uv add --dev <package>`, or `uv add --group deploy <package>`, committing updated `pyproject.toml` and `uv.lock` files together.
 
-Do not install another PyQt or PySide Fluent package that exports `qfluentwidgets` into this
-environment. The project pins `PySide6-Fluent-Widgets[full]`, and a second one makes it
-unpredictable which copy an import resolves to.
+Do not install external Qt Fluent components that export the `qfluentwidgets` namespace into this environment to prevent import conflicts.
 
-## Where Code Belongs
+## Architectural Layering Rules
 
-Dependencies flow downward only: `shared` imports nothing of ours, feature packages never import
-each other, and neither `app` nor `web` imports `entrypoints`. `tests/test_architecture.py` parses
-the imports and enforces this, so crossing a boundary fails the build.
+Dependencies must flow strictly top-to-bottom:
+- `src/shared/` serves as shared infrastructure and must never import from `app`, `entrypoints`, or `features/`;
+- Feature modules (`src/features/`) encapsulate pages, models, and domain pipelines; cross-feature imports are prohibited;
+- Orchestration shells (`src/app/` and `src/web/`) must never import from `entrypoints/`;
+- Shared algorithms, types, and constants must reside in `src/shared/`.
 
-- A new feature is one new directory under `src/features/`, carrying its own page, models, and
-  processing logic.
-- Anything two features need, or that both the GUI and the CLI need, moves down into `shared` and
-  is defined once — for example `shared.audio.BLOCK_FRAMES`, `shared.audio.AUDIO_EXTENSIONS`,
-  `shared.jobs.SIGMA_CHOICES`, `shared.i18n.SUPPORTED_LANGUAGES`, and `shared.logging.LOG_LEVELS`.
-- Orchestration that joins several features lives in `app`; do not make feature packages import
-  each other for the sake of reuse.
-- Shared data models belong to their consumers: a model used by several features goes to `shared`,
-  one used inside a single feature stays there, and none of them may be re-exported from another
-  feature for convenience.
-
-The full layering and each layer's responsibilities are in
-[Architecture and Data Flow](architecture.md).
+Import boundaries are enforced statically by `tests/test_architecture.py`.
 
 ## Code Conventions
 
-### Python
+### Python Conventions
 
-- New modules use `from __future__ import annotations` and complete type annotations.
-- Job models with few mutable parameters prefer `frozen=True, slots=True` dataclasses; fixed string
-  sets use `StrEnum`.
-- Log through `logging.getLogger(__name__)`; only an explicitly recorded fallback path may swallow
-  a local failure.
-- Ruff's line width is 100 with the E, F, I, UP, B, SIM, and RUF rules; E501 is left to the
-  formatter and to review.
+- Modules declare `from __future__ import annotations` and include complete type annotations;
+- Task and configuration models use frozen slotted dataclasses (`@dataclass(frozen=True, slots=True)`), using `StrEnum` for fixed string sets;
+- Loggers are instantiated via `logging.getLogger(__name__)`; unhandled exceptions must not be suppressed silently;
+- Static analysis adheres to Ruff configurations (100 character line length, enforcing E, F, I, UP, B, SIM, and RUF rules).
 
-### Qt
+### Qt Desktop Conventions
 
-- Background jobs are coordinated by `app/job_presenter.py` for page state and handed to
-  `app/job_runner.py` for the thread; pages and processing pipelines must not create threads.
-- A slot receiving a cross-thread signal is annotated `@Slot(<types>)`
-  (worker → `JobRunner` → `JobPresenter`) so Qt dispatches the queued connection with the declared
-  signature.
-- Where Qt already owns the problem, use Qt's answer: `QAbstractTableModel` + `TableView` for an
-  editable table rather than filling `QTableWidget` item by item; `QNetworkAccessManager` for HTTP
-  (system proxy, redirects, timeouts, progress, `abort()`); `QSaveFile` when a file must be
-  verified before it is committed; `QStandardPaths` for locations. Where the standard library is
-  already equal or better, leave it (`hashlib`, `tempfile` + `numpy.memmap`, argparse subcommands,
-  the DSP thread pool).
-- Split a self-contained interactive widget into its own module inside the same feature package —
-  the preview seek control lives in `reference_removal/preview.py`, for instance.
+- UI pages handle rendering and signal emission; background jobs are orchestrated via `app/job_presenter.py` and executed by `app/job_runner.py`;
+- Cross-thread signal slots must be decorated with explicit types using `@Slot(<type>)`;
+- Prefer standard Qt components (e.g., `QAbstractTableModel` paired with Fluent `TableView`, `QNetworkAccessManager` for HTTP operations, `QSaveFile` for atomic disk writes);
+- Self-contained UI controls should be modularized within their respective feature packages.
 
-### Audio and Memory
+### Audio and Memory Management
 
-- Stream long audio with `create_pcm_audio` and block loops (block size from
-  `shared.audio.BLOCK_FRAMES`); never copy a whole file into an ordinary in-memory array. Release
-  mapped pages with `shared.audio.release_mapped_pages()`.
-- A cancellable loop must call `CancellationToken.raise_if_cancelled()` regularly, and must never
-  swallow the cancellation exception.
-- Write output through `write_wav_atomic`; never overwrite the target file directly.
-- The export format follows the input file: `AudioData` carries the decoded source's `sample_rate`
-  alongside its `bit_depth`, `resample_audio` and `stereo()` carry both forward, and
-  `write_wav_atomic` and `analyze_audio` read them off the audio rather than taking a format
-  argument. `WAV_BIT_DEPTHS` is `(16, 24)`: 8-bit and 16-bit PCM inputs are written as 16-bit,
-  while wider 24/32-bit PCM, float, and every lossy format are written as 24-bit. There is no
-  export floor, and nothing may be resampled upwards to hit a nicer-looking number.
+- Long-audio processing must combine `create_pcm_audio` with streaming block loops (`shared.audio.BLOCK_FRAMES`), avoiding accumulating full-file arrays in system RAM;
+- Compute loops must invoke `CancellationToken.raise_if_cancelled()` regularly;
+- Audio outputs use `write_wav_atomic` for atomic disk persistence;
+- Output formats strictly preserve input sampling rates and format bit depths (16-bit for 8/16-bit PCM; 24-bit for float, lossy, or wider formats). Artificial upsampling is prohibited.
 
-### DSP
+### DSP Evolution Guidelines
 
-Every user-selectable path must reconstruct its output from the original stage mix, and must never
-write source-only content or its inverted polarity into the result. DSP changes are accepted on
-measurement, not on argument: pass the automated checks first, then export directly comparable
-versions from fixed real-world material. Technical check results must not be reported as
-confirmation of listening quality.
+- Cancellation and stem outputs must reconstruct solely from original mix audio; reference waveforms or their inversions must never be written directly to output files;
+- Algorithm changes require quantitative verification using `tools/eval_cancellation.py` and `tools/eval_stems.py`, paired with comparative listening on live audio recordings.
 
-## Interface Text and Translations
+## Localization (i18n)
 
-Interface strings are edited in Qt Linguist `.ts` files (XML); the compiled `.qm` output is loaded
-by `QTranslator`:
+Interface strings are maintained in Qt Linguist XML catalogs (`src/resources/i18n/*.ts`), compiled to binary `*.qm` files:
 
 ```text
 src/resources/i18n/zh_cn.ts   src/resources/i18n/zh_cn.qm
@@ -116,21 +77,9 @@ src/resources/i18n/ja_jp.ts   src/resources/i18n/ja_jp.qm
 src/resources/i18n/ko_kr.ts   src/resources/i18n/ko_kr.qm
 ```
 
-The `.ts` files are indexed by key rather than by source text: `<source>` is a short identifier
-like `nav_mr`, `<translation>` is the text for that language, and all five files share the single
-`Purivox` context. Changing the Chinese wording therefore does not disturb the other languages,
-`pyside6-lupdate` does not apply (it extracts literals from source code), and the entries are
-maintained by hand.
-
-Search the five catalogues before inventing a string: the desktop has already named most states
-(`warn_no_song`, `stage_need_sources`, `preview_empty`, the whole `home_*` set), and reusing an
-existing key gets five locales right at once.
-
-`zh_tw` is Taiwanese usage, not a character-by-character conversion of `zh_cn`: 檔案, 取樣率,
-辨識, 快取 rather than 文件, 采样率, 识别, 缓存. A test pins a few of those terms so a
-conversion tool cannot quietly overwrite the catalogue.
-
-Any `.ts` change must be recompiled, and the `.ts` and `.qm` committed together:
+1. **Key Organization**: Catalogs index strings by semantic context keys. Reuse existing keys whenever possible.
+2. **Traditional Chinese Usage**: `zh_tw` strictly follows Taiwanese technological conventions (e.g., 檔案, 取樣率, 辨識, 快取).
+3. **Compilation**: After editing any `.ts` file, recompile `.qm` files and commit both formats:
 
 ```bash
 for locale in zh_cn zh_tw en_us ja_jp ko_kr; do
@@ -139,54 +88,20 @@ for locale in zh_cn zh_tw en_us ja_jp ko_kr; do
 done
 ```
 
-Adding, removing, or renaming a translation key means editing all five `.ts` files. The tests check
-that the key sets match exactly, that no `.qm` is stale against its `.ts`, and that every literal
-key appearing in the source exists in every language. Calls to `tr(key, **values)` must not rely on
-the "unknown key returns the key" fallback.
+4. **Catalog Parity**: Test suites verify that all five language catalogs maintain identical key sets and current `.qm` binaries.
 
-Language is application state: `shared.i18n.install_language()` installs that language's
-`QTranslator` and `tr()` looks up through `QCoreApplication.translate()`, so job objects and
-processing pipelines carry no language parameter. Switching the language in the GUI settings page
-reinstalls the translator and calls each page's `retranslate()`; the CLI installs once at startup
-from `--lang`.
+## Packaging Declarations (Three-Point Synchronization)
 
-Configuration is the QConfig singleton in `src/shared/config.py`. Changing a persistent option
-means considering its default, its validator, page retranslation, and the tests together.
+When introducing new source modules or directories, update all three packaging manifests:
+1. `pyproject.toml` wheel packages list (`[tool.hatch.build.targets.wheel]`);
+2. `pyproject.toml` pyside6 project files (`[tool.pyside6-project].files`);
+3. `pysidedeploy.spec` include package entries (`include-package`).
 
-## New Files Must Be Registered in Three Places
+`tests/test_packaging.py` validates repository paths against these manifests.
 
-When adding a source directory or file, check three shipping manifests. Missing any one of them can
-leave the development environment working while the wheel or the standalone build is missing files:
+## Local Verification Workflow
 
-1. the wheel package list in `pyproject.toml`;
-2. `[tool.pyside6-project].files` in `pyproject.toml`;
-3. `include-package`, or the corresponding entry, in `pysidedeploy.spec`.
-
-`tests/test_packaging.py` compares every `src/**/*.py` against `[tool.pyside6-project].files` and
-rejects a missing or dead entry; a new top-level package still needs the wheel and Nuitka lists
-confirmed by hand.
-
-## The Browser Front End
-
-`web/` is a Vite + React front end running the same `src/`: `predev` / `prebuild` pack the Python
-tree into `purivox-src.zip` and regenerate the translation JSON, so rerunning them is all that a
-change to Python or to a `.ts` catalogue needs.
-
-```bash
-cd web && bun install
-bun run dev        # http://localhost:5173/
-bun run check      # tsc + Biome + the layering check, which build runs first
-```
-
-The front end's layering mirrors the Python side and is enforced the same way, by
-`scripts/check-architecture.mjs`. When changing DSP, note that Pyodide has no pthreads, so
-`process_audio` carries a serial branch, and
-`tests/features/reference_removal/test_dsp_execution.py` holds both paths to the same output. See
-[Browser Build (WebAssembly)](web.md) for the details.
-
-## Verifying a Change
-
-Qt tests need the offscreen platform, which conftest sets:
+Run all automated checks before submitting pull requests (Qt tests require an offscreen platform):
 
 ```bash
 uv run --locked ruff check src tests
@@ -196,111 +111,33 @@ QT_QPA_PLATFORM=offscreen uv run --locked purivox --selftest
 uv build
 ```
 
-A DSP change also owes a measurement rather than an explanation:
-
-```bash
-uv run --locked python tools/eval_cancellation.py --save baseline.json    # before
-uv run --locked python tools/eval_cancellation.py --compare baseline.json # after
-```
-
-The slow benchmark is opt-in. It runs 15 minutes of 44.1 kHz stereo audio through reference
-cancellation and checks output length, seam smoothness, and peak resident memory against a 2 GiB
-ceiling:
+To run the intensive 15-minute benchmark checking long-audio memory retention and seam continuity:
 
 ```bash
 QT_QPA_PLATFORM=offscreen uv run --locked pytest tests/benchmarks --runslow
 ```
 
-Synthetic metrics exist to catch implementation regressions and claim nothing about real music.
+When modifying documentation, ensure all links and bilingual translation pairings validate:
 
-### Where Tests Go
-
-`tests/` mirrors `src/` path for path, so a change's tests are at the mirrored location: DSP and
-alignment regressions, the timeline, matching and the segmented render under
-`tests/features/reference_removal/`, runner and presenter lifecycles and the pytest-qt interface
-tests under `tests/app/`, and shared audio, job contracts, and widgets under `tests/shared/`.
-
-Pytest uses the `importlib` import mode, so different directories may reuse the test file name that
-matches their source without a module collision. Three repository-wide gates sit alongside:
-`test_architecture.py` (import boundaries), `test_packaging.py` (the shipped-source roster), and
-`test_documentation.py` (README index, documentation translation pairing, internal links). When
-renaming a document, update the index and the references with it rather than leaving a dead link
-for someone else to find.
-
-No test reaches a real host: the update-check tests point `updates.RELEASES_API` at a local
-server.
-
-### What CI Runs
-
-Pull requests and commits on `main` trigger `.github/workflows/build.yml`, a thin shell that calls
-`.github/workflows/common.yml` for the full pipeline: the quality checks above, then Linux,
-Windows, and both macOS architectures built in parallel. The quality checks run once, on Ubuntu;
-the Windows and macOS jobs only produce binaries. Artifacts are kept for 14 days, and a new
-commit on the same branch cancels the older run.
-
-What a compile job costs is decided almost entirely by whether Nuitka's compiler cache hits: 5
-to 12 minutes when it does, upwards of 55 when it does not. The cached directory has to be
-Nuitka's own cache root (`~/.cache/Nuitka`, `~/Library/Caches/Nuitka`,
-`%LOCALAPPDATA%\Nuitka\Nuitka\Cache`) — Nuitka points `CCACHE_DIR` inside it, and the
-system-wide `~/.cache/ccache` stays empty. The cache key follows `uv.lock` and
-`pysidedeploy.spec` only: adding the source hash writes a fresh ~400 MB entry on every push, and
-the 10 GB quota then evicts the entry the next run needed.
-
-## Commits
-
-- The **subject** is `type(scope): what changed` — imperative, lower case, no trailing period. The
-  types in use are `feat`, `fix`, `perf`, `refactor`, `docs`, `ci`, `build`, and `chore`; the scope
-  is the area (`dsp`, `ui`, `web`, `audio`, `i18n`, `isolation`, `settings`, `shared`, `release`)
-  and may be dropped for a change that spans the repository.
-- The **body** is English prose wrapped at 80 columns explaining why the change looks like this:
-  the problem, the constraint that decided the design, what was rejected and why. Not a restatement
-  of the diff, and not a bullet list.
-- One commit does one thing. A translation change carries its recompiled `.qm`; a dependency change
-  carries `uv.lock`.
-
-The existing commits are the examples:
-
-```text
-perf(dsp): build the cancellation chain in place instead of a temporary per step
-fix(web): merge Fluent class names instead of concatenating them
-refactor(dsp): run the pipelines where there is no Qt and no threads
+```bash
+QT_QPA_PLATFORM=offscreen uv run --locked pytest tests/test_documentation.py
 ```
 
-A user-facing change also earns a line in the matching version's section of `CHANGELOG.md`. There
-is one bilingual section per released version — the release workflow publishes the section whose
-heading matches the tag, and the in-app update dialog shows that same text.
+## Commit Conventions
 
-## Packaging and Release (Maintainers)
+- **Commit Subject**: Format as `type(scope): description` in lowercase imperative prose without trailing periods. Standard types: `feat`, `fix`, `perf`, `refactor`, `docs`, `ci`, `build`, `chore`.
+- **Commit Body**: Explain the motivation, technical constraints, and alternative approaches considered, wrapped at 80 characters.
+- **Changelog**: User-facing improvements must be documented in both English and Chinese under the current version section in `CHANGELOG.md`.
 
-Ordinary contributions do not run anything in this section.
+## Release Procedures (Maintainers)
 
-`uv build` writes the wheel and sdist to `dist/`. The version has one source, `src/app/version.py`,
-which Hatch reads at build time. The standalone builds go through `pyside6-deploy` wrapping
-Nuitka (`uv sync --locked --group deploy`): Linux and Windows get the onefile `dist/Purivox.bin` /
-`Purivox.exe`, macOS gets the `dist/Purivox.app` bundle, built once for arm64 and once for
-x86_64. Both are native builds, on the `macos-15` and `macos-15-intel` runners: numpy, scipy, soxr
-and soundfile ship one wheel per architecture, so there is nothing to cross-compile from. They all
-bundle Python and Qt. CI builds them; before a release, actually launch one and confirm the
-resources under the unpacked path can still be found.
-
-Releases are tag-driven, with no manual step beyond the tag:
-
-1. update `__version__` in `src/app/version.py`;
-2. add a section at the top of `CHANGELOG.md` titled `## v<version> — <date>`;
-3. commit, then tag with the same name and push.
+1. Update `__version__` in `src/app/version.py`;
+2. Add a new release section at the top of `CHANGELOG.md`: `## v<version> — <date>`;
+3. Commit and push an annotated git tag:
 
 ```bash
 git tag -a v1.0.0 -m "Purivox v1.0.0"
 git push origin main --follow-tags
 ```
 
-Once the tag is pushed, `release.yml` runs the whole `common.yml` pipeline and its `publish` job
-ships the artifacts from that same run, regenerating a flat `SHA256SUMS`. The first quality-check
-step compares the tag against `src/app/version.py` and fails within minutes on a mismatch rather
-than after an hour of compiling. A suffixed tag (`v1.1.0-rc1`, say) is published as a pre-release
-and does not appear at `releases/latest`. Re-running a build for the same tag overwrites the
-existing assets instead of creating a second release.
-
-The AUR package (`deployment/aur/`) is pushed after a release by running
-`deployment/aur/publish.sh` by hand, never by CI: it re-points `purivox-bin` at that release's
-`.deb`, builds it once as a check, and pushes `PKGBUILD` and `.SRCINFO`.
+GitHub Actions executes the release workflow in `release.yml`, running quality checks, compiling cross-platform standalone binaries (Linux, Windows, macOS arm64/x86_64), and publishing release artifacts with SHA256 sums. AUR packages (`deployment/aur/`) are updated and published manually via `deployment/aur/publish.sh` following release publication.

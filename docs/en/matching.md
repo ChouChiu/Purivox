@@ -4,233 +4,114 @@
   <a href="../matching.md">简体中文</a> · <strong>English</strong>
 </p>
 
-## Goals and Boundaries
+## Scope and Architectural Boundaries
 
-There is one vocal-isolation pipeline, entered through
-`run_isolation_job(job, analysis, token, progress)`; the GUI, the CLI and the browser build all call
-it. This document covers its matching engine: placing one or more song sources within one continuous
-stage recording, building an editable timeline, and rendering it segment by segment. The whole-file
-path that cancels one source against one recording over its whole length is
-[reference cancellation](reference-removal.md).
+The reference cancellation workflow shares a unified entry point: `run_isolation_job(job, analysis, token, progress)`, called identically by the GUI, CLI, and WebAssembly browser runtime. This document details the source matching engine: locating one or more studio reference tracks within continuous stage recordings, generating an editable timeline, and executing segmented cancellation. For the single-source whole-file path, see [Reference Cancellation](reference-removal.md).
 
-Sources do not need to be ordered in advance, and a source that briefly repeats in an intro,
-advertisement, or outro can also produce additional fragments. Automatic analysis does not modify
-audio directly: it first generates an editable timeline and renders only after user confirmation;
-unmatched ranges are always copied from the original stage recording.
+Input audio tracks do not require manual sorting. When a track recurs across an intro, outro, or intermission, the algorithm detects multiple discrete instances. The analysis stage produces an editable timeline without mutating underlying audio; unassigned time intervals strictly retain the original live audio.
 
-Geometry decides the engine, not match quality:
+### Engine Selection Rules
 
-- When clips were matched and the timeline was not edited, a lone source whose length is within one
-  second of the recording's (`_WHOLE_RECORDING_TOLERANCE_SECONDS`) is the recording's own content
-  and goes through the whole-file path `run_reference_job`; everything else is rendered clip by clip
-  by `render_stage_job`.
-- When nothing was matched and there is exactly one source, the whole-file path is the fallback too.
-- When nothing was matched and there are several sources, or the user disabled every matched clip,
-  rendering is refused (`ValueError("no source could be matched to the stage audio")`) - one
-  recording against several songs is not a request that "cancel the whole thing once" can answer.
-- An `analysis` the caller passes in is the timeline the user checked or edited and is rendered as
-  it stands: an edited timeline is a decision, and only an untouched analysis leaves the choice of
-  engine to the geometry above.
+The pipeline selects its processing engine based on input geometric durations:
 
-That geometric rule is measured. For a source as long as the recording, a capture running at a
-different tempo makes the matcher place the source a few seconds out, and the whole-file path keeps
-1-2 dB more cancellation depth; for a source that starts later in a longer recording the matched
-clips are 2-4 dB better. Both numbers come from synthetic scenes.
+1. **Whole-File Path**: When given a single reference track whose duration matches the recording within 1 second (`_WHOLE_RECORDING_TOLERANCE_SECONDS`) and the timeline has not been manually edited, the engine assumes full coverage and invokes `run_reference_job` for global alignment and cancellation.
+2. **Segmented Path**: When multiple clips are detected or the reference track is significantly shorter than the recording, `render_stage_job` aligns and cancels each segment individually.
+3. **Fallbacks and Errors**: If a single reference yields no candidate matches, the pipeline falls back to the whole-file path. If multiple references are provided and none can be matched, or if all detected clips are unchecked, processing raises an error.
+4. **Manual Edits**: If the input `analysis` contains user-confirmed or manually modified clips, the segmented engine renders the timeline as defined without automatic engine reassignment.
+
+Evaluations demonstrate that for whole-file live recordings with global clock drift, the whole-file engine achieves $1$–$2\text{ dB}$ deeper cancellation due to unified time stretching; conversely, for isolated clips within longer recordings, the segmented path yields $2$–$4\text{ dB}$ better suppression.
 
 ```mermaid
 flowchart TB
-    stage["Stage recording"] --> feature["Extract multi-band onset features"]
-    sources["Song sources"] --> speed["Per-source tempo estimate"]
-    speed --> stretch["Pitch-preserving WSOLA stretch"]
+    stage["Stage/Live Recording"] --> feature["Extract Multi-Band Log-Flux Features"]
+    sources["Reference Audio Tracks"] --> speed["Per-Source Global Tempo Search"]
+    speed --> stretch["WSOLA Pitch-Preserving Stretch"]
     stretch --> feature
-    feature --> match["Normalized cross-correlation<br/>and candidate clustering"]
-    match --> song["Full songs"]
-    match --> fragment["Repeated short fragments"]
-    song --> timeline["Editable timeline"]
+    feature --> match["Normalized Cross-Correlation & Clustering"]
+    match --> song["Full Song Candidates"]
+    match --> fragment["Short Fragment Scans"]
+    song --> timeline["Construct Timeline"]
     fragment --> timeline
-    manual["Hand-entered segments"] --> timeline
-    timeline --> review["Manual review and correction"]
-    timeline --> unmatched["Unmatched ranges"]
-    review --> engine{"Engine choice"}
-    engine -->|lone source of the same length,<br/>timeline untouched| whole["Whole-file path<br/>align over the whole length"]
-    engine -->|matched clips| rescale["Stretch the source slice<br/>by the entry's tempo"]
-    rescale --> cancel["Local alignment<br/>and reference cancellation"]
-    cancel --> blend["Boundary fade up to 50 ms"]
-    unmatched --> original["Preserve the original recording"]
-    original --> output["Assemble the stage output"]
+    manual["Manual Clip Additions"] --> timeline
+    timeline --> review["User Inspection & Edits"]
+    timeline --> unmatched["Identify Unmatched Intervals"]
+    review --> engine{"Engine Selection"}
+    engine -->|Unedited Matching Duration| whole["Whole-File Path<br/>Global Alignment & Cancellation"]
+    engine -->|Segmented Clips| rescale["Rescale Source Slices via Tempo"]
+    rescale --> cancel["Local Delay Alignment & Cancellation"]
+    cancel --> blend["50 ms Boundary Crossfade"]
+    unmatched --> original["Retain Original Live Audio"]
+    original --> output["Assemble Final Output"]
     blend --> output
     whole --> output
 ```
 
-## Global Tempo
+## Global Tempo Estimation
 
-A stage recording may have been re-uploaded with its tempo shifted as a whole: the pitch stays put and
-the speed moves by a few percent. The anchor search slides a fixed-width window, so a source at a
-different tempo lines up nowhere - measured on real material, two songs were matched to each other's
-positions. Every source therefore gets one global scale search before matching: its onset features
-are linearly interpolated along time at each trial ratio and normalized-correlated against the stage
-proxy with the same spectral-flux features, taking the peak over every lag, scanning 0.88 to
-1.15 in 0.004 steps and refining around the peak in 0.0005 steps.
+Stage recordings frequently suffer from subtle playback speed shifts. Because anchor matching relies on fixed sliding windows, speed mismatches prevent correlation peaks from aligning. The engine performs a global scale search before feature extraction: reference onset representations are linearly interpolated across candidate speeds and cross-correlated against the first two minutes of the live proxy signal.
 
-An estimate is accepted only when its peak scores at least 0.25, beats the best ratio outside its own
-neighbourhood by 10%, beats the ratio-one score by 0.04, and moves the tempo by at least 0.2%. The
-last condition keeps material that is already aligned on its existing path. The estimator and the
-stretch both live in `shared/dsp/rate.py` and `shared/dsp/stretch.py`, shared by the matching engine
-and the whole-file path.
+The search sweeps $0.88$–$1.15$ using a two-tier grid ($0.004$ coarse step, $0.0005$ fine step). Candidates satisfying correlation, margin, and minimum shift ($\ge 0.2\%$) thresholds are accepted, followed by WSOLA time stretching. The estimated tempo ratio is stored per timeline entry and applied to source slices during rendering.
 
-An accepted ratio stretches the source proxy with WSOLA before the existing anchor search runs, so
-the matcher itself is unchanged. The ratio travels with the timeline entry, and rendering stretches
-the source slice by it - the source range in the timeline always stays on the source file's own
-clock.
+## Feature Extraction and Fingerprinting
 
-## Feature Extraction
+The recording and reference tracks are downsampled to $4\text{ kHz}$ mono proxies and analyzed via STFT with $\approx 40\text{ ms}$ hop sizes. Linear magnitude spectra undergo $\log(1 + x)$ compression, half-wave difference rectification, and aggregation into $12$ logarithmically spaced frequency bands.
 
-The stage recording and every source are first converted to 4 kHz mono proxy signals. A short-time
-Fourier transform is then calculated with a frame step of approximately 40 ms. Magnitudes are
-compressed with `log1p`, positive spectral flux is retained, and the result is aggregated into 12
-geometrically spaced frequency bands.
+Each band is normalized by subtracting its sliding median, dividing by the median absolute deviation (MAD), and clipping to $[-8, 8]$. This emphasizes transient onset contours while minimizing master loudness and equalization discrepancies. The feature extraction logic is unified in `shared.dsp.log_flux_bands()`, shared with coarse alignment.
 
-Each band has its median removed, is normalized by median absolute magnitude, and is clipped to
-$[-8,8]$. Matching therefore focuses on onset changes rather than mastering loudness.
+## Full Song Candidate Clustering
 
-The feature itself lives in `shared.dsp.log_flux_bands()`. Coarse alignment in reference cancellation
-needs the same onset description, so the band layout, normalization and clipping exist once; source
-matching and coarse alignment differ only in window length and rejection threshold.
-
-## Full-Song Candidates
-
-Each source contributes up to seven distributed anchors. Anchor duration adapts to source length
-within a range of approximately 6–20 seconds. Every anchor is matched against the stage recording's
-features using normalized cross-correlation:
+Up to $7$ representative anchors ($6$–$20\text{ s}$ duration) are selected per reference track. Each anchor is cross-correlated with the live recording features:
 
 $$
-s(k)=\frac{\langle \mathbf S_k,\mathbf Q\rangle}
-{\|\mathbf S_k\|_2\,\|\mathbf Q\|_2+\varepsilon}
+s(k) = \frac{\langle \mathbf S_k, \mathbf Q\rangle}{\|\mathbf S_k\|_2\,\|\mathbf Q\|_2 + \varepsilon}
 $$
 
-An anchor hit is converted to the predicted position of source time zero in the recording. Hits
-within 0.8 seconds are grouped into one candidate; votes from distinct anchors and their average
-score together form the confidence. A candidate needs support from multiple anchors or a
-sufficiently high individual score.
+Detected peaks translate to candidate start offsets in the recording. Peaks within $0.8\text{ s}$ are merged into clusters; confidence scores combine multi-anchor vote counts and average correlation scores.
 
-After all sources are searched independently, candidates are sorted by votes and confidence. At
-most one full-song position is selected for each source, and a candidate overlapping an
-already selected song by more than two seconds is rejected. The final timeline is ordered by
-stage start time.
+Each reference track is assigned at most one full song placement, rejecting candidates overlapping existing selections by more than $2\text{ s}$. The final timeline is sorted chronologically by stage start time.
 
-## Repeated Short Fragments
+## Short Fragment Detection
 
-To identify short quotations in intros, outros, or advertisements, the algorithm additionally
-scans each source with a ten-second window and five-second step, paying particular attention to
-approximately the first and last 75 seconds of the recording. In addition to the multi-anchor and
-confidence thresholds, a candidate is verified by secondary cross-correlation over the first
-difference of the 4 kHz waveforms.
+To detect short quotes, intro loops, or stage interludes, a sliding $10\text{ s}$ window with a $5\text{ s}$ step scans the reference tracks, focusing on the first and last $75\text{ s}$ of the recording. Candidates undergo secondary verification via cross-correlation on first-difference $4\text{ kHz}$ waveforms.
 
-A short fragment must be at least approximately five seconds long and must not overlap a detected
-full song or another fragment substantially. They are cancelled along with the full songs; a
-fragment the user does not want is skipped by clearing its checkbox in the timeline.
+Short fragments require a minimum duration of $\approx 5\text{ s}$ and cannot significantly overlap full song matches. By default, they are enabled for cancellation and can be disabled via the timeline UI.
 
 ## Timeline Model
 
-`analyze_stage(job, token, progress) -> StageAnalysis` produces this timeline: it reports
-`stage_loading` and `stage_fingerprinting` first, `stage_matching_source` for each source it matches,
-and `stage_analysis_done` at the end. Entries have these kinds:
+The analysis routine `analyze_stage(job, token, progress)` outputs a `StageAnalysis` data structure:
 
-| Kind | Meaning | Default processing |
+| Clip Kind | Description | Default Action |
 |---|---|---|
-| Full song | The primary full-length match for a source | Reference cancellation enabled |
-| Short fragment | A local reuse of the same source | Cancelled |
-| Unmatched | A gap without reliable source coverage | Preserve original audio |
-| Manual | A segment the user entered; the confidence column reads "Manual" | Treated as a full song |
+| Full Song | Primary high-confidence match | Enable cancellation |
+| Short Fragment | Repeated short quotation or loop | Enable cancellation |
+| Unmatched | Unassigned interval | Retain live recording |
+| Manual | User-defined custom clip | Enable cancellation |
 
-Each matched entry records the stage start/end times, source file, source start/end times, tempo,
-confidence, and enabled state. The model rejects negative times, zero-length ranges, matched
-entries without a source, and out-of-range confidence.
+Each clip record stores stage start/end times, reference source path, reference start/end times, tempo stretch ratio, confidence score, and enabled status.
 
-The tempo column shows the factor the entry's source is stretched by (stage duration divided by
-source duration), and reads "-" when no correction was applied. It is read-only: the analysis
-measured it, and editing it would have to recompute the source range too, so a wrong estimate is
-skipped by unchecking the entry instead. Manual entries are fixed at 1; process a spliced backing
-track through the whole-file path to correct its speed first.
+The desktop GUI implements a model/view architecture: `TimelineModel` (subclassing `QAbstractTableModel`) wraps `StageAnalysis` directly. Updates and inputs are validated in `setData()`; invalid edits trigger `edit_rejected` and revert to previous values. Clip additions and deletions use `add_manual_clip` and `remove_manual_clip` in `matching.py`, shared by the WebAssembly frontend.
 
-After detected occupied ranges are merged, any gap of at least 0.25 seconds produces an unmatched
-entry. Sources that were not detected are listed separately for manual review.
+### Manual Clips and Medley Edits
 
-The interface presents this table through Qt's model/view classes: `TimelineModel`
-(a `QAbstractTableModel` in `features/reference_removal/timeline_model.py`) treats the analysis as
-its single source of truth, and `TableView` only displays it. Cell text, alignment, check state, and
-editability come from `data()` and `flags()`; user edits are parsed and validated in `setData()`
-before they reach the analysis, and an invalid entry returns `False` and emits `edit_rejected`, so
-the view restores the previous value on its own. Inserting and removing segments goes through
-`add_manual_clip` / `remove_manual_clip` in `matching.py`, and the browser build's timeline calls the
-same pair. There is no whole-table repaint and no code that blocks signals raised by its own
-repainting; a language change simply makes the model emit `dataChanged`.
+For medleys or rearranged live edits, automatic placement can be supplemented using "Add clip". Users edit stage boundaries and reference ranges directly. Manual clips carry a "Manual" confidence label and default to unit tempo ($1.0$).
 
-### Manual Segments and Spliced Backing Tracks
+Automatically detected clips can be unchecked but not removed, preserving an audit trail of detected segments. Manually added clips can be freely removed.
 
-The analysis places at most one full-song position per source, and the fragment scan is weighted
-toward the first and last 75 seconds of the recording. A **spliced backing track** — the same song
-cut into pieces and replayed in an order the performance calls for — is outside what that search can
-reconstruct.
+## Segmented Rendering Pipeline
 
-The timeline therefore accepts hand-entered rows through "Add segment". A new row lands at the
-start of the first unidentified range, and the editable stage-time and source-range columns move
-it to its real position. Manual segments are full songs rather than fragments: a fragment is
-what the matcher found on its own, and a range the user typed in is not one. The confidence column
-reads "Manual" rather than inventing a detection score.
+Rendering is performed by `render_stage_job(job, analysis, token, progress)`:
 
-Only manual segments can be removed. Detected entries are skipped by clearing their checkbox and
-stay in the list for review.
+1. **Buffer Allocation**: Allocates an output memory-mapped floating-point buffer matching the live recording duration and channels, prefilled with original audio.
+2. **Slicing and Resampling**: Reads and resamples corresponding reference segments to the recording sampling rate.
+3. **Tempo Stretching**: Applies WSOLA pitch-preserving stretching if the clip tempo ratio differs from $1.0$.
+4. **Local Delay Tracking & Gating**: Evaluates local delay tracking. To prevent inaccurate trajectories from degrading valid timeline boundaries, the engine computes $2\times2$ direct fit residuals; alignment is adopted only if residual metrics improve upon the unaligned timeline.
+5. **Complex Subtraction and Masking**: Applies frequency-domain cancellation and residual masking using only signals reconstructed from the live mix.
+6. **Boundary Crossfades**: Blends processed segments back into the output buffer with up to $50\text{ ms}$ raised-cosine crossfades.
+7. **Backing Stem Generation**: If backing export is enabled, transfer gains are applied to aligned reference slices and mixed into a parallel backing buffer.
+8. **Atomic Export**: Writes PCM WAV files atomically at the native sample rate and bit depth of the live recording.
 
-A spliced backing track can also bypass matching: cut the source into the performance's order
-first, which yields a source as long as the recording, and hand it to the whole-file path to cancel
-in one continuous pass. That returns it to a single continuous alignment problem, but the splice
-points have to be accurate to within tens of milliseconds — local delay tracking corrects at most
-2 ms per 0.1 s, so a half second of error takes about 25 seconds to recover from, and cancellation
-fails for that whole time.
+## Failure Policies and Boundary Conditions
 
-## Segmented Rendering
-
-`render_stage_job(job, analysis, token, progress)` reports `stage_render_loading` first and
-`stage_render_clip` for each entry. It creates a floating-point buffer with the same duration and
-sample rate as the stage recording and copies the original audio in full, then processes each
-enabled full song and optional short fragment:
-
-1. Read the source and resample it to the stage recording's sample rate.
-2. Slice the stage and source ranges specified by the timeline.
-3. Stretch the source slice by the entry's tempo when it is not 1, preserving pitch.
-4. Optionally perform local drift alignment.
-5. Measure how well both the original timeline position and drift-aligned result explain the stage
-   audio; use drift alignment only when the new result is no worse.
-6. Process the segment with reference cancellation. Reconstruction uses only the original
-   stage mix and never mixes the source waveform into the result.
-7. Blend the result into the recording copy with fades of up to 50 ms at both boundaries.
-
-After all segments are complete, the output is written atomically as PCM WAV at the stage
-recording's own sample rate and bit depth (`analyzing_output`, then `saving`). Unmatched ranges are
-already a bit-exact copy of the original, so raising the export to a fixed floor would only enlarge
-the file without adding spectral detail absent from the original recording.
-
-When the backing is also requested, each clip's pass renders that stretch's backing from its own
-aligned source as it goes, and blends it into the backing buffer under the same weights; the buffer
-starts silent, so unmatched ranges are silent in the backing too - nothing was cancelled out of
-them. The 50 ms fades at the segment boundaries are the same for both tracks.
-
-Explanatory power is calculated by fitting small $2\times2$ direct models in multiple windows,
-measuring their residual ratios, and taking the median, so that one abnormal window cannot
-dominate the decision. This selection gate prevents an already correct timeline position from
-being damaged by an unreliable local-delay trajectory.
-
-## Failure Strategy
-
-- Rendering is refused when there are no usable matches and more than one source, rather than
-  producing an input-identical file that appears successful; a lone source that cannot be located
-  falls back to the whole-file path.
-- An unreliable tempo estimate, too small an improvement, or a change below 0.2% is treated as 1:1,
-  exactly as before the feature existed.
-- The output cannot overwrite the stage recording or any source, and the stage recording cannot also
-  be used as a song source.
-- Temporary audio for each segment is cleaned immediately after processing; mapped storage keeps
-  memory use under control for the full output.
-- Disabled or unmatched ranges are never replaced with silence, removed from the timeline, or
-  allowed to change the original duration.
+1. **Multi-Source Match Rejection**: If multiple reference tracks are supplied but none can be placed, or if all candidate clips are unchecked by the user, the engine raises `ValueError` and refuses to render. This prevents writing untouched audio files masquerading as successful cancellations. A single unplaced source falls back to whole-file processing.
+2. **Onset Feature Boundaries**: Spectral flux relies heavily on percussive drum onsets. For acapella performances, ambient soundscapes, or recordings where loud crowd cheering completely masks backing rhythm onsets, correlation confidence drops. Users should verify and supplement matches using manual timeline clips.
+3. **Geometric Heuristic Edge Cases**: The 1-second duration tolerance heuristic assumes an equal-length source spans the entire performance. If an unrelated track of matching length is inadvertently provided, the whole-file path is triggered; user inspection via the GUI timeline is recommended before processing.

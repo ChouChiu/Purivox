@@ -4,34 +4,26 @@
   <a href="../README.md">简体中文</a> · <strong>English</strong>
 </p>
 
-This directory documents Purivox's internal design, signal-processing methods, and
-development workflow. For installation and usage instructions intended for general users, see
-the [project README](../../README_EN.md). Flows and dependencies are drawn with Mermaid, and
-mathematical models use LaTeX.
+This directory contains technical specifications, digital signal processing (DSP) algorithms, and development guidelines for Purivox. For end-user installation and basic usage instructions, see the [project README](../../README_EN.md).
 
 ## Documentation Index
 
-| Document | Contents |
+| Document | Key Topics |
 |---|---|
-| [Architecture and Data Flow](architecture.md) | Layer boundaries, task orchestration, audio storage, cancellation, and error handling |
-| [Reference Cancellation](reference-removal.md) | Time alignment, complex transfer estimation, residual masking, and chunk blending |
-| [Source Matching, the Timeline, and Segmented Rendering](matching.md) | Multi-source fingerprints, candidate clustering, the timeline model, segmented rendering, and how the engine is chosen |
-| [Stem Split](stem-split.md) | Dispatch by channel layout, the complementary crossover, panning-adaptive centre extraction, and grouped levels |
-| [Browser Build (WebAssembly)](web.md) | The Pyodide runtime, the changes for a Qt-free build, the memory ceiling, cancellation, and deployment |
-| [Contributing](CONTRIBUTING.md) | Environment setup, code conventions, translations, verifying a change, commit conventions, and release |
+| [Architecture and Data Flow](architecture.md) | Architectural layering, task execution model, chunked memory management, responsive UI, and error handling |
+| [Reference Cancellation](reference-removal.md) | Global tempo and time alignment, complex transfer estimation, residual masking, and backing track generation |
+| [Source Matching, the Timeline, and Segmented Rendering](matching.md) | Multi-source log-flux features, candidate clustering, timeline models, and segmented rendering pipelines |
+| [Stem Split](stem-split.md) | Channel layout dispatch, complementary Linkwitz-Riley crossovers, panning-adaptive center extraction, and grouped gain normalization |
+| [Browser Build (WebAssembly)](web.md) | Pyodide runtime integration, Qt-free / single-thread constraints, heap memory budgeting, and lifecycle management |
+| [Contributing](CONTRIBUTING.md) | Environment setup, code and i18n conventions, testing matrix, CI/CD pipelines, and release procedures |
 
-## Suggested Reading
+## Reading Guide
 
-- To understand how a task moves through the GUI, background thread, and processing pipeline,
-  start with **Architecture and Data Flow**.
-- To adjust the removal quality, read **Reference Cancellation** and check the alignment before
-  raising the strength.
-- To change automatic source placement, read **Source Matching, the Timeline, and Segmented
-  Rendering** and the engine-choice rule in the architecture document's "One Pipeline, Two
-  Engines".
-- To change how the stem split separates, read **Stem Split** and bring a
-  `tools/eval_stems.py --compare` delta for the change.
-- Before submitting code or building a release, read **Contributing**.
+- **System Architecture and Concurrency**: Review [Architecture and Data Flow](architecture.md) to understand how the GUI, CLI, worker threads, and core processing pipelines interact.
+- **Cancellation Algorithms and Tuning**: Review [Reference Cancellation](reference-removal.md) for frequency-domain complex subtraction, adaptive regularization, and leakage regression models.
+- **Multi-Source Detection**: Review [Source Matching, the Timeline, and Segmented Rendering](matching.md) for acoustic fingerprinting, cross-correlation searches, and engine selection heuristics.
+- **Reference-Free Stem Extraction**: Review [Stem Split](stem-split.md) for complementary filter phases and generalized Gaussian panning window formulations.
+- **WebAssembly Deployment**: Review [Browser Build (WebAssembly)](web.md) for Emscripten memory layout and client-side execution constraints.
+- **Development and Verification**: Review [Contributing](CONTRIBUTING.md) for architectural linting rules, testing requirements, and commit conventions.
 
-These documents describe the current Python implementation. Synthetic regression results are not
-claims about quality on real music.
+> Technical documentation reflects the current codebase implementation. Synthetic benchmark metrics referenced throughout are used for regression testing; real-world performance should always be evaluated through comparative listening on live audio recordings.

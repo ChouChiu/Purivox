@@ -4,90 +4,70 @@
   <strong>简体中文</strong> · <a href="en/CONTRIBUTING.md">English</a>
 </p>
 
-这份文档写给要改这个仓库的人：怎么把环境跑起来、代码该放在哪、改完怎么验证、提交要写成什么样。
-算法和架构本身见[架构与数据流](architecture.md)与各功能文档。
+本文档阐述 Purivox 项目的开发环境搭建、架构分层规则、代码风格规范、多语言维护流程、测试验证与持续集成/发布指南。
 
-## 准备环境
+## 开发环境搭建
 
-项目用 uv 管理 Python、隔离环境和锁文件。装好 uv 后，在仓库根目录安装锁定的运行时依赖和默认开发
-依赖，Python 版本由 `.python-version` 决定，uv 会自动取：
+项目使用 [uv](https://docs.astral.sh/uv/) 作为包管理与隔离环境工具。克隆仓库后，在根目录执行依赖同步：
 
 ```bash
 uv sync --locked
 ```
 
-跑起来确认环境没问题：
+Python 解释器版本由 `.python-version` 统一指定，`uv` 将自动配置并初始化隔离虚拟环境。
+
+验证本地环境运行状况：
 
 ```bash
-uv run --locked purivox                                        # 图形界面
-QT_QPA_PLATFORM=offscreen uv run --locked purivox --selftest   # 管线冒烟，无需显示器
+uv run --locked purivox                                        # 启动桌面图形界面
+QT_QPA_PLATFORM=offscreen uv run --locked purivox --selftest   # 无头模式执行自检冒烟测试
 ```
 
-改依赖用 `uv add <包名>`、`uv add --dev <包名>` 或 `uv add --group deploy <包名>`，
-并把同步更新的 `pyproject.toml` 与 `uv.lock` 一起提交。
+依赖变更使用 `uv add <package>`、`uv add --dev <package>` 或 `uv add --group deploy <package>`，并将同步更新的 `pyproject.toml` 与 `uv.lock` 一同提交。
 
-不要在这个环境里再装别的会导出 `qfluentwidgets` 的 PyQt / PySide Fluent 组件。项目指定的是
-`PySide6-Fluent-Widgets[full]`，装第二个会让导入解析到哪一份变得不确定。
+请勿在该环境中安装其他可能导出同名 `qfluentwidgets` 命名空间的第三方 Qt 组件，以防符号解析冲突。
 
-## 代码放在哪里
+## 模块分层准则
 
-依赖只能向下流：`shared` 不导入我们的任何东西，功能包之间不互相导入，`app` 和 `web` 都不导入
-`entrypoints`。`tests/test_architecture.py` 解析 import 强制这条规则，越界会让构建失败。
+系统依赖方向严格自顶向下：
+- `src/shared/` 作为底层共享基础设施，严禁导入 `app`、`entrypoints` 或任何 `features/`；
+- 各业务功能包（`src/features/`）自包含业务页面、数据模型与处理逻辑，相互之间严禁跨包导入；
+- 外壳层（`src/app/` 与 `src/web/`）负责多模块协同编排，严禁反向导入 `entrypoints/`；
+- 两个或以上功能包共享的算法、数据类型或配置常量必须下沉至 `src/shared/`，严禁通过重导出建立隐式依赖。
 
-- 一个新功能就是 `src/features/` 下的一个新目录，自带页面、模型和处理逻辑。
-- 两个功能都要的东西，或者 GUI 与 CLI 都要的东西，向下沉到 `shared` 定义一次再引用，
-  例如 `shared.audio.BLOCK_FRAMES`、`shared.audio.AUDIO_EXTENSIONS`、
-  `shared.jobs.SIGMA_CHOICES`、`shared.i18n.SUPPORTED_LANGUAGES` 和 `shared.logging.LOG_LEVELS`。
-- 需要联合多个功能的编排放在 `app`，不要为了复用让功能包互相导入。
-- 公共数据模型按使用方归属：被多个功能消费的放 `shared`，只在一个功能内部用的留在原地，
-  不得为了方便从别的功能再导出。
+分层边界由 `tests/test_architecture.py` 静态检查，违背分层约束将导致构建与测试失败。
 
-分层的完整说明和每层职责见[架构与数据流](architecture.md)。
+## 编码规范
 
-## 代码约定
+### Python 规范
 
-### Python
+- 模块顶部统一使用 `from __future__ import annotations`，所有函数签名与数据结构必须具备完整的类型标注；
+- 任务与配置数据模型优先使用不可变数据类（`@dataclass(frozen=True, slots=True)`），固定枚举集合使用 `StrEnum`；
+- 模块日志统一通过 `logging.getLogger(__name__)` 获取，禁止吞咽非预期异常；
+- 代码格式与静态检查遵循 Ruff 规则集（行宽限制 100 字符，启用 E、F、I、UP、B、SIM、RUF 规则）。
 
-- 新模块使用 `from __future__ import annotations` 和完整类型标注。
-- 可变参数少的任务模型优先用 `frozen=True, slots=True` 数据类，固定字符串集合用 `StrEnum`。
-- 日志通过 `logging.getLogger(__name__)` 写入；只有明确记录的降级路径可以忽略局部失败。
-- Ruff 行宽 100，启用 E、F、I、UP、B、SIM 和 RUF 规则，E501 由格式化与评审控制。
+### Qt 与桌面端交互
 
-### Qt
+- 页面组件仅负责界面渲染与事件发射，后台异步任务统一由 `app/job_presenter.py` 协调并交由 `app/job_runner.py` 调度执行；
+- 跨线程接收信号的槽函数必须显式标注 `@Slot(<type>)`，确保 Qt 运行时正确派发排队连接；
+- 优先采用 Qt 推荐的最佳实践（如表格数据使用 `QAbstractTableModel` 与 Fluent `TableView` 结合，网络请求使用 `QNetworkAccessManager`，文件校验写入使用 `QSaveFile`）；
+- 单一功能包内的独立控件应进行组件化拆分。
 
-- 后台任务统一由 `app/job_presenter.py` 协调页面状态，再交给 `app/job_runner.py` 管理线程；
-  页面和业务管线不得自行创建线程。
-- 跨线程接收信号的槽用 `@Slot(<类型>)` 标注（worker → `JobRunner` → `JobPresenter`），
-  让 Qt 按声明的签名派发排队连接。
-- Qt 已经处理好的问题优先用 Qt 的方案：可编辑表格用 `QAbstractTableModel` + `TableView`，
-  不要用 `QTableWidget` 逐格填 item；HTTP 用 `QNetworkAccessManager`（系统代理、跳转、超时、
-  进度、`abort()`）；需要先校验再写入时用 `QSaveFile`；路径用 `QStandardPaths`。
-  标准库已经等价或更好的地方保持不变（`hashlib`、`tempfile` + `numpy.memmap`、
-  argparse 子命令、DSP 线程池）。
-- 页面里的独立交互控件拆成同功能包内的小模块，例如试听跳转控件位于
-  `reference_removal/preview.py`。
+### 音频处理与内存管理
 
-### 音频与内存
+- 长音频处理必须结合 `create_pcm_audio` 与流式分块循环（分块常量统一使用 `shared.audio.BLOCK_FRAMES`），禁止直接将全文件载入普通内存数组；
+- 密集计算循环中须定期调用 `CancellationToken.raise_if_cancelled()` 响应任务取消；
+- 音频写出统一使用 `write_wav_atomic` 原子写入；
+- 导出文件严格保持输入音频的原生采样率与格式位深（8/16-bit PCM 输出为 16-bit PCM，其余及有损格式输出为 24-bit PCM），严禁进行无物理意义的升采样。
 
-- 长音频用 `create_pcm_audio` 与分块循环（块大小取 `shared.audio.BLOCK_FRAMES`），
-  不要把整个文件复制到普通内存数组；映射页用 `shared.audio.release_mapped_pages()` 释放。
-- 可取消循环必须定期调用 `CancellationToken.raise_if_cancelled()`，且不得忽略取消异常。
-- 输出用 `write_wav_atomic`，不要直接覆盖目标文件。
-- 导出规格跟随输入文件：`AudioData` 同时携带解码源的 `sample_rate` 与 `bit_depth`，
-  `resample_audio` 与 `stereo()` 逐级传递，`write_wav_atomic` 与 `analyze_audio` 直接读取，
-  不再接收格式参数。`WAV_BIT_DEPTHS` 为 `(16, 24)`：8-bit 与 16-bit PCM 输入写出 16-bit，
-  更宽的 24/32-bit PCM、浮点以及所有有损格式写出 24-bit。不存在导出规格下限，
-  也不得为凑规格而向上重采样。
+### DSP 算法演进准则
 
-### DSP
+- 所有对消与分轨算法的输出信号仅允许从原始混音中重构提取，禁止将参考信号或其反相波形直接写入输出；
+- DSP 算法改动须通过量化指标验证（使用 `tools/eval_cancellation.py` 与 `tools/eval_stems.py` 执行基线比对），并配合实际现场素材进行试听核对。
 
-所有用户可选的处理路径都只能从现场原混音重建，不得把音源独有的内容或它的反相写进结果。
-DSP 改动按测量接受，不按论证接受：先过自动化检查，再对固定的真实素材导出可以直接试听对比的版本。
-技术检查结果不应写成“已确认听感”。
+## 多语言国际化（i18n）
 
-## 界面文案与翻译
-
-界面字符串以 Qt Linguist 的 `.ts`（XML）为可编辑来源，编译产物 `.qm` 由 `QTranslator` 加载：
+多语言文案源文件为 Qt Linguist XML 格式（`src/resources/i18n/*.ts`），编译生成的 `*.qm` 二进制文件供应用运行时加载：
 
 ```text
 src/resources/i18n/zh_cn.ts   src/resources/i18n/zh_cn.qm
@@ -97,17 +77,9 @@ src/resources/i18n/ja_jp.ts   src/resources/i18n/ja_jp.qm
 src/resources/i18n/ko_kr.ts   src/resources/i18n/ko_kr.qm
 ```
 
-`.ts` 按键索引而非按原文索引：`<source>` 是 `nav_mr` 这样的短标识，`<translation>` 是各语言文本，
-五个文件同属 `Purivox` 这一个 context。因此改中文不会牵动其他语言的条目，`pyside6-lupdate`
-也不适用（它按源码中的字面量提取），翻译条目由人工维护。
-
-动手前先在五个 `.ts` 里搜一遍：桌面端已经给大多数状态起过名字（`warn_no_song`、
-`stage_need_sources`、`preview_empty`、整套 `home_*`），复用现成的键能让五种语言一次就对。
-
-`zh_tw` 是正体中文（台湾）用语，不是 `zh_cn` 的逐字转换：檔案、取樣率、辨識、快取，
-而不是文件、采样率、识别、缓存。测试会钉住其中几个词，防止有人用简繁转换工具覆盖它。
-
-改过任一 `.ts` 都要重新编译，并把 `.ts` 与 `.qm` 一起提交：
+1. **键值维护**：`.ts` 文件按上下文键名（Key）组织。新增文案前应优先复用现有词条；
+2. **正体中文规范**：`zh_tw` 遵循台湾正体中文技术术语习惯（如「檔案」、「取樣率」、「辨識」、「快取」等）；
+3. **编译要求**：修改任一 `.ts` 后，须执行重新编译并将更新后的 `.ts` 与 `.qm` 一并提交：
 
 ```bash
 for locale in zh_cn zh_tw en_us ja_jp ko_kr; do
@@ -116,47 +88,20 @@ for locale in zh_cn zh_tw en_us ja_jp ko_kr; do
 done
 ```
 
-增加、删除或重命名翻译键时必须同步修改五个 `.ts`。测试会检查键集合完全一致、`.qm` 与 `.ts`
-未过期，并且源码中出现的每个字面量键都存在于所有语言。调用 `tr(key, **values)` 时不得依赖
-“未知键返回键名”的回退行为。
+4. **完整性约束**：测试套件会校验五种语言的键集合完全一致，且不存在过期 `.qm` 文件。
 
-语言是应用级状态：`shared.i18n.install_language()` 安装对应语言的 `QTranslator`，`tr()` 经
-`QCoreApplication.translate()` 查表，因此任务对象和处理管线不携带语言参数。GUI 在设置页切换语言时
-重新安装并调用各页面的 `retranslate()`，CLI 则在启动时按 `--lang` 安装一次。
+## 构建清单配置（三处同步）
 
-配置由 `src/shared/config.py` 中的 QConfig 单例管理。改持久化选项时要同时考虑默认值、验证器、
-页面重译和测试。
+新增源码文件或目录时，须检查以下三处打包配置，防止发布包遗漏组件：
+1. `pyproject.toml` 中的 `[tool.hatch.build.targets.wheel] packages`；
+2. `pyproject.toml` 中的 `[tool.pyside6-project].files`；
+3. `pysidedeploy.spec` 中的 `include-package` 清单。
 
-## 新增文件要登记三处
+`tests/test_packaging.py` 会自动核对源码目录与配置清单的对应关系。
 
-新增源码目录或文件时检查三个发布清单，漏掉任一处都可能开发环境正常、而 wheel 或独立程序缺文件：
+## 本地验证流程
 
-1. `pyproject.toml` 的 wheel 包列表；
-2. `pyproject.toml` 的 `[tool.pyside6-project].files`；
-3. `pysidedeploy.spec` 的 `include-package` 或相应包含项。
-
-`tests/test_packaging.py` 会自动比较所有 `src/**/*.py` 与 `[tool.pyside6-project].files`，
-并拒绝遗漏或失效条目；新增顶层包时仍需人工确认 wheel 与 Nuitka 的包清单。
-
-## 浏览器前端
-
-`web/` 是 Vite + React 前端，跑的是同一份 `src/`：`predev` / `prebuild` 会把 Python 树打包成
-`purivox-src.zip` 并生成翻译 JSON，所以改完 Python 或 `.ts` 词条后重新跑一次即可。
-
-```bash
-cd web && bun install
-bun run dev        # http://localhost:5173/
-bun run check      # tsc + Biome + 分层检查，build 会先跑它
-```
-
-前端的分层与 Python 端同构，同样由 `scripts/check-architecture.mjs` 强制。改动 DSP 时注意
-Pyodide 没有 pthread，`process_audio` 因此有串行分支，
-`tests/features/reference_removal/test_dsp_execution.py` 要求两条路径输出一致。
-细节见[浏览器版（WebAssembly）](web.md)。
-
-## 验证改动
-
-Qt 测试必须用离屏平台，conftest 会设置它：
+在提交代码前，请执行完整的本地自动化测试与静态检查（Qt 测试须在离屏环境下运行）：
 
 ```bash
 uv run --locked ruff check src tests
@@ -166,98 +111,33 @@ QT_QPA_PLATFORM=offscreen uv run --locked purivox --selftest
 uv build
 ```
 
-改了 DSP 还要给出测量，而不是说明：
-
-```bash
-uv run --locked python tools/eval_cancellation.py --save baseline.json    # 改动前
-uv run --locked python tools/eval_cancellation.py --compare baseline.json # 改动后
-```
-
-慢速基准要显式开启，用 15 分钟、44.1 kHz 双声道音频检查参考对消的输出长度、接缝和峰值常驻内存，
-内存上限 2 GiB：
+针对长音频进行的 15 分钟高负载基准测试（检查内存泄漏与接缝连续性，需显式开启）：
 
 ```bash
 QT_QPA_PLATFORM=offscreen uv run --locked pytest tests/benchmarks --runslow
 ```
 
-合成信号指标只用来发现实现回归，不构成对真实音乐的结论。
+修改文档后，须确保文档链接与双语对称性测试通过：
 
-### 测试放在哪
-
-`tests/` 与 `src/` 路径一一对应，所以改动的测试就在镜像位置：DSP 与对齐回归在
-`tests/features/reference_removal/`，时间线、匹配与分段渲染也在同一目录，
-运行器与协调器生命周期以及 pytest-qt 的界面测试在 `tests/app/`，
-公共音频、任务协议和控件在 `tests/shared/`。
-
-Pytest 用 `importlib` 导入模式，允许不同目录使用与源码对应的相同测试文件名而不发生模块碰撞。
-另有三道仓库级闸门：`test_architecture.py`（导入边界）、`test_packaging.py`（发布清单）、
-`test_documentation.py`（README 索引、文档翻译配对、内部链接）。重命名文档时同步改索引和引用，
-不要留下失效链接等人发现。
-
-没有测试会访问真实主机：更新检查的测试把 `updates.RELEASES_API` 指向本地服务器。
-
-### CI 会跑什么
-
-Pull Request 和 `main` 上的提交由 `.github/workflows/build.yml` 触发，它只是一层薄壳，
-调用 `.github/workflows/common.yml` 跑完整流水线：先过上面那套质量检查，再并行构建
-Linux、Windows 与两个架构的 macOS 产物。质量检查只在 Ubuntu 上跑一遍，Windows 与 macOS 任务
-只产出二进制。工件保留 14 天，同一分支有新提交时旧任务会被取消。
-
-编译任务的耗时几乎全看 Nuitka 的编译缓存命中与否：命中 5 到 12 分钟，落空 55 分钟以上。
-缓存目录必须写 Nuitka 自己的缓存根（`~/.cache/Nuitka`、`~/Library/Caches/Nuitka`、
-`%LOCALAPPDATA%\Nuitka\Nuitka\Cache`）——它把 `CCACHE_DIR` 指到那里面，系统的
-`~/.cache/ccache` 一直是空的。缓存 key 只跟 `uv.lock` 和 `pysidedeploy.spec` 走：
-把源码 hash 也放进去，每次推送都会存一份约 400 MB 的新条目，10 GB 配额很快就把
-下一次要用的那条挤掉了。
-
-## 提交
-
-- **主题**写成 `type(scope): 改了什么`，祈使句、小写、不加句号。在用的类型有 `feat`、`fix`、
-  `perf`、`refactor`、`docs`、`ci`、`build`、`chore`；scope 是区域（`dsp`、`ui`、`web`、`audio`、
-  `i18n`、`isolation`、`settings`、`shared`、`release`），横跨整个仓库的改动可以省略。
-- **正文**用英文散文，按 80 列折行，说明这个改动为什么长这样：问题是什么、哪个约束定了这个设计、
-  否决了什么以及为什么。不是把 diff 重述一遍，也不是罗列要点。
-- 一次提交做一件事。翻译改动要带上重新编译的 `.qm`，依赖改动要带上 `uv.lock`。
-
-仓库里的既有提交就是样例：
-
-```text
-perf(dsp): build the cancellation chain in place instead of a temporary per step
-fix(web): merge Fluent class names instead of concatenating them
-refactor(dsp): run the pipelines where there is no Qt and no threads
+```bash
+QT_QPA_PLATFORM=offscreen uv run --locked pytest tests/test_documentation.py
 ```
 
-面向用户的改动还要在 `CHANGELOG.md` 里对应版本的小节补一条。每个已发布版本一节，中英双语——
-发布流程会把与标签同名的那一节发成 Release 说明，应用内“检查更新”弹窗显示的也是这段文本。
+## Git 提交规范
 
-## 打包与发布（维护者）
+- **Commit 标题**：格式为 `type(scope): description`（小写祈使句，无句号）。常见类型：`feat`、`fix`、`perf`、`refactor`、`docs`、`ci`、`build`、`chore`；
+- **Commit 正文**：建议使用英文清晰说明改动背景、关键约束与技术选型原因，按 80 字符列宽折行；
+- **更新日志**：面向用户的实质性改动须同步更新 `CHANGELOG.md` 中对应版本小节（中英双语对照）。
 
-日常贡献不需要执行这一节。
+## 发布流程（维护者参考）
 
-`uv build` 把 wheel 与 sdist 写到 `dist/`，版本号以 `src/app/version.py` 为唯一来源，
-由 Hatch 在构建时读取。独立程序由 `pyside6-deploy`
-封装 Nuitka 构建（`uv sync --locked --group deploy`），Linux 与 Windows 是 onefile 的
-`dist/Purivox.bin` / `Purivox.exe`，macOS 是应用包 `dist/Purivox.app`，arm64 与 x86_64 各构建
-一份，都是原生构建，分别跑在 `macos-15` 与 `macos-15-intel` runner 上——numpy、scipy、soxr 与
-soundfile 每个架构一个 wheel，没有可以交叉编译的东西。它们都内含 Python 与 Qt。产物由 CI
-构建，发布前应实际启动一次，确认解包路径下的资源文件仍能被找到。
-
-发布由标签驱动，除打标签外没有手动步骤：
-
-1. 更新 `src/app/version.py` 里的 `__version__`；
-2. 在 `CHANGELOG.md` 顶部新增一节，标题写成 `## v<版本> — <日期>`；
-3. 提交后打上同名标签并推送。
+1. 更新 `src/app/version.py` 中的 `__version__`；
+2. 在 `CHANGELOG.md` 顶部新增对应的版本小节：`## v<版本> — <日期>`；
+3. 提交变更并打上带注释的版本标签：
 
 ```bash
 git tag -a v1.0.0 -m "Purivox v1.0.0"
 git push origin main --follow-tags
 ```
 
-标签推送后 `release.yml` 先跑完 `common.yml` 的整条流水线，`publish` 任务再把这一次构建出来的
-产物发布出去，并重新生成一份扁平的 `SHA256SUMS`。质量检查的第一步会核对标签与
-`src/app/version.py` 是否一致，不一致就在几分钟内失败，不会等编译跑完一个小时。带后缀的标签
-（如 `v1.1.0-rc1`）发布为 pre-release，`releases/latest` 不会返回它。重新运行同一个标签的构建
-会覆盖上传资产，不会新建 Release。
-
-AUR 包（`deployment/aur/`）在发布之后由人运行 `deployment/aur/publish.sh` 推送，从不由 CI 做：
-它把 `purivox-bin` 重新指向这次发布的 `.deb`，本地构建一次作为检查，再推 `PKGBUILD` 与 `.SRCINFO`。
+GitHub Actions 将自动触发 `release.yml`，执行质量检查、跨平台编译（Linux、Windows、macOS arm64/x86_64）并发布 Release 工件与校验和。AUR 软件包在 GitHub Release 完成后由维护者执行 `deployment/aur/publish.sh` 更新。

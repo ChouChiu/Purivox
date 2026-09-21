@@ -4,283 +4,98 @@
   <a href="../web.md">简体中文</a> · <strong>English</strong>
 </p>
 
-**Live at <https://purivox.wwchun.top/>**
+**Live Deployment: <https://purivox.wwchun.top/>**
 
-The browser build is Purivox's third shell, alongside the GUI and the CLI. It runs the very same
-Python pipelines from `src/` under [Pyodide](https://pyodide.org/). The site is entirely static and
-deployed to GitHub Pages, with **no backend**: audio stays in the visitor's own tab from beginning
-to end and is never uploaded anywhere.
+The Purivox browser build is a backend-free static web application operating alongside the desktop GUI and CLI. Powered by [Pyodide](https://pyodide.org/), it compiles and runs core Python signal-processing pipelines directly in WebAssembly. Hosted statically on GitHub Pages, **it requires no backend server**: audio data remains entirely inside the user's browser tab.
 
-## What it covers
+## Scope of Support
 
-| Feature | Browser | Why |
-|---|---|---|
-| Vocal isolation (matching, timeline, both engines) | ✅ | `run_isolation_job` carries no Qt |
+| Feature Module | Browser Support | Notes |
+|---|:---:|---|
+| Vocal Isolation (Matching + Timeline + Dual Engines) | ✅ | Fully ported and verified without Qt dependencies |
+| Acoustic Stem Split | Planned | Awaiting memory optimization for WebAssembly |
 
-There is one copy of the algorithm. The browser runs the desktop's own `src/features/**`, packed
-into `purivox-src.zip` at build time; there is no second TypeScript implementation.
+Core DSP algorithms reuse the code under `src/features/` directly, packaged into `purivox-src.zip` during build. No separate TypeScript implementations exist.
 
-## Structure
+## Runtime Architecture
 
 ```mermaid
 flowchart TD
-    ui["page main thread<br/>React + Fluent UI v9"] -->|postMessage| worker["Web Worker"]
-    worker -->|loadPyodide| pyodide["Pyodide (wasm32)"]
-    pyodide -->|loadPackage| deps["numpy · scipy · soundfile · soxr"]
-    pyodide -->|unpackArchive| sources["purivox-src.zip = the Python tree from src/"]
+    ui["Main Thread<br/>React + Fluent UI v9"] -->|Web Worker Messages| worker["Web Worker"]
+    worker -->|Initialize| pyodide["Pyodide (wasm32)"]
+    pyodide -->|Load Wheels| deps["numpy · scipy · soundfile · soxr"]
+    pyodide -->|Unpack Archive| sources["purivox-src.zip (src/ mirror)"]
     sources --> bridge["web/bridge.py"]
     bridge --> pipelines["run_isolation_job<br/>analyze_stage<br/>render_stage_job<br/>run_reference_job"]
 ```
 
-- `src/web/bridge.py` is the JavaScript-facing job entry point: **JSON in, JSON out**, exporting
-  `probe_audio`, `estimate_isolation`, `analyze_stage`, `run_isolation`, `add_timeline_clip`,
-  `remove_timeline_clip` and `edit_timeline_clip`. Handing a dict across would give the page a proxy
-  it must `destroy()` by hand, and a progress callback fires often enough that one leaked proxy per
-  update matters.
-- `src/web/timeline.py` serialises the timeline. Inserting and removing clips calls
-  `add_manual_clip` / `remove_manual_clip` in `features.reference_removal.matching` directly, so the
-  page edits under the same rules the GUI's `TimelineModel` does.
-- `src/web/limits.py` estimates the memory budget; see below.
-- `web/` is the Vite + React front end, whose `bun run build` output deploys as-is. It is
-  organised by feature, mirroring the Python tree.
+- `src/web/bridge.py`: JSON-based bridge interface between JavaScript and Python, avoiding object proxy lifecycle leaks;
+- `src/web/timeline.py`: Timeline data serialization calling matching routines in `matching.py`;
+- `src/web/limits.py`: WebAssembly heap memory quota estimation and pre-execution rejection gates;
+- `web/`: Vite + React web application mirroring Python module organization.
 
-## How the front end is laid out
+## Frontend Architecture
 
-The front end mirrors the Python tree: it is organised by **feature**, not by kind of file.
+The frontend project resides in `web/src/` organized by domain feature:
 
 ```text
 web/src/
-  main.tsx                       entry point
-  app/App.tsx                    the shell: navigation, theme, runtime wiring
-                                 (the counterpart of src/app/main_window.py)
+  main.tsx                       Application entrypoint
+  app/App.tsx                    App shell: navigation, theme, runtime bootstrapping
   features/
-    reference_removal/           MrPage.tsx, Timeline.tsx, clock.ts, job.ts
-    settings/                    SettingsPage.tsx
-  shared/                        depends on neither app nor features
-    runtime/                     PurivoxClient, the worker protocol, useClient, useJob, types
-    worker/                      the Pyodide worker
-    audio/                       the decoder fallback and upload preparation
+    reference_removal/           Isolation UI: MrPage.tsx, Timeline.tsx, job.ts
+    settings/                    Settings UI: SettingsPage.tsx
+  shared/                        Shared utilities
+    runtime/                     PurivoxClient, worker protocol, task hooks
+    worker/                      Pyodide worker lifecycle
+    audio/                       Browser decoding and chunked uploads
     i18n/  ui/  jobs.ts  theme.ts
 ```
 
-The boundaries are the same ones the Python tree has, and they are enforced rather than merely
-agreed: `scripts/check-architecture.mjs` parses imports and requires that `shared` import neither
-`app` nor `features`, that no feature import another, and that `app` not import the entry point. It
-runs alongside `tsc` and Biome under `bun run check`.
+Frontend architecture is checked statically via `scripts/check-architecture.mjs`, enforcing that `shared` remains domain-independent and feature packages do not import each other.
 
-The split is visible in the code: the timeline's `clock.ts` carries milliseconds because
-its ranges are editable, while the result card's duration label does not and lives in
-`shared/ui/duration.ts`. The desktop divides them the same way — the first is `clock()` in
-`reference_removal/timeline_model.py`, the second the private `_clock()` in `reference_removal/page.py`.
+## Adaptations for Qt-Free and Single-Threaded Environments
 
-## Changes made for a build with no Qt and no threads
+1. **Localization Decoupling**: `shared/i18n.py` degrades gracefully without Qt, forwarding raw translation keys so the frontend can render strings from precompiled JSON catalogs.
+2. **Sequential Dispatch**: Because Pyodide CPython lacks POSIX thread pooling, `process_audio` incorporates a sequential processing branch whose output is bit-identical to the multi-threaded path (verified by `test_dsp_execution.py`).
+3. **Direct Heap Allocation**: In Emscripten, `mmap` cannot alias memory directly to the wasm32 heap. To prevent redundant allocations, `create_pcm_audio` allocates audio arrays directly on the heap.
+4. **Strided STFT Slicing**: `shared/dsp/spectral.py` extracts frames via direct stride hops rather than large intermediate matrices, preventing index overflows on 32-bit wasm32 addressing.
 
-The one hard Qt dependency on the browser path used to be `shared/i18n.py`, imported at module
-scope by `shared/progress.py`, which every pipeline uses through `report_progress`. Now:
+## Frontend Implementation Details
 
-- `shared/i18n.py` imports Qt lazily, and `tr()` resolves a key to itself where Qt is absent.
-- `ProgressEvent` carries `key` and `values`, so progress reaches the page untranslated and the
-  front end renders it from the same `.ts` catalogue. The `.ts` files remain the single authority
-  for every string: the desktop compiles them to `.qm` with `pyside6-lrelease`, and the browser
-  generates JSON from them with `scripts/build-i18n.mjs`.
-- `process_audio` gained an inline schedule. The CPython that Pyodide builds has no pthreads, so
-  the pool cannot start a worker. The block layout is unchanged and only the execution differs, so
-  both paths produce bit-identical output
-  (`tests/features/reference_removal/test_dsp_execution.py`).
-- `create_pcm_audio` and `resample_audio` allocate on the heap here rather than through a temporary
-  file and `np.memmap`. Emscripten's filesystem keeps a file's contents in a JavaScript-side array
-  that `mmap` cannot alias into the wasm heap, so it allocates a second region and copies — which
-  makes a mapped buffer cost two of everything it holds. Measured over one three-minute whole-file
-  job: the mapped build held 190,512,000 bytes under `/tmp`, exactly its three full-length buffers,
-  while both builds used the same wasm heap. Allocating on the heap simply removes that copy.
-- `release_mapped_pages` became best-effort. There is no mapping left to release on the browser
-  path, and Emscripten's `msync` reports a bad descriptor rather than succeeding anyway.
-- `stft` in `shared/dsp/spectral.py` strides straight to the hop positions. Framing every offset
-  first and keeping every `hop`-th row made an intermediate view `hop` times taller, and numpy
-  refuses a view whose nominal size does not fit a pointer — which under wasm32 is 32 bits, a
-  ceiling that a few seconds of 44.1 kHz audio passes. Both formulations give identical results.
-- `log_flux_bands` frames at the hop the same way, and reduces each block of the magnitude
-  spectrum to its bands as it goes. It used to call `scipy.signal.stft`, which frames every offset
-  too: the 4 kHz matching proxy hits the same ceiling past 131 seconds, so every recording longer
-  than two minutes failed in the browser at the first step of the analysis. Blocking also keeps
-  peak memory off the duration — 19 MB against 55 MB over a three-minute analysis — and both
-  formulations are identical bit for bit.
+- **Dependency Loading & Progress**: Pyodide and scientific wheels total $\sim 23\text{ MB}$. The loader presents four distinct loading phases, leveraging parallel downloads to minimize cold start time.
+- **Chunked File Uploads**: Files are written into Emscripten virtual storage in $4\text{ MiB}$ chunks, providing total length headers upfront to allocate contiguous space.
+- **Custom Preview Player**: Built on the Web Audio API with Fluent UI styling, featuring continuous timeline scrubbing and text-labeled controls to avoid intrusive tooltip popovers.
+- **Persistent State**: Tabs hide via CSS rather than unmounting, maintaining background task execution and audio playback across navigation.
+- **Responsive Layout**: Inherits desktop breakpoints, stacking controls vertically on mobile viewports.
 
-## Choices the page makes
+## Memory Budgeting
 
-### The loading state does not fake a progress bar
-
-A first visit downloads about 23 MB — the
-runtime at 5.7 MB plus numpy 2.8, scipy 13.2, soundfile 0.7 and soxr 0.1, measured compressed
-against the pinned build. Pyodide's lock file carries no sizes, so a real byte-level bar is not
-available; the page shows coarse progress through the four startup stages and says plainly that the
-first visit costs about 23 MB and the browser caches it. Telling the visitor how long they are
-waiting beats inventing a percentage. The packages download in one parallel `loadPackage` call:
-loading them one at a time would give finer progress but a slower start, and the total is what the
-visitor waits for. A failed boot offers a retry rather than requiring a reload.
-
-### Uploads are chunked, so they do have progress
-
-Files are written into Pyodide's filesystem in
-4 MiB slices, which keeps the whole file from ever being resident and gives a song of ordinary
-length half a dozen progress steps rather than one. The first slice carries the file's final size
-so the runtime allocates it once: appending to an Emscripten file reallocates the whole array and
-copies back everything written so far, growing by an eighth at a time, so a long recording is moved
-through memory over and over. Measured on a 151 MB file, 1.5 seconds became 0.5.
-
-### Shortcuts live in the app layer, not on a page
-
-`Ctrl+O` chooses files, `Ctrl+Enter` starts,
-`Esc` cancels, `F5` finds songs and `Ctrl+P` toggles the preview, matching the desktop — and for
-the desktop's reason: page-local `Ctrl+O` bindings would be an ambiguous overload, and a
-window shortcut works before a page has taken focus. While a time
-range is being edited, `Esc` and `Enter` belong to the input.
-
-### The interface reuses the vocabulary the desktop already settled on
-
-The home page, the specific message when an input is missing ("Choose the stage / live audio
-first." rather than only greying out Start), the match summary and the empty preview state all
-come from keys that have been in the `.ts` catalogues all along and that the browser build simply
-was not using. The brand mark is not a redrawing either:
-`scripts/build-assets.mjs` copies the desktop's `src/resources/purivox.svg` into the site's favicon
-and header mark, so there is one source for it.
-
-### Choosing a file shows what the decoder read
-
-`02:30 · 48.0 kHz · Stereo · 27 MB`. `probe_audio` has always
-returned this and the page never showed it; a wrong sample rate or a
-truncated file is now visible before a job runs rather than after, and those are the same numbers
-the memory estimate is computed from.
-
-### The preview is a built player, not `<audio controls>`
-
-The native control looks foreign in a
-Fluent interface and different in every browser. It is now play/pause, stop, a draggable seek bar, a
-`00:15 / 00:20` label and volume, worded with the desktop's own `preview_play`, `preview_pause`,
-`preview_stop`, `preview_volume` and `preview_error`. The behaviour matches too: pressing play at
-the end restarts, and `Ctrl+P` toggles playback. The buttons carry their words ("Play", "Stop")
-rather than a tooltip: the desktop does the same with `preview_play.setText(...)`, and a Fluent
-tooltip pops open on every keyboard focus and covers the card title, which is the last thing a
-control meant to be clicked repeatedly should do.
-The seek bar sets **no step** - Fluent draws a tick
-per step, and a step fine enough for audio would bury the rail under thousands of them, while
-seeking is continuous anyway. Only one preview plays at a time; starting one pauses the other.
-
-### The working pages are hidden on a tab change, not unmounted
-
-This fixes a real bug: unmounting
-stopped a preview mid-play and threw away both a finished result and a running job, none of which
-the visitor asked for by changing tab. The cost is that all pages are mounted at once, so the
-shortcut bindings are gated on `active` — otherwise the last page mounted would claim them.
-
-### Responsive behaviour follows the desktop's breakpoints
-
-Below 620px the file picker stacks its
-button above the path, matching the desktop's `PORTRAIT` rule; the tab strip and the timeline table
-each scroll sideways on their own, and the page itself never overflows horizontally at 375px.
-The keyboard hint appears only on a wide screen with a fine pointer — a touch screen has no Ctrl
-to press.
-
-### There is no code splitting
-
-The bundle is 560 KB of JavaScript, 160 KB gzipped, which is not
-the bottleneck next to 23 MB of Pyodide. Splitting the pages into async chunks would buy a
-saving the visitor cannot perceive, at the cost of another loading state.
-
-## The memory ceiling
-
-wasm32 caps the heap at 4 GB, and Emscripten's filesystem lives in the same tab's memory. The
-`np.memmap` discipline the desktop relies on has nothing to stand on here, so this build does not
-map at all (see above): every `create_pcm_audio` allocation is resident, and so is every uploaded
-file.
-
-`src/web/limits.py` estimates the peak with the formulas below, against a `WASM_BUDGET_BYTES` of
-2.6 GB - 4 GB less room for the interpreter, numpy/scipy and allocator fragmentation:
+The wasm32 architecture imposes a $4\text{ GB}$ address space limit. `src/web/limits.py` enforces a conservative budget ceiling of `WASM_BUDGET_BYTES = 2.6 GB` (reserving headroom for runtime and heap fragmentation):
 
 ```text
-render:     input bytes + 2 x stage buffer + (5 or 4) x longest source buffer + backing buffer
-            + export + DSP working set
-whole file: input bytes + stage buffer + 2 x source buffer + max(stage, source)
-            + backing buffer + export + DSP working set
-estimate:   the larger of the two, because which path runs depends on the material
-where:      buffer bytes = channels(2) x sample rate x 4 x seconds
-            backing buffer = 1 x stage buffer when the backing is exported, else 0
-            export bytes = channels(2) x sample rate x 3 x seconds, only when both stems are written
+Segmented:  input + 2×stage + 4×source_max + backing + export + DSP_workspace
+Whole-File: input + stage + 2×source + max(stage, source) + backing + export + DSP_workspace
 ```
 
-Exporting the backing costs one more full-length buffer: it is re-rendered from the source rather
-than subtracted in place. What is also charged is the first WAV staying in the Emscripten
-filesystem while the second is written, because that filesystem is the same heap.
+Jobs exceeding this budget are rejected prior to execution with an invitation to use the desktop application; warnings trigger at $60\%$ utilization.
 
-A job over the budget is refused outright, pointing at the desktop app; past 60% it warns. At
-44.1 kHz stereo that works out at roughly 35 minutes of stage recording; a longer source lowers the
-ceiling, and a source as long as the recording gives about 17 minutes. The formula uses the real
-sample rate, so 48 kHz and 96 kHz material tightens automatically.
+## Task Cancellation and Lifecycle
 
-Matching is not affected: `analyze_stage` calls `cleanup()` on the stage recording as soon as
-it has read it and keeps only the downsampled proxy. The render is the memory-hungry step, because
-it holds the stage and a full-length output at the same time.
+Because Pyodide runs synchronously in the Web Worker thread, cancellation cannot rely on polling interrupts. Cancellation is accomplished by **terminating the active Web Worker and re-initializing the runtime**. File references (`File`) are preserved in JavaScript memory and restored automatically upon worker re-instantiation.
 
-## Cancellation
+## Audio Decoding Strategy
 
-Cancelling **terminates the worker and boots a fresh runtime**. Pyodide runs the pipeline
-synchronously on the worker's only thread, so busy Python cannot read a message; the cooperative
-`CancellationToken` the desktop uses would need a `SharedArrayBuffer`, and GitHub Pages cannot send
-the COOP/COEP headers that unlocks.
+For formats unsupported by libsndfile (e.g., AAC in MP4), `probe_audio` falls back to the browser's native `AudioContext.decodeAudioData` API before passing converted PCM WAV data to the pipeline.
 
-Terminating takes Emscripten's filesystem with it, so `PurivoxClient` remembers which `File`
-objects it uploaded and writes them back to the same paths afterwards. A `File` is a reference to
-something the browser already holds on disk, so keeping one costs nothing and spares the user from
-picking the same audio again after every cancellation.
-
-## Decoding
-
-The libsndfile that ships inside `soundfile` is compiled with FLAC, Ogg/Vorbis, Opus and MP3, so
-the browser reads much the same containers the desktop does. For what libsndfile turns down -
-chiefly AAC in an MP4 container — `probe_audio` reports the fact instead of raising, and the page
-decodes with the browser's own `decodeAudioData` and hands the pipeline a WAV. This is the same
-two-decoder arrangement the desktop makes with libsndfile and Qt Multimedia.
-
-## Running and deploying
+## Local Development and Deployment
 
 ```bash
 cd web
 bun install
-bun run dev
+bun run dev       # Start development server at http://localhost:5173/
+bun run check     # Run linting, TypeScript compiler, and architecture checks
+bun run build     # Build production bundle in web/dist/
 ```
 
-`predev` and `prebuild` pack `src/` and generate the translation JSON first, so re-run either after
-changing Python or a `.ts` catalogue. To check and format:
-
-```bash
-cd web && bun run lint      # Biome, recommended rules
-cd web && bun run format    # biome check --write
-cd web && bun run check     # lint + tsc + the layering check; build runs it first
-```
-
-To build:
-
-```bash
-cd web && bun run build
-```
-
-The output lands in `web/dist/`. Vite's `base` defaults to `/`, since the site is served from the
-root of its own domain (<https://purivox.wwchun.top/>).
-To publish it as a GitHub Pages *project* site instead
-(`username.github.io/repository/`), override it with `PURIVOX_BASE=/repository/ bun run build`, or
-every asset under that subpath will 404. CI builds this in the `web` job of
-`.github/workflows/common.yml` and publishes to Pages from `main`.
-
-The Pyodide runtime loads from jsDelivr at the version pinned in `PYODIDE_URL`
-(`web/src/runtime/PurivoxClient.ts`) rather than living in the repository: scipy alone is tens of
-megabytes, which is not something a Pages repository's size and bandwidth should carry.
-
-## Agreement with the desktop
-
-Given the same inputs and settings, the browser's output differs from `purivox mr` by at most one
-least-significant bit of 16-bit quantisation, an RMS difference of about -108 dB. That is
-floating-point rounding, not a difference in the algorithm.
-
-Worth knowing: `_processing_workers` derives the block size from `os.cpu_count()`, so the desktop
-already produces slightly different output on machines with different core counts. The browser,
-which reports a single core, differs in exactly that way and no other.
+Static assets can be hosted on GitHub Pages or any standard static file host.

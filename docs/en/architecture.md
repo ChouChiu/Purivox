@@ -6,289 +6,143 @@
 
 ## Design Goals
 
-Purivox separates its interface, feature implementations, and shared infrastructure. The
-GUI and CLI only collect parameters, report progress, and present results; the actual processing
-happens in independently callable task functions. This lets the desktop application and command
-line reuse the same implementation and makes it possible to test audio pipelines without starting
-the interface.
+Purivox decouples user interfaces, feature packages, and shared infrastructure. The Graphical User Interface (GUI) and Command-Line Interface (CLI) serve as lightweight wrappers responsible for collecting parameters, dispatching execution, and reporting progress and results. Core processing routines are implemented as pure Python functions independent of GUI dependencies, allowing the desktop GUI, CLI, and WebAssembly browser runtime to execute identical pipelines while facilitating headless automated testing.
 
-## Layered Structure
+## Layered Architecture
 
 ```text
-src/entrypoints/                 Startup only: launches the GUI or parses the CLI
-src/app/                         Main window, task runner, and background thread
-src/features/                    Self-contained pages, models, and processing logic
-├── reference_removal/           Vocal isolation: source matching, the timeline, both engines,
-│                                the page, and the DSP
-├── stem_split/                  Stem split: dispatch by channel layout, the complementary
-│                                crossover, panning-adaptive separation, and the page
-├── home/                        Home page
-└── settings/                    Settings page and the release check
-src/shared/                      Audio, spectra, job validation, configuration, logging,
-                                 task protocol, link downloads, and widgets
-src/web/                         Browser shell: the job entry points and memory budget under Pyodide
-src/resources/                   Read-only resources such as the translations
+src/entrypoints/                 Entry points: startup shims for GUI and CLI
+src/app/                         Desktop shell: MainWindow, presenters, and thread runners
+src/features/                    Feature implementations: pages, models, and domain pipelines
+├── reference_removal/           Reference cancellation: matching, timeline, dual engines, and DSP
+├── stem_split/                  Acoustic stem split: channel dispatch, crossovers, and adaptive panning
+├── home/                        Landing view and navigation shortcuts
+└── settings/                    Configuration, localization, and release update checks
+src/shared/                      Shared foundations: audio I/O, general DSP, config, logging, and UI cards
+src/web/                         WebAssembly runtime shell: JS bridge, timeline serialization, and memory limits
+src/resources/                   Static assets: translation catalogs and SVG brand assets
 ```
 
-Dependencies flow in one direction:
+Dependencies flow strictly top-to-bottom:
 
 ```mermaid
 flowchart LR
-    entry["Entry points<br/>src/entrypoints"] --> app["Application orchestration<br/>src/app"]
-    browser["Browser shell<br/>src/web"] --> app
-    app --> feature["Feature modules<br/>src/features"]
-    app --> shared["Shared modules<br/>src/shared"]
-    browser --> feature
-    browser --> shared
+    entry["Entrypoints<br/>src/entrypoints"] --> app["Desktop App<br/>src/app"]
+    browser["Browser Shell<br/>src/web"] --> feature["Features<br/>src/features"]
+    browser --> shared["Shared<br/>src/shared"]
+    app --> feature
+    app --> shared
     feature --> shared
 ```
 
-`src/app` and `src/web` are two shells at the same level: the first orchestrates the GUI, the
-second the Pyodide jobs that run in a browser. Both may use `features` and `shared` freely, and
-neither may import `entrypoints`. The browser build is described in full in
-[Browser Build (WebAssembly)](web.md).
+`src/app` and `src/web` are peer orchestration shells: `app` manages desktop Qt components, while `web` interfaces with the Pyodide WebAssembly runtime.
 
-`tests/test_architecture.py` uses the abstract syntax tree to enforce these boundaries:
+### Architectural Invariants
 
-- `shared` must not import `app`, `entrypoints`, or any `features` package.
-- Feature packages must not import `app`, `entrypoints`, or another feature package.
-- Neither `app` nor `web` may import `entrypoints`.
-- Logic that combines multiple features belongs in `app`. Vocal isolation keeps matching and
-  cancellation in one feature package, so its entry point `run_isolation_job` stays in
-  `features/reference_removal/processing.py` and `app` only hands it to the background thread;
-  moving the whole pipeline into `app` would make the feature depend on the shell.
+`tests/test_architecture.py` verifies the following AST import boundaries:
+- `src/shared/` must never import from `app`, `entrypoints`, or `features`;
+- Feature modules (`features/`) must never import from each other;
+- Neither `app` nor `web` may import from `entrypoints`;
+- Components shared across multiple features or entry points must reside in `src/shared/` (e.g., `BLOCK_FRAMES`, `AUDIO_EXTENSIONS`, `log_flux_bands()`, and `validate_reference_settings()`).
 
-The two feature packages do not import each other. The stem split reads `shared.dsp.stft` and
-`istft` - the same spectral implementation source matching uses - rather than the complex transfer
-estimate in `features/reference_removal/dsp/transfer.py`: reaching that across packages would mean
-sinking it into `shared` first, which is a change to the cancellation pipeline and owes an
-`eval_cancellation.py --compare` delta of its own. The split is documented in
-[Stem Split](stem-split.md).
-
-A shared data model belongs to the layer that consumes it, not necessarily where it first
-appeared. `AudioStats`, for example, is used by both the whole-file path and the segmented render
-and is defined in `shared.audio`; `ReferenceJob` serves only the whole-file path and remains in
-`features/reference_removal` alongside the matching `IsolationJob`. Feature modules must not create
-implicit dependencies by re-exporting shared types from one another.
-
-The same rule applies to code: values and algorithms that more than one caller would otherwise
-reimplement move down into `shared` rather than being imported across features. Both engines
-validate strength and the statistics window through `shared.jobs.validate_reference_settings()`;
-they derive onset features from `shared.dsp.log_flux_bands()` and correct a shifted tempo through
-`shared.dsp.rate` and `shared.dsp.stretch`; the file-dialog filters and the decoders share
-`shared.audio.AUDIO_EXTENSIONS`.
-
-Fetching a source from a link is placed by that same rule: the GUI and the CLI both download, so
-the yt-dlp wrapper, the download index and the background thread live in `shared/download`; the
-fetch dialog is imported on demand by `MainWindow`, in the slot that opens it, because yt-dlp is a
-tenth of a second of startup, and the page only emits `download_requested`; it wraps
-`shared/download`, so it stays in the shared layer beside the downloader. The browser build has no
-such path — Pyodide has no sockets and the sites answer with no cross-origin headers — so `web`
-never imports it, and `tests/web/test_headless_imports.py` holds that boundary.
+URL download utilities (wrapping yt-dlp) reside in `src/shared/download/` and are imported dynamically in GUI slots to preserve fast desktop startup times. The WebAssembly runtime excludes download tools.
 
 ## Task Execution Model
 
-Each page emits start and cancel signals without controlling threads directly. `MainWindow`
-creates an immutable job object from the page parameters and passes the processing function to
-`JobPresenter`. The presenter manages the page's running state, progress text, and result display,
-then delegates background execution to `JobRunner`. The runner has exclusive ownership of the
-`QThread` and `ProcessingWorker` lifecycles, ensuring that only one task runs in a window at a
-time.
-`ProcessingWorker` only adapts a regular Python call to Qt signals. The runner emits its own
-`finished` signal only after the thread object completes deferred deletion, preventing races
-between Qt object destruction and window closure or test-scope teardown. This leaves the main
-window responsible only for navigation, job construction, and coordinated shutdown.
+UI components emit start and cancel signals rather than managing thread lifecycles directly.
 
 ```mermaid
 flowchart LR
-    page["GUI page"] -->|parameters| job["Immutable job object"]
+    page["GUI Page"] -->|Immutable Parameters| job["Job Dataclass"]
     job --> window["MainWindow"]
-    window --> presenter["JobPresenter<br/>page state and results"]
-    presenter --> runner["JobRunner"]
-    runner -->|owns| worker["QThread + ProcessingWorker"]
-    worker --> pipeline["Processing function"]
-    cli["CLI"] -->|synchronous call| pipeline
-    pipeline --> result["Processing result"]
-    result -->|signal| page
-    cancel["Cancel request"] -.-> token["CancellationToken"]
+    window --> presenter["JobPresenter<br/>Page State & Progress"]
+    presenter --> runner["JobRunner<br/>Exclusive Execution"]
+    runner -->|Owns| worker["QThread + ProcessingWorker"]
+    worker --> pipeline["Processing Pipeline"]
+    cli["CLI"] -->|Synchronous Invocation| pipeline
+    pipeline --> result["Result Dataclass"]
+    result -->|Qt Signals| page
+    cancel["Cancel Request"] -.-> token["CancellationToken"]
     token -.-> pipeline
 ```
 
-The CLI constructs the same job data classes and calls the same processing functions
-synchronously. `SIGINT` sets a `CancellationToken`; decoding, resampling, analysis, inference, and
-output loops call `raise_if_cancelled()` periodically, so cancellation is cooperative.
+1. **State Coordination**: `MainWindow` constructs immutable job objects and delegates UI state management to `JobPresenter`;
+2. **Thread Exclusivity**: `JobRunner` manages the lifecycles of `QThread` and `ProcessingWorker`, enforcing that each window runs at most one background task concurrently;
+3. **Clean Teardown**: `JobRunner` emits its `finished` signal only after thread deferred deletion completes, preventing race conditions during application shutdown or test teardown;
+4. **Cooperative Cancellation**: CLI and GUI share a cooperative `CancellationToken`. Long-running processing loops periodically invoke `raise_if_cancelled()` to respond to abort signals.
 
 ## Audio Data and Memory Management
 
-The shared `AudioData` type stores planar `float32` data in `[channel, frame]` order. Long audio is
-written to temporary `np.memmap` storage instead of remaining in ordinary NumPy arrays:
+The primary audio container is `AudioData`, representing `[channels, frames]` planar `float32` arrays. Audio processing utilizes chunked streaming and disk mapping:
 
-- Decoding, analysis, resampling, writing, and most copy operations use blocks of 262,144
-  frames (`shared.audio.BLOCK_FRAMES`).
-- Formats that libsndfile cannot read fall back to Qt Multimedia decoding.
-- Resampling uses soxr's high-quality streaming interface.
-- Mono input is expanded to stereo; inputs with more than two channels use the first two channels
-  before processing.
-- Temporary audio is closed and deleted through `cleanup()`; long loops can call
-  `release_pages()` to release processed mapped pages.
-- Only platforms with a real disk under them map at all. The browser build runs on Emscripten,
-  whose filesystem is itself in memory, so mapping there would cost a second copy and
-  `create_pcm_audio` allocates on the heap instead; see [the browser build](web.md).
+- **Chunked Processing**: Intensive operations (decoding, analysis, resampling, writing) process blocks of `BLOCK_FRAMES = 262144` frames;
+- **Fallback Decoding**: Formats unsupported by libsndfile fall back to Qt Multimedia pipeline decoders;
+- **Resampling**: High-quality sample rate conversions use streaming libsoxr;
+- **Memory Mapping**: Desktop audio paths write temporary data to `np.memmap` files, calling `release_mapped_pages()` to unmap completed chunks;
+- **WebAssembly Adaptation**: Under WebAssembly (Emscripten), where virtual filesystems reside directly in heap memory, `create_pcm_audio` allocates directly on the heap to avoid duplicate memory copies (see [Browser Build](web.md));
+- **Atomic Writes**: WAV exports write to temporary sibling files before executing atomic replacements (`os.replace`), preventing corrupt files from partial runs or cancellations.
 
-`shared.audio.analysis` provides chunked copying, peak/RMS analysis, and the `AudioStats` model
-shared across workflows. The block size is defined once as `shared.audio.BLOCK_FRAMES` and reused by
-every streaming loop; finding and releasing mapped pages likewise has a single implementation,
-`shared.audio.release_mapped_pages()`, called by both `AudioData` and the reference-cancellation
-block loop. All of these operations respond to cancellation, avoiding separate implementations that
-could drift between pipelines.
+## Dual-Engine Architecture
 
-WAV output is first written to a temporary file in the destination directory, and `os.replace`
-then atomically replaces the destination. Cancellation or failure therefore leaves no partially
-written final output.
-
-## One Pipeline, Two Engines
-
-The GUI, the CLI and the browser build all call
-`run_isolation_job(job, analysis, token, progress)`. It first matches the sources against the
-recording with `analyze_stage`, then picks an engine from the geometry: a lone source of the same
-length goes through the whole-file path `run_reference_job`, while matched clips go through
-`render_stage_job`.
+The unified entry point `run_isolation_job` first executes source matching via `analyze_stage`, then dispatches execution to an engine based on geometric duration criteria:
 
 ```mermaid
 flowchart TB
-    input["Stage recording + one or more song sources"] --> match["Source matching<br/>analyze_stage"]
-    match --> choice{"Geometry"}
-    choice -->|lone source of the same length,<br/>timeline untouched| whole["Whole-file path<br/>align over the whole length"]
-    choice -->|matched clips| stage["Segmented render<br/>align and cancel clip by clip"]
-    whole --> out["Vocal / backing WAV<br/>in the stage's own format"]
+    input["Recording + Reference Tracks"] --> match["Source Matching<br/>analyze_stage"]
+    match --> choice{"Geometric Criteria"}
+    choice -->|Single Equal-Length Track (Unedited)| whole["Whole-File Path<br/>run_reference_job"]
+    choice -->|Matched Clips| stage["Segmented Path<br/>render_stage_job"]
+    whole --> out["PCM WAV Export<br/>Native Recording Spec"]
     stage --> out
 ```
 
-### The Whole-File Path
+### Whole-File Path
 
-```text
-Read both files → convert to stereo → resample the song source → optional time alignment
-→ reference cancellation → analysis → atomic output
-```
+Pipeline: stereo loading $\to$ source resampling $\to$ global tempo estimation and WSOLA stretching $\to$ coarse delay alignment and drift tracking $\to$ complex subtraction and residual masking $\to$ atomic export.
 
-The output always retains the stage recording's duration. If the song source is shorter, its
-remaining region is treated as a silent reference and the original tail is preserved. The result is
-written at the stage recording's own sample rate and bit depth; there is no export floor.
+Optimized for full-length song captures, applying unified clock drift and phase alignment across the entire recording.
 
-### The Segmented Render
+### Segmented Path
 
-```text
-Extract fingerprints from the stage recording and sources → match independently
-→ generate and manually correct a timeline → copy the original stage recording
-→ align and cancel each matched segment → blend boundaries → atomic output
-```
+Pipeline: fingerprint extraction $\to$ candidate clustering and timeline construction $\to$ prefilling output with live audio $\to$ iterating active clips $\to$ slice extraction and tempo stretching $\to$ local drift alignment (validated via $2\times2$ direct fit residual gating) $\to$ complex cancellation $\to$ 50 ms cosine crossfade $\to$ atomic export.
 
-Unmatched ranges come from the copy of the original stage recording, so failed identification does
-not introduce silence or shorten the output.
-Segment processing and the final export both retain the stage/live audio's own sample rate and bit
-depth.
+Unmatched intervals preserve native live recording audio without truncation.
 
-### How the Engine Is Chosen
+### Format Integrity
 
-Geometry decides the engine, not match quality, and the reasoning with the measured numbers is in
-[Source Matching, the Timeline, and Segmented Rendering](matching.md): a lone source as long as the
-recording is the recording's own content, and the whole-file path aligns the two over their whole
-length and corrects a clock difference between them, whereas a shorter source is a song located
-inside the recording and only the matched clips can place it. When nothing is matched and there is
-exactly one source, the whole-file path is the fallback as well — a canceller that finds no
-correlation leaves the recording alone. With more than one source the job is refused instead of
-cancelling the recording as a whole. A timeline the user edited is rendered as it stands and no
-longer changes the engine.
+All export paths strictly match the native live recording specifications:
+- Sampling rate equals the input recording sampling rate;
+- 8-bit and 16-bit PCM inputs export as 16-bit PCM;
+- 24-bit/32-bit PCM, floating-point, and lossy inputs export as 24-bit PCM.
 
-### Export Format
+Artificial upsampling is prohibited.
 
-Both engines export at the input file's own sample rate and bit depth: upsampling would only
-enlarge the file without producing spectral detail absent from the input. For bit depth, an 8- or
-16-bit PCM input is written at 16 bits, and wider 24-/32-bit PCM, float and every lossy format are
-written at 24.
+## Responsive UI Architecture
 
-## Responsive Layout
+Desktop window geometry adapts across four responsive layout modes evaluated in `src/shared/ui/responsive.py`:
 
-`src/shared/ui/responsive.py` reduces the window shape to four modes, decided by the width a page
-actually has to spend:
-
-| Mode | Page width | Layout |
+| Mode | Width (px) | Layout Structure |
 |---|---|---|
-| `PORTRAIT` | < 620 | One column; labels move above their controls, volume takes its own line |
-| `HALF` | < 960 | One column; labels beside their controls, tighter margins |
-| `LANDSCAPE` | < 1440 | One column; full margins |
-| `ULTRAWIDE` | >= 1440 | Two lanes; the content column stops at 1760 px and is centred |
+| `PORTRAIT` | $< 620$ | Single column; controls stack vertically below labels |
+| `HALF` | $< 960$ | Single column; controls inline with labels, tightened padding |
+| `LANDSCAPE` | $< 1440$ | Single column; standard margins |
+| `ULTRAWIDE` | $\ge 1440$ | Dual columns; content clamped to 1760 px maximum, centered |
 
-Width alone decides the mode: a 800 px window on a portrait screen is portrait-shaped but still has
-room for a label beside its control, so it lays out like a half screen rather than like a phone.
-Height only affects vertical breathing space and the minimum height of the source list and the
-timeline (`LayoutMetrics.short`).
+Layout metrics are determined by `PageScrollArea` and propagated down the hierarchy. Status labels and dropdowns utilize `shared.ui.allow_shrinking()` to prevent long file paths from expanding column widths.
 
-A page never watches its own children. `PageScrollArea` measures its viewport and hands the metrics
-down:
+## Localization, Configuration, and Logging
 
-```mermaid
-flowchart LR
-    viewport["Page viewport size"] --> metrics["LayoutMetrics<br/>mode / short window"]
-    metrics --> page["PageScrollArea<br/>margins, spacing, centring"]
-    metrics --> columns["ResponsiveColumns<br/>one lane or two"]
-    metrics --> responsive["Responsive widgets<br/>FormCard / FoldingRow"]
-```
+- **Configuration**: Managed via the QFluentWidgets `QConfig` singleton.
+- **Localization**: Uses Qt Linguist XML catalogs (`src/resources/i18n/*.ts`), compiled to binary `*.qm` files loaded by `QTranslator`. Translations are accessed via `shared.i18n.tr(key, **values)`. Language changes trigger page-level `retranslate()` handlers.
+- **Progress Protocol**: Processing pipelines issue untranslated key events via `shared.progress.report_progress()`, allowing both Qt desktop and WebAssembly web frontends to render localized progress text.
+- **Log Rotation**: Daily logs append to `logs/YYYY-MM-DD.log` under the user data directory, automatically purging expired files on startup.
 
-A control therefore folds because the *page* is narrow, not because it has already been squeezed —
-the latter would simply cut the page off, since the scroll areas keep their horizontal scroll bar
-switched off. For the same reason status labels and the combo boxes call
-`shared.ui.allow_shrinking()`: a completion message carrying a long path has no space to wrap at and
-would otherwise widen the whole page.
+## Error Handling Boundaries
 
-Cards declare their lane through `PageScrollArea.add_card()`. One column keeps the order they were
-added in and only two lanes split them apart, so a narrow window reads top to bottom in the same
-order a wide one reads side by side: the vocal-isolation page keeps files, the source list and
-parameters in the primary lane, and status, the timeline, preview and audio data in the secondary
-one.
-
-## Configuration, Translation, and Logging
-
-- QFluentWidgets `QConfig` persists application configuration.
-- Translation uses the native Qt system: `src/resources/i18n/*.ts` (Qt Linguist XML) is compiled by
-  `pyside6-lrelease` into `*.qm`, which `QTranslator` loads and installs into `QCoreApplication`.
-  Catalogues are keyed by identifier, and all four languages must have identical key sets.
-- `shared.i18n.tr(key, **values)` resolves through `QCoreApplication.translate()` against the
-  installed language and then fills `{name}` placeholders; an unknown key returns the key itself.
-  Language is application state, so job objects no longer carry a language field.
-- Logs use the single-line format `date time [level] module: message`; Qt and FFmpeg messages also
-  enter the unified logging system.
-- On the desktop every run also appends to `log_directory()/YYYY-MM-DD.log` (a `logs/` directory
-  under the application data location) alongside stderr, so the runs of one day share one file and
-  files older than `LOG_RETENTION_DAYS` are removed at startup. The browser build has nowhere to
-  write, which is why file logging is asked for by the entry points rather than being the default.
-- When the GUI language changes, each page updates its widget text and combo boxes through
-  `retranslate()`.
-- Every processing pipeline uses `shared.progress.report_progress()` to translate and create
-  `ProgressEvent` objects, avoiding duplicate progress protocols in each feature.
-
-## Error Boundaries
-
-Expected problems such as identical input files, an output overwriting an input, or invalid
-parameters use `ValueError`, `KeyError`, or `FileNotFoundError`. The CLI returns status 2 for these
-errors, 1 for unexpected failures, and 130 for cancellation; the GUI displays errors through
-worker-thread signals.
-
-Alignment failure is one of the few allowed fallbacks: the pipeline logs a warning and continues
-using the original timeline. Cancellation exceptions must never be swallowed.
-
-An exception nobody caught reaches `app/crash_handler.py`. PySide6 prints an uncaught exception and
-lets the event loop carry on, so this is a report rather than a shutdown: the traceback goes into
-that day's log at CRITICAL, the file opens in whatever the desktop reads text with, and a dialog
-points the user at the issue form. That URL carries the version, the platform, the build and the
-exception's type - not its message, which is the part most likely to be a path. The log stays out
-of it: it holds absolute paths, a URL is in the browser's history before anyone has read it, GitHub
-answers an over-long one with 414 rather than a shortened form, and a day's log is over the budget
-once percent-encoded. It goes on the clipboard instead, written only once the user has chosen to
-report, and the reporter pastes it into the form's code block themselves and sees what they are
-sending. That field does not use the schema's `render:`: a prefilled rendered text area cannot be
-edited, and the field arrives prefilled from its own `value:`, so the `<details>` and the code
-fence are spelled out in the template. One run raises one dialog - an exception thrown from `paintEvent` repeats on every
-frame. A native crash or
-a `qFatal` never gets here, but the Qt message handler has already put what Qt said about it in the
-same file.
+- **Anticipated Failures**: Missing files, path collisions, and parameter violations raise `FileNotFoundError`, `KeyError`, or `ValueError`. The CLI exits with code 2 for anticipated errors, 1 for unhandled exceptions, and 130 for cancellation. The GUI presents errors via InfoBar notifications.
+- **Unhandled Exceptions**: Intercepted by `src/app/crash_handler.py`:
+  1. Full tracebacks are logged with CRITICAL severity to the active daily log file;
+  2. A diagnostic dialog opens, offering a button to launch the system default text viewer on the log;
+  3. GitHub Issue URLs prefill only system version, OS platform, and exception type, omitting local paths to avoid URL length errors (HTTP 414) and sensitive path disclosure;
+  4. Detailed log excerpts are copied to the system clipboard only upon clicking "Submit Issue", allowing users to inspect contents before submitting;
+  5. Diagnostic dialogs are limited to a single instance per session to prevent infinite dialog cascades during UI repaint events.

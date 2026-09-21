@@ -1,389 +1,191 @@
-# Reference Cancellation
+# Reference Cancellation Implementation
 
 <p align="left">
   <a href="../reference-removal.md">简体中文</a> · <strong>English</strong>
 </p>
 
-## Problem Definition
+## Mathematical Formulation and Problem Modeling
 
-Let the stereo recording to process be $\mathbf{y}(t)$ and the song source be
-$\mathbf{x}(t)$. Content that is absent from the song source—such as live vocals, speech, and
-ambient sound—is denoted by $\mathbf{v}(t)$. Reference cancellation estimates a complex,
-time- and frequency-varying $2\times2$ transfer matrix in the STFT domain:
+Let the two-channel stage or live recording be $\mathbf{y}(t)$, the studio reference track be $\mathbf{x}(t)$, and non-playback components such as live lead vocals, speech, and audience acoustic environment be $\mathbf{v}(t)$. In the Short-Time Fourier Transform (STFT) domain, the stage playback is modeled as the reference signal filtered by a time-varying, frequency-dependent $2\times2$ complex transfer matrix $\mathbf{H}(t, f)$:
 
 $$
-\mathbf{y}(t) \approx \mathbf{H}(t)\mathbf{x}(t) + \mathbf{v}(t)
+\mathbf{y}(t, f) \approx \mathbf{H}(t, f)\mathbf{x}(t, f) + \mathbf{v}(t, f)
 $$
 
-Cancellation runs in two stages, following the same arrangement used by acoustic echo cancellers:
-complex subtraction removes the predicted backing vector, and a soft mask then suppresses
-whatever the linear stage could not describe cleanly. Writing the prediction as
-$\mathbf{d}=\mathbf{H}\mathbf{x}$, the first stage is
+Cancellation operates in a two-stage cascade: first, complex subtraction removes linearly correlated playback components; second, a soft mask suppresses non-coherent leakage and transfer mismatches. Denoting the linear prediction as $\mathbf{d} = \mathbf{H}\mathbf{x}$, the first stage computes:
 
 $$
-\mathbf{e}=\mathbf{y}-\gamma\,\mathbf{d},\qquad
-\lvert\mathbf{e}\rvert\leftarrow\min\bigl(\lvert\mathbf{e}\rvert,\lvert\mathbf{y}\rvert\bigr)
+\mathbf{e} = \mathbf{y} - \gamma\,\mathbf{d},\qquad
+\lvert\mathbf{e}\rvert \leftarrow \min\bigl(\lvert\mathbf{e}\rvert,\,\lvert\mathbf{y}\rvert\bigr)
 $$
 
-The second expression constrains the linear stage so that it can only remove energy, never add
-any. The residual still carries backing the transfer could not describe — mostly
-reverberation ringing past the window and residual misalignment — whose size comes from a
-regression of the residual power on the power that was removed (see "Estimating the Leakage") and
-is handed to the linked soft mask:
+The second inequality enforces an energy non-expansion constraint, guaranteeing that the linear subtraction stage cannot amplify signal magnitude. For long reverberation tails and residual delays that cannot be fully captured by the transfer matrix, residual power is regressed against predicted power to estimate leakage $\rho P_d$ (see "Leakage Estimation"), followed by a soft suppression mask:
 
 $$
-\widehat P_v=\max(P_e-\rho P_d,\,0.05^2P_e),\qquad
-M=\sqrt{\frac{\widehat P_v}{P_e+\varepsilon}}
+\widehat P_v = \max(P_e - \rho P_d,\, 0.05^2 P_e),\qquad
+M = \sqrt{\frac{\widehat P_v}{P_e + \varepsilon}}
 $$
 
-Strength $\alpha\in[0,1]$ interpolates on the complex spectrum:
+The user strength parameter $\alpha \in [0, 1]$ interpolates linearly on the complex spectrogram:
 
 $$
-\mathbf{s}=\mathbf{y}+\alpha\,(M\mathbf{e}-\mathbf{y})
+\mathbf{s} = \mathbf{y} + \alpha\,(M\mathbf{e} - \mathbf{y})
 $$
 
-When nothing is subtracted, $\mathbf{e}=\mathbf{y}$ and this reduces to
-$M_\alpha=1-\alpha(1-M)$, the original mask-only path, so $\alpha=0$ is still a complete bypass
-and $\alpha$ is still monotonic.
+When $\alpha = 0$, the output equals the unedited input $\mathbf{y}$, ensuring smooth and monotonic strength adjustment.
 
-Subtracting is safe here because the per-bin least-squares prediction is itself the projection of
-$\mathbf{y}$ onto $\mathrm{span}(\mathbf{x})$. Content present in the reference but absent from the
-mix, a changed lyric or a harmony only the source has, satisfies
-$\mathbb{E}[y\overline{x_j}]\approx 0$, so both $h$ and $d$ fall to zero and that content is never
-predicted in the first place, let alone injected. $\gamma$ also falls to zero in those places, and
-with the no-amplification bound on top, the three safeguards are independent of one another.
+Complex linear subtraction relies on least-squares orthogonal projection: the estimated prediction $\mathbf{d}$ lies within the reference subspace $\mathrm{span}(\mathbf{x})$. For elements present in the studio reference but absent from the live mix (such as album-exclusive backing vocals or modified lyrics), cross-covariance expectations satisfy $\mathbb{E}[y\overline{x_j}] \approx 0$. Consequently, transfer coefficients $h$ and predictions $d$ vanish, preventing artificial artifact injection.
 
-Reference cancellation requires the stage/live recording to contain backing audio corresponding
-to the selected song source. A different arrangement or key, heavy dynamics processing, or
-additional instruments cannot be corrected with time and gain adjustments alone.
+### Applicable Boundaries and Physical Constraints
 
-## Overall Flow
+Reference cancellation relies strictly on acoustic coherence between the live recording and the reference track. Several physical factors naturally constrain cancellation depth:
+1. **Acoustic Environment and Non-Linearities**: Severe venue reverberation (exceeding analysis window lengths) and PA system non-linear distortion (speaker clipping, power amp saturation) introduce harmonic content absent from the reference, which cannot be eliminated through linear transfer modeling;
+2. **Arrangement and Performance Variations**: Live musical alterations (chords, transposed keys, varied drum patterns, or rearranged structures) cause coherence to collapse;
+3. **Pickup Artifacts**: Microphone movement and comb-filtering fluctuations degrade local transfer estimation accuracy.
+
+## Processing Pipeline
 
 ```mermaid
 flowchart LR
-    mix["Recording to process"] --> read["Read and convert to stereo"]
-    ref["Song source"] --> read
-    read --> rate["Match sample rates"]
-    rate --> tempo["Global tempo estimate<br/>pitch-preserving WSOLA stretch"]
-    tempo --> enabled{"Automatic alignment?"}
-    enabled -->|yes| coarse["Spectral flux / GCC-PHAT<br/>coarse alignment"]
-    coarse --> drift["Local drift tracking"]
-    drift --> warp["Lanczos time warp"]
-    enabled -->|no| mask["Complex transfer estimate<br/>confidence-weighted Wiener mask"]
+    mix["Live Recording"] --> read["Dual-Channel Loading"]
+    ref["Reference Audio"] --> read
+    read --> rate["Sample Rate Alignment (soxr)"]
+    rate --> tempo["Global Tempo Estimation & WSOLA"]
+    tempo --> enabled{"Auto Alignment?"}
+    enabled -->|Yes| coarse["Multi-Band Flux / GCC-PHAT<br/>Coarse Time Alignment"]
+    coarse --> drift["Local Clock-Drift Tracking"]
+    drift --> warp["Lanczos Time Resampling"]
+    enabled -->|No| mask["Complex Transfer Estimation<br/>Coherent Cancellation + Mask"]
     warp --> mask
-    mask --> protect["Peak protection"]
-    protect --> output["WAV in the song's own format"]
+    mask --> protect["Peak Protection & Limiting"]
+    protect --> output["PCM WAV Export<br/>Native Recording Spec"]
 ```
 
-## Time Alignment
+## Time and Speed Alignment
 
-### Global Tempo
+### Global Tempo Estimation and Time Stretching
 
-A stage recording may have been re-uploaded with its tempo shifted as a whole: the pitch stays put and
-the speed moves by a few percent. Local drift tracking corrects at most 2 ms every 0.1 s, which is
-20 ms a second, so it never catches up with a 3% error and the coarse search below finds no peak at all.
+Live recordings and redistributed media frequently exhibit subtle playback speed differences (typically within $\pm 15\%$ while preserving original pitch). Because local clock-drift tracking is constrained to a maximum correction rate of $20\text{ ms/s}$ ($2\text{ ms}$ per $0.1\text{ s}$ step), persistent speed disparities prevent coarse cross-correlation from finding a reliable peak.
 
-The implementation first runs a global scale search on 4 kHz mono proxies: the source's onset features
-are linearly interpolated along time at each trial ratio and normalized-correlated against up to the
-first two minutes of the stage proxy with the same spectral-flux features the coarse alignment uses,
-taking the peak over every lag. The ratio is one constant per source, and a longer take measured the
-same ratio: past two minutes the extra material only lengthens the resample and the correlation.
-Interpolating features rather than resampling audio and transforming it again costs a tenth as
-much - one source's search fell from 2.4 s to 0.23 s - and the two agree on the peak to within one
-grid step on real material. Trials scan 0.88 to 1.15 in 0.004 steps, then refine around the peak in
-0.0005 steps. An estimate is accepted only when its peak scores at least 0.25, beats the best ratio
-outside its own neighbourhood by 10%, beats the ratio-one score by 0.04, and moves the tempo by at
-least 0.2%. The last condition is the one that matters: material that is
-already aligned keeps its existing path, so one accidental peak from a long correlation cannot drag it
-off. When the source is longer than the stage, every trial is trimmed to the stage's length first,
-because the unchanged hypothesis is otherwise not measurable at all.
+The global search procedure operates as follows:
+1. **Downsampled Proxy**: Downsamples signals to a $4\text{ kHz}$ mono proxy to reduce correlation overhead.
+2. **Feature Interpolation Correlation**: Extracts multi-band log spectral flux from the reference, linearly interpolates feature timestamps across candidate speeds, and computes normalized cross-correlation against the first two minutes of the live proxy. Interpolating features rather than resampling audio reduces search duration from $\sim 2.4\text{ s}$ to $0.23\text{ s}$.
+3. **Two-Tier Grid Search**: Performs a coarse search across $0.88$–$1.15$ with a step of $0.004$, followed by refinement in a $\pm 0.0005$ neighborhood around the candidate peak.
+4. **Acceptance Thresholds**: A candidate speed is accepted only if: correlation score $\ge 0.25$, score exceeds non-neighborhood peaks by $\ge 10\%$, score exceeds unit speed ($1.0$) by $\ge 0.04$, and tempo deviation is $\ge 0.2\%$. These constraints prevent false corrections on non-stretched material.
+5. **WSOLA Time Stretching**: Stretches the reference audio via Waveform Similarity Overlap-Add (WSOLA). Each frame searches within a nominal $\pm 7.5\text{ ms}$ range for maximum waveform continuity, windowed with a $64\text{ ms}$ Hann window at $50\%$ overlap. Channels share identical offsets to preserve inter-channel phase coherence. WSOLA preserves transient definition better than traditional phase vocoders, avoiding transient dispersion and coherence loss.
 
-An accepted ratio is applied as a pitch-preserving stretch built on waveform-similarity overlap-add
-(WSOLA): each output frame searches within 7.5 ms of its nominal position for the input segment that
-continues the previous waveform most smoothly, windows 64 ms of it with a Hann taper at 50% overlap, and
-uses one shared offset across channels so the stereo image survives. A resample cannot stand in: it would
-turn a 3% tempo shift into a 51-cent pitch shift, and the per-bin complex transfer would no longer line
-up. A plain phase vocoder cannot either: measured end to end on one real broadcast, cancellation depth
-was -0.05 dB with no stretch, -1.46 dB with a phase vocoder and -2.99 dB with WSOLA, level with ffmpeg's
-`atempo` at -3.15 dB. What a phase vocoder smears is exactly the transients that carry the coherent
-energy.
+Tempo search and stretching are implemented purely in NumPy and SciPy under `shared/dsp/rate.py` and `shared/dsp/stretch.py` to maintain WebAssembly runtime compatibility.
 
-The stretched reference then enters the coarse alignment and local drift tracking below, which now have
-only a small residual drift left to follow. `shared/dsp/rate.py` and `shared/dsp/stretch.py` use numpy
-and scipy alone, because the browser build runs the same pipeline under Pyodide, where an external
-binary is not an option.
+### Coarse Delay Alignment
 
-### Coarse Alignment
-
-A camera track recorded at the venue may have low waveform correlation with the matching song
-source even when note onsets remain similar. The implementation therefore starts with multi-band
-spectral-flux features (`shared.dsp.log_flux_bands()`, shared with source matching) and searches
-for a significant correlation peak over up to approximately 60 seconds of shared material. A channel
-whose bands are too flat rejects the whole estimate; if the feature peak is unreliable, it tries
-GCC-PHAT and ordinary cross-correlation in sequence.
-
-GCC-PHAT retains only the phase of the cross-power spectrum:
+To handle differences between direct sound and live acoustic pickup, the system extracts $12$-band log-flux onset representations (`shared.dsp.log_flux_bands()`), searching for prominent correlation peaks within an overlap window of up to $60\text{ s}$. If band energy is flat or onset features lack confidence, alignment falls back to GCC-PHAT and standard cross-correlation:
 
 $$
-R_{\mathrm{PHAT}}(\tau)
-=\mathcal{F}^{-1}\!\left(
-\frac{Y(f)\,\overline{X(f)}}
-{\lvert Y(f)\,\overline{X(f)}\rvert+\varepsilon}
-\right)
+R_{\mathrm{PHAT}}(\tau) = \mathcal{F}^{-1}\!\left(\frac{Y(f)\,\overline{X(f)}}{\lvert Y(f)\,\overline{X(f)}\rvert + \varepsilon}\right)
 $$
 
-The correlation peak gives the coarse delay. The implementation first searches a smaller range;
-if the peak is close to a boundary, it expands the search to at most approximately 20 seconds.
-This reduces the chance of meaningless long-distance matches.
+The initial search operates within a narrow window and expands up to $20\text{ s}$ if a peak approaches the boundary.
 
-### Local Drift
+### Local Clock-Drift Tracking
 
-Clock differences between recording devices can produce correct alignment at the beginning but
-increasing error toward the end. The implementation resamples the audio into anti-aliased 16 kHz
-proxy signals,
-estimates local delay every 0.1 seconds, and limits the maximum change between adjacent estimates.
-Low-correlation windows retain the predicted value, and a three-point median filter suppresses
-jumps.
+Oscillator inaccuracies across recording hardware introduce time-accumulated drift. The tracker uses a $16\text{ kHz}$ proxy to estimate local time delays every $0.1\text{ s}$, bounding frame-to-frame delta transitions. Low-coherence frames extrapolate prior trajectory predictions, smoothed with a 3-point median filter to suppress spurious jumps.
 
-What limits local delay accuracy is the proxy's *bandwidth*, not its sample grid. Measured end to
-end on a drifting broadband reference, raising the proxy rate from 2 kHz to 16 kHz lifted
-cancellation depth by roughly 10 dB while alignment runtime stayed flat: the tracking loop still
-advances once every 0.1 seconds, only each correlation gets longer.
-
-The delay curve is kept on the proxy sample grid, with no sub-sample refinement: a constant
-fractional delay is already absorbed by the per-bin complex transfer as a phase ramp.
-
-After obtaining the delay curve $d(t)$, the source is resampled as
+The delay trajectory $d(t)$ resamples the reference signal:
 
 $$
-x_{\mathrm{aligned}}(t)=x\bigl(t-d(t)\bigr)
+x_{\mathrm{aligned}}(t) = x\bigl(t - d(t)\bigr)
 $$
 
-Non-integer positions are interpolated with a radius-3 Lanczos kernel, and the result is written
-to mapped storage in blocks. The kernel depends only on the fractional part of the source
-position, so it is read from a precomputed 8192-phase table rather than evaluating `sinc` per
-output sample; the table's quantisation error sits near -80 dBFS. Sliding window energy in the
-local tracker is computed from a prefix sum, which takes it from O(N*M) to O(N).
+Fractional interpolation employs a radius-3 Lanczos kernel precomputed over $8192$ phases (quantization noise below $-80\text{ dBFS}$). Sliding energy windows use prefix sums to reduce window computation from $O(N \cdot M)$ to $O(N)$.
 
-## Coherent Cancellation
+## Coherent Cancellation and Complex Transfer Estimation
 
-The STFT window targets approximately 46 ms. Its length is rounded to the nearest power of two at
-the current sample rate and constrained to 512–4096 points; the hop is one quarter of the window.
-At each frequency bin, a complex transfer matrix is estimated from the smoothed source covariance
-and mix–source cross-power. Diagonal regularization is added to the covariance, and the total
-transfer gain for each output channel is limited to 2×.
-
-The normal equations are $R\,h=c$ with $R_{jk}=\mathbb{E}[x_k\overline{x_j}]$ and
-$c_j=\mathbb{E}[y\overline{x_j}]$. **The index order matters**: filling $R_{jk}$ with
-$\mathbb{E}[x_j\overline{x_k}]$ transposes the system and solves for a different transfer,
-measured at roughly 3.4 dB of cancellation depth on a stereo reference whose channels are
-strongly correlated across a small inter-channel delay — the normal case for real backing tracks.
-Only the lower triangle is built, and it is solved with an $LDL^{H}$ factorisation vectorised
-over whole spectra; stacking each time-frequency cell into a tensor for `numpy.linalg.solve`
-makes LAPACK run once per cell, and measured about seven times slower.
-
-### Reliability of the Transfer Estimate
-
-How much to subtract depends on how much the transfer estimate can be trusted, so it is better
-if that confidence is not a second quantity computed after the fact. At the least-squares optimum
-$\mathbb{E}[|Hx|^2]=h^{H}c$, so the share of the mixture the reference explains can be read
-directly from the solve:
+STFT window sizes adapt to the sampling rate, targeting $\approx 46\text{ ms}$ power-of-two lengths ($512$–$4096$ points) with a $75\%$ overlap ($1/4$ hop). At each frequency bin, the normal equations are formed from smoothed reference covariance matrices and cross-power vectors:
 
 $$
-\gamma^2=\frac{\mathrm{Re}\,(h^{H}c)}{P_y+\varepsilon}
+R h = c
 $$
 
-This multiple coherence comes with the solution for free; no second cross-spectrum coherence
-between the mixture and the prediction is needed.
+Where:
+- $R_{jk} = \mathbb{E}[x_k \overline{x_j}]$ represents the regularized reference covariance matrix;
+- $c_j = \mathbb{E}[y \overline{x_j}]$ represents the cross-power spectrum.
 
-A least-squares fit over a finite window always explains part of the mixture by chance, and the
-expected size of that accident is exactly $p/N_{\text{eff}}$ for order $p$. Removing it gives the
-adjusted coherence:
+The system builds lower triangular systems solved via bin-vectorized $LDL^H$ decomposition, bounding total channel gain at $2.0$ ($+6\text{ dB}$).
 
-$$
-N_{\text{eff}}=\max\Bigl(W\cdot\tfrac{\text{hop}}{n_{\text{fft}}}\cdot 1.5,\;p+2\Bigr),\qquad
-\gamma^2_{\text{adj}}=1-(1-\gamma^2)\frac{N_{\text{eff}}}{N_{\text{eff}}-p}
-$$
+### Multiple Coherence and Shrinkage Estimation
 
-$W$ is the smoothing window in frames, 1/8 is the effective independence of adjacent frames, and
-1.5 is the effective number of independent bins under the $\sigma=1$ frequency Gaussian. The frame
-independence was measured rather than derived: reading $\text{hop}/n_{\text{fft}}$ literally at 75%
-overlap gives 1/4, but the Hann window has its own correlation between overlapping frames and the
-frequency Gaussian delivers fewer independent bins than its nominal count under a four-bin main
-lobe, both of which make that reading too optimistic. The property this correction buys can be
-measured directly: with a completely unrelated reference the bypass is exact (correlation 1.000000,
-RMSE 0). That is what guarantees an unrelated source is never subtracted.
-
-$W$ also has to be clamped to the frames the block actually holds before it is used. The box filter
-reflects at the block edge rather than inventing samples, so a context wider than the block is worth
-only what the block contains; reading the nominal width overstates the observation count, and does
-so in exactly the short blocks where the overfit bias is worst.
-
-The estimation error variance of the transfer is roughly $p/N_{\text{eff}}$ of the unexplained
-power, which in turn fixes the shrinkage that minimises the mean square error:
+At the least-squares optimum, $\mathbb{E}[|Hx|^2] = h^H c$. Multiple coherence is extracted directly from the solution:
 
 $$
-\gamma=\frac{\gamma^2_{\text{adj}}}{\gamma^2_{\text{adj}}+\frac{p}{N_{\text{eff}}}\bigl(1-\gamma^2_{\text{adj}}\bigr)+\varepsilon}
+\gamma^2 = \frac{\mathrm{Re}\,(h^H c)}{P_y + \varepsilon}
 $$
 
-A reference that explains nothing gives $\gamma=0$ and is not subtracted at all; the better it
-explains, the closer the subtraction comes to removing the whole prediction.
-
-The diagonal loading needs a floor for a similar reason. Added purely in proportion to the
-local reference power, the regularisation collapses along with it: where the reference falls silent
-for a moment while the mixture does not, the equations have almost nothing to go on and the
-transfer runs away until the gain cap stops it. The loading is therefore never smaller than the
-value that bin would receive at its own median level.
-
-Nor can the scale used to judge outliers be one the outliers themselves can raise. A smoothed
-arithmetic mean is dragged up by the very live transients it is meant to suppress, whereas a
-geometric mean is not; it is the same O(N) smoother, read in the log domain.
-
-The prediction that scale is read from is fitted per reference channel rather than as the full
-two-channel system. The scale only has to know where the residual fluctuates, and the diagonal fit
-measured both 13% cheaper end to end and marginally deeper on the phase-correlated stereo scene
-(+0.04 dB of cancellation depth, +0.0002 of fidelity); the subtraction itself still fits the full
-system, and the scene that exists to punish a wrong cross-channel orientation is unchanged.
-
-### Estimating the Leakage
-
-What remains correlated after the linear stage is mostly reverberation ringing past the window and
-residual misalignment. The question is how much of the residual is still backing, and it
-cannot be dodged by looking only at reference-dominant frames: when the live source plays
-throughout, there are no frames where the reference sounds alone, so an intercept-free ratio
-$\rho=P_e/P_d$ measures the live source as leakage and the mask then removes it along with the rest.
-
-The leakage is therefore a power regression carrying an intercept, in exactly the form the
-incoherent path below uses:
+To compensate for finite-sample degrees-of-freedom overestimation, the effective sample size $N_{\text{eff}}$ yields adjusted coherence:
 
 $$
-P_e \approx \rho(f,n)\,P_d(f,n) + c(f,n)
+N_{\text{eff}} = \max\Bigl(W \cdot \tfrac{\text{hop}}{n_{\text{fft}}} \cdot 1.5,\; p + 2\Bigr),\qquad
+\gamma^2_{\text{adj}} = 1 - (1 - \gamma^2)\frac{N_{\text{eff}}}{N_{\text{eff}} - p}
 $$
 
-$\rho P_d$ rises and falls with the backing that was actually there, so it is leakage; the
-slowly varying $c$ does not, so it is live content, and only the first term may be removed. $\rho$
-is thresholded by a smoothstep on the adjusted correlation the same way, and is bounded by the
-residual it was found in, so one weak-evidence cell cannot drive the mask to the floor.
-
-### The Incoherent Power Path
-
-The failure mode measured on real material turns out not to be reverberation but the loss of the
-phase relationship altogether. On a KWDA stage recording the alignment itself is sub-sample accurate
-(residual lag 0.00-0.04 ms) and the structure and tempo agree (frame-energy envelope correlation
-0.896), yet the complex multiple coherence still holds 0.68 below 100 Hz and falls to 0.02-0.05
-above 500 Hz. Widening the analysis window from 43 ms to 1365 ms, a full 32 times, lifts the
-achievable depth only from 2.30 dB to 4.24 dB, so a window shorter than the room does not explain
-this.
-
-The magnitudes of that same material do still track each other, with a log-magnitude spectrogram
-correlation of 0.45–0.72 by band. A power-domain regression therefore runs alongside the complex
-path:
+Where $W$ is the smoothing window length in frames and $p$ is system order. Minimizing expected mean-squared error yields the shrinkage scalar $\gamma$:
 
 $$
-P_y \approx g(f,n)\,P_x + c(f,n)
+\gamma = \frac{\gamma^2_{\text{adj}}}{\gamma^2_{\text{adj}} + \frac{p}{N_{\text{eff}}}\bigl(1 - \gamma^2_{\text{adj}}\bigr) + \varepsilon}
 $$
 
-The intercept is there on purpose: $gP_x$ is the part that follows the source and the slowly varying
-$c$ is the live content, so only the former may be removed. The slope is constrained non-negative,
-since more accompaniment in the source cannot mean less of it on stage, and is then gated through a
-smoothstep on the same degrees-of-freedom-adjusted correlation. Unrelated music shares loudness
-envelopes to some degree, and that gate is what keeps an unrelated source from being suppressed.
+When the reference is uncorrelated, $\gamma \to 0$ and the linear stage bypasses the input signal unchanged.
 
-The mask ends up removing whichever of the two paths explains more, less whatever the coherent stage
-already took out. On that stage recording the removed energy measures 6.85 dB.
+Diagonal regularization thresholds are bounded below by median spectral energy to prevent unstable amplification during quiet reference passages.
 
-This path removes content whose power follows the source rather than content the waveform shows to
-come from the source, so it relies on much weaker evidence than the coherent path. Driving the mask
-from it directly makes the mask open and close cell by cell, which on badly phase-decorrelated
-material is audible as musical noise, so two bounds keep that in check: a single cell's incoherent
-claim is capped at a share of the residual power (`_INCOHERENT_MAX_SHARE`), so weak evidence can
-never push the mask to the floor, and the mask ratio is formed from powers smoothed in time
-(`_MASK_POWER_SMOOTH`) before the existing narrow Gaussian pass, which flattens most of the
-fluctuation before it reaches the mask. The remaining knobs are `_INCOHERENT_OVERSUBTRACTION`,
-`_MASK_FLOOR` and `_MASK_SMOOTHING`; when $\gamma^2$ is only 0.02–0.05
-above 500 Hz there is simply not enough information to decide whether
-a given cell is backing, which is why the smoothstep gate still shuts the path off at low
-confidence.
+### Leakage Estimation
 
-### Research Basis and Boundaries
-
-- Gorlow, Ramona, and Pachet's
-  [live accompaniment-cancellation study](https://arxiv.org/abs/1611.08905) compares
-  adaptive noise cancellation, spectral subtraction, and short-time ERB-band Wiener
-  filtering. This implementation uses a simpler coherence-weighted frequency-domain soft
-  mask rather than time-domain LMS or a separate ERB voting layer.
-- Boll's [classic spectral-subtraction paper](https://doi.org/10.1109/TASSP.1979.1163209)
-  describes magnitude subtraction and residual-noise problems. This implementation retains
-  a subtractive power target while adding reference-conditioned coherence, a mask floor,
-  and narrow time-frequency smoothing instead of directly applying hard spectral subtraction.
-- Avery Lee's [Center Cut](https://www.virtualdub.org/blog2/entry_102.html) and ADRess-style
-  methods depend on center imaging, inter-channel level differences, or phase differences,
-  and are unrelated to this implementation: they read only the spatial relationship between
-  two channels, whereas reference cancellation reads the evidence the song source provides.
-- The convolutive transfer function (CTF) literature explains why the multiplicative narrowband
-  approximation fails under long reverberation and how a finite set of frame taps replaces it, for
-  example [joint dereverberation and blind source separation with a hybrid CTF
-  model](https://doi.org/10.1016/j.apacoust.2024.110168). Schröter et al.'s
-  [DeepFilterNet](https://arxiv.org/abs/2110.05588) and Tammen and Doclo's
-  [deep multi-frame MVDR](https://arxiv.org/abs/2011.10345) are the learned form of the same idea:
-  a complex filter across frames per time-frequency bin rather than a point-wise mask.
-- Engineering systems with the same structure are useful references. WebRTC's AEC3 is
-  likewise "known reference plus unknown transfer plus double-talk", and its
-  partitioned-block frequency-domain adaptive filter, delay estimation, and residual
-  echo suppressor map onto the alignment, transfer estimation, and coherence-weighted mask here.
-
-These papers provide algorithm structure and failure boundaries; they
-do not guarantee an improvement on every real performance. Matched-segment,
-loudness-matched A/B listening remains the acceptance criterion.
-
-## Output Protection and Validation
-
-After processing, non-finite values are replaced with finite values and peaks are kept within
-range when necessary. The result is written as PCM WAV at the song's own sample rate and bit
-depth: cancellation neither changes the time base nor creates new spectrum, so raising the export
-to a fixed floor would only enlarge the file.
-
-Algorithm tests cover time offsets, local drift, a tempo-shifted reference (including the refusal of an
-unchanged one), inverted polarity, frequency-dependent room
-transfer, unrelated sources, rejection of source-only replacement lyrics, matrix crosstalk,
-normal-equation orientation on a phase-correlated stereo reference, a live source that never stops
-(which guards the leakage regression's intercept), and block seams. Synthetic
-metrics only detect implementation regressions. Real material must
-still be exported with identical input and settings for direct
-comparison, listening closely to vocal level, sibilance, breathing, harmonies, reverb tails, and
-audience sound.
-
-## Exported Stems
-
-One cancellation can export two tracks. The vocal is what the pipeline produces; the backing is
-not subtracted from the recording but re-rendered from the song source through the transfer the
-cancellation estimated. Each time-frequency cell gets a real power gain
+Residual power $P_e$ is regressed against predicted power $P_d$ with an intercept to account for reverberant and acoustic mismatch leakage:
 
 $$
-g(f,n)=\sqrt{\frac{\widehat P_b(f,n)}{P_x(f,n)}}
+P_e \approx \rho(f, n)\,P_d(f, n) + c(f, n)
 $$
 
-The numerator is the source power the playback carried — what the linear stage removed, or the
-larger of the leakage regression's and the incoherent path's estimates, bounded by the mixture's
-own power. The denominator is the source's own smoothed power. Both sides are smoothed over the
-same statistical context before the root is taken, which leaves a slowly varying real gain, and it
-is multiplied onto the source's own spectrum. That choice has two reasons: the backing keeps the
-source's phase, transients and fine structure, so its quality is the source's rather than the
-capture's; and the complex transfer's phase is itself noise where the coherence is low, so
-rendering it would smear exactly the content the power path recovered. The gain is capped at 2,
-because the playback chain can be louder than the master but a gain fitted on weak evidence must
-not run away.
+Here, $\rho P_d$ captures residual playback fluctuations while $c$ accounts for steady-state live program material. The regression slope $\rho$ is thresholded and bounded by residual power to drive soft residual attenuation.
 
-Strength $\alpha$ scales the backing too, so $\alpha=0$ exports silence rather than a backing
-nothing was taken from.
+### Incoherent Power Path
 
-When only one stem is exported it is written to the path the user named. When both are, the second
-name is derived from the first: a trailing `_vocals` becomes `_backing`, and a name without that
-marker simply gains it. The backing is rendered into its own full-length buffer, so exporting both
-costs one more of them rather than overwriting the vocal's. Peak protection scales each track on
-its own peak: the synthesised backing can be louder than the vocal, and clipping one to protect the
-other would trade a level for a distortion.
+When high-frequency phase coherence collapses (e.g., complex coherence drops below $0.1$ above $500\text{ Hz}$), a parallel log-magnitude power regression is evaluated:
 
-Because the backing is no longer formed by subtraction, the two stems no longer add back up to the
-original recording. What that buys is source-grade quality in the backing, and clean silence in the
-ranges no clip covered — nothing was cancelled out of them.
+$$
+P_y \approx g(f, n)\,P_x + c(f, n)
+$$
+
+With gain constrained to $g \ge 0$. Incoherent attenuation is capped by `_INCOHERENT_MAX_SHARE` and filtered across time (`_MASK_POWER_SMOOTH`) to prevent musical noise artifacts.
+
+### Literature and Industry Comparisons
+
+- **Adaptive Filtering & Spectral Subtraction**: Gorlow, Ramona, and Pachet's study on [accompaniment removal in live solos](https://arxiv.org/abs/1611.08905) compares adaptive filtering and subband Wiener filtering. Purivox adopts STFT complex subtraction coupled with adjusted coherence masking.
+- **Spectral Subtraction Foundations**: Boll's [classic spectral subtraction paper](https://doi.org/10.1109/TASSP.1979.1163209) addresses musical noise; here, nonlinear subtraction is applied exclusively to post-linear residuals.
+- **Echo Cancellation Parallels**: The tiered structure mirrors WebRTC AEC3 (delay estimation, linear cancellation, residual suppression), formulated in batch frequency-domain least-squares for parallel processing.
+
+## Specification Integrity and Verification
+
+Outputs undergo finite-value sanity checks and dynamic peak protection. Exported PCM WAV files match input sampling rates and format bit depths (16-bit for 8/16-bit inputs; 24-bit for float, lossy, or wider inputs).
+
+Automated tests verify delay offsets, drift tracking, tempo criteria, phase inversions, room transfer responses, uncorrelated reference immunity, and chunk boundary transitions. The evaluation suite `tools/eval_cancellation.py` measures cancellation depth and waveform fidelity across synthetic test scenes.
+
+## Export Stem Modes and Non-Additive Trade-Offs
+
+The pipeline supports two output stems:
+
+1. **Isolated Live Vocal**: Direct result of coherent subtraction and residual masking.
+2. **Reconstructed Backing**: Synthesized from the studio reference through estimated transfer gains:
+
+$$
+g(f, n) = \sqrt{\frac{\widehat P_b(f, n)}{P_x(f, n)}}
+$$
+
+Smoothed gains modulate the reference spectrogram, producing a backing track that mirrors stage acoustic frequency response and levels while retaining studio transient fidelity. When exporting both stems, backing tracks receive a `_backing` suffix.
+
+### Non-Additive Reconstruction Note
+
+Importantly: **isolated live vocal stems and reconstructed backing stems do not sum back to the original recording**. This non-additive behavior arises because:
+- The reconstructed backing stem is re-synthesized from the clean studio reference and excludes stage reverberation, room reflections, and ambient noise;
+- The vocal stem undergoes nonlinear residual soft-masking.
+
+This is an intentional engineering trade-off that prioritizes delivering a clean, studio-grade backing track over strict additive mathematical decomposition. In unassigned timeline intervals where no reference match exists, the backing track outputs pure silence.
