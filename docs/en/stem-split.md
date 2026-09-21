@@ -88,10 +88,22 @@ $\psi$ is how alike the two channels are in that cell — one panned source scor
 tail or a cymbal wash near 0 — and $\tau$ is where between them it sits, 0 being centred. The
 centre weight is their product:
 
-$$w = \psi \cdot \exp\!\left(-\frac{\tau^2}{2\sigma_{\text{pan}}^2}\right) \cdot g(f)$$
+$$w = \frac{2\psi}{1 + \psi} \cdot
+\exp\!\left(-\frac{1}{2}\left|\frac{\tau}{\sigma_{\text{pan}}}\right|^{p}\right) \cdot g(f)$$
 
-$\sigma_{\text{pan}} = 0.25$ (`PAN_WIDTH`) is the tolerance for "still centred": a lead that sits
-slightly off centre, or is doubled, stays inside it; a hard-panned guitar does not.
+The first term is not $\psi$ itself. For a centred cell $\psi$ is exactly the gain that best
+recovers the shared source from **one channel**, but what is masked here is the mid $M$, which
+carries that same source against half the uncorrelated power; its optimal gain is therefore higher,
+and works out to $2\psi/(1+\psi)$. The two barely differ where the channels already agree, and
+differ most where a room has spread the lead across the image — which is where plain $\psi$ was
+giving up early.
+
+$\sigma_{\text{pan}} = 0.40$ (`PAN_WIDTH`) is the edge of "still centred", and $p = 8$
+(`PAN_ORDER`) is how steeply the window falls away past it. The exponent is what makes both halves
+true at once: a plain Gaussian ($p = 2$) has to choose, because a width that follows a lead fifteen
+percent off centre also pulls in a hard-panned guitar, and a width that keeps the guitar out leaves
+two thirds of that lead behind. A high-order window is flat across the middle and steep at its
+edge, which separates "is this centred at all" from "how centred is it" and answers both.
 
 $g(f)$ is the bass protection (`BASS_PROTECT_HZ = 100`, rising to 1 by `BASS_PROTECT_EDGE_HZ =
 200`). The kick and the bass are centred by convention, not because they are the lead, and taking
@@ -125,14 +137,26 @@ over the whole recording by orthogonal projection; what a mastering chain actual
 a filter — delayed, shelved, different at every frequency — and a scalar cannot cancel it.
 
 This takes two passes. The first accumulates $\sum F_L \overline{F_C}$ and $\sum |F_C|^2$ per bin,
-which gives a **complex** $\alpha_L(f)$ over the whole recording; bins whose coherence
-$|\Phi_{LC}|^2 / (\Phi_{LL}\Phi_{CC})$ falls below `COHERENCE_FLOOR` are set to zero, so content a
-front channel does not share with the centre is left alone. The second pass writes
+which gives a **complex** $\alpha_L(f)$ over the whole recording; the second writes
 $\text{istft}(F_L - \alpha_L(f) F_C)$.
+
+$$\alpha_L(f) = \frac{\sum_t F_L \overline{F_C}}{\sum_t |F_C|^2 + \lambda \max_f \sum_t |F_C|^2}$$
+
+**Nothing gates this on coherence.** Coherence answers how much of a front channel the centre
+explains, and a front channel carrying a whole arrangement of its own scores low on that however
+faithfully the centre leaks into it. Gating on it zeroes a large and correct ratio precisely where
+there is most to cancel and least chance of hearing it. Content the centre does not explain leaves
+no correlation to find, so its $\alpha$ comes back at zero on its own; nothing has to force it.
+
+What needs guarding against is a divisor close to zero — a band-limited centre feed leaves bins
+with almost nothing in them, and a ratio standing on one of those is unbounded. $\lambda = 10^{-6}$
+(`TRANSFER_FLOOR`) floors the divisor against the loudest bin, so the bound holds whatever the
+recording's level, which an absolute epsilon cannot do.
 
 The estimate covers the whole recording rather than following it frame by frame: the leak from FC
 into the front pair of a master is essentially static, and a whole-file estimate is the steadier
-one.
+one, and more frames mean less variance. Over a few seconds of material, estimation noise costs a
+front channel with no leak at all under a decibel; over a whole song that is invisible.
 
 ## Level and Clipping
 

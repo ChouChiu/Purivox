@@ -43,9 +43,17 @@ OVERLAP_SECONDS = 2.0
 # neighbours, which other sources own.
 SMOOTHING_FRAMES = 5
 # The panning offset a source is still called centred at, as a fraction of the
-# way to one side.  A lead vocal that sits slightly off centre, or is doubled,
-# stays inside this; a guitar panned hard does not.
-PAN_WIDTH = 0.25
+# way to one side, and how steeply the window falls away past it.  A lead vocal
+# that sits slightly off centre, or is doubled, stays inside this; a guitar
+# panned hard does not.  The exponent is what makes both true at once: a plain
+# Gaussian has to choose, because the width that follows a lead fifteen percent
+# off centre also pulls in a hard-panned guitar, and the width that keeps the
+# guitar out leaves two thirds of that lead behind.  Raising it flattens the
+# window across the middle and steepens its edge, which is worth ten decibels
+# on the off-centre lead in `tools/eval_stems.py` at less cost to the
+# arrangement than the Gaussian was already paying.
+PAN_WIDTH = 0.40
+PAN_ORDER = 8
 # The band the centre mask is allowed to act in.  Below the first of these a
 # mix is centred whatever it holds - the kick and the bass live there by
 # convention, not because they are the lead - so taking centred content out
@@ -56,9 +64,12 @@ PAN_WIDTH = 0.25
 # the instrumental.
 BASS_PROTECT_HZ = 100.0
 BASS_PROTECT_EDGE_HZ = 200.0
-# Below this coherence a front channel shares nothing measurable with the
-# centre channel, so nothing is subtracted from it.
-COHERENCE_FLOOR = 0.2
+# How far below the loudest bin the centre channel may sit before its share of
+# the front pair stops being worth dividing by.  A band-limited centre feed
+# leaves bins with almost nothing in them, and a ratio standing on one of those
+# is unbounded; flooring the divisor against the loudest bin bounds it whatever
+# the recording's level, which an absolute epsilon cannot do.
+TRANSFER_FLOOR = 1e-6
 _EPSILON = 1e-12
 
 ProgressFraction = Callable[[float], None]
@@ -156,9 +167,16 @@ def estimate_centre(left: np.ndarray, right: np.ndarray, sample_rate: int) -> Ce
     cross = _smooth(left * np.conj(right))
     total = auto_left + auto_right + _EPSILON
     similarity = np.clip(2.0 * np.abs(cross) / total, 0.0, 1.0)
+    # For a centred cell the similarity is already the gain that best recovers
+    # the shared source from one channel.  The mid channel carries that same
+    # source against half the uncorrelated power, so its gain is higher, and
+    # this is what it works out to.  The difference is small where the channels
+    # already agree and largest where a room has spread the lead across the
+    # image, which is exactly where the plain similarity gives up too early.
+    shared = 2.0 * similarity / (1.0 + similarity)
     balance = (auto_left - auto_right) / total
-    centred = np.exp(-(balance**2) / (2.0 * PAN_WIDTH**2))
-    weight = similarity * centred * _bass_protection(left.shape[1], sample_rate)
+    centred = np.exp(-0.5 * np.abs(balance / PAN_WIDTH) ** PAN_ORDER)
+    weight = shared * centred * _bass_protection(left.shape[1], sample_rate)
     # The amplitudes the shared source arrives at on each side.  Their mean is
     # what the mid channel carries, so dividing by it gives each channel the
     # factor that takes exactly its own share of the source away.
@@ -218,13 +236,20 @@ def _front_transfer(
 
     Atome fits one real number over the whole recording.  What a mastering
     chain actually leaves in the front pair is a filter - delayed, shelved, and
-    different at every frequency - so this is a complex ratio per bin, gated by
-    the coherence behind it: where a front channel shares nothing measurable
-    with the centre, nothing is subtracted from it.
+    different at every frequency - so this is a complex ratio per bin.
+
+    Nothing gates it on coherence.  Coherence answers how much of a front
+    channel the centre explains, and a bin where the front carries a loud
+    arrangement of its own scores low on that however faithfully the centre
+    leaks into it - so gating on it zeroes a large and correct ratio precisely
+    where there is most to cancel, which `tools/eval_stems.py` scores forty
+    decibels worse.  Content the centre does not explain leaves no correlation
+    to find, so its ratio comes back at zero without being forced.  What does
+    need guarding against is a divisor close to zero, and `TRANSFER_FLOOR`
+    guards against that directly.
     """
     bins = N_FFT // 2 + 1
     cross = np.zeros((2, bins), dtype=np.complex128)
-    auto_front = np.zeros((2, bins))
     auto_centre = np.zeros(bins)
     for block in block_plan(source.frames, source.sample_rate):
         token.raise_if_cancelled()
@@ -241,14 +266,11 @@ def _front_transfer(
                 HOP,
             )
             cross[row] += np.sum(spectrum * np.conj(centre), axis=0)
-            auto_front[row] += np.sum(np.abs(spectrum) ** 2, axis=0)
-    transfer = cross / (auto_centre + _EPSILON)
-    coherence = np.abs(cross) ** 2 / ((auto_front * auto_centre) + _EPSILON)
-    transfer[coherence < COHERENCE_FLOOR] = 0.0
+    transfer = cross / (auto_centre + TRANSFER_FLOOR * auto_centre.max() + _EPSILON)
     logger.info(
-        "centre leaks into the front pair over %d of %d bins",
-        int(np.count_nonzero(transfer[0])),
-        bins,
+        "centre leaks into the front pair at up to %.3f, %.4f on average",
+        float(np.abs(transfer).max()),
+        float(np.abs(transfer).mean()),
     )
     return transfer
 
