@@ -1,18 +1,35 @@
 from __future__ import annotations
 
+from typing import Protocol
+
 from PySide6.QtCore import QObject, Signal, Slot
 from PySide6.QtWidgets import QWidget
-from qfluentwidgets import InfoBar, InfoBarPosition, StateToolTip
+from qfluentwidgets import InfoBar, InfoBarPosition, ProgressBar, StateToolTip
 
-from app.job_runner import JobRunner
-from features.reference_removal import ClipKind, IsolationResult, StageAnalysis
-from features.reference_removal.page import MrPage
-from features.stem_split import StemSplitResult
-from features.stem_split.page import StemPage
 from shared.i18n import tr
-from shared.processing import ProcessingOperation, ProcessingResultLike
+from shared.tasks import Operation, TaskRunner
+from shared.ui import ElidedLabel
 
-ProcessingPage = MrPage | StemPage
+
+class JobPage(Protocol):
+    """What the presenter needs of a page that runs jobs.
+
+    The page shows its own result, because only it knows what its job returns;
+    the presenter owns everything that is the same for every job.
+    """
+
+    progress: ProgressBar
+    status: ElidedLabel
+
+    def set_running(self, running: bool) -> None: ...
+
+    def start_clock(self) -> None: ...
+
+    def stop_clock(self) -> None: ...
+
+    def show_result(self, result: object) -> str:
+        """Show a finished job's result and return the line to announce it with."""
+        ...
 
 
 class JobPresenter(QObject):
@@ -23,8 +40,8 @@ class JobPresenter(QObject):
     def __init__(self, parent: QWidget):
         super().__init__(parent)
         self._parent = parent
-        self._runner = JobRunner(self)
-        self._active_page: ProcessingPage | None = None
+        self._runner = TaskRunner(self)
+        self._active_page: JobPage | None = None
         self._state_tip: StateToolTip | None = None
         self._runner.progress.connect(self._progress)
         self._runner.succeeded.connect(self._success)
@@ -36,7 +53,7 @@ class JobPresenter(QObject):
     def running(self) -> bool:
         return self._runner.running
 
-    def start(self, page: ProcessingPage, operation: ProcessingOperation) -> None:
+    def start(self, page: JobPage, operation: Operation) -> None:
         if self.running:
             raise RuntimeError("a processing operation is already running")
         self._active_page = page
@@ -46,14 +63,7 @@ class JobPresenter(QObject):
         self._state_tip = StateToolTip(tr("processing"), tr("loading_stage"), self._parent)
         self._state_tip.move(self._state_tip.getSuitablePos())
         self._state_tip.show()
-        try:
-            self._runner.start(operation)
-        except BaseException:
-            page.set_running(False)
-            page.stop_clock()
-            self._active_page = None
-            self._discard_state_tip()
-            raise
+        self._runner.start(operation)
 
     def cancel(self) -> None:
         self._runner.cancel()
@@ -66,47 +76,16 @@ class JobPresenter(QObject):
         if self._state_tip is not None:
             self._state_tip.setContent(message)
 
-    @staticmethod
-    def _summary(analysis: StageAnalysis) -> str:
-        return tr(
-            "stage_analysis_summary",
-            songs=len(analysis.song_clips),
-            fragments=sum(clip.kind is ClipKind.FRAGMENT for clip in analysis.clips),
-            missing=len(analysis.missing_sources),
-        )
-
     @Slot(object)
-    def _success(self, result: ProcessingResultLike) -> None:
+    def _success(self, result: object) -> None:
         if self._state_tip is not None:
             self._state_tip.setState(True)
             self._state_tip = None
-        page = self._active_page
-        if isinstance(result, StageAnalysis):
-            # The Find songs button reports a timeline and writes nothing.
-            if isinstance(page, MrPage):
-                page.set_analysis(result)
-            message = self._summary(result)
-        elif isinstance(result, StemSplitResult):
-            if isinstance(page, StemPage):
-                page.set_result(result)
-                page.status.setText(tr("stem_done_status", count=len(result.outputs)))
-            message = "\n".join(map(str, result.outputs))
-        else:
-            analysis = result.analysis if isinstance(result, IsolationResult) else None
-            if isinstance(page, MrPage) and analysis is not None:
-                page.set_analysis(analysis)
-                if result.outputs:
-                    stats = result.audio_stats[0] if result.audio_stats else None
-                    page.set_result(result.outputs[0], stats)
-                    page.status.setText(tr("done_status", path=result.outputs[0]))
-            message = (
-                "\n".join(map(str, result.outputs))
-                if result.outputs
-                else (self._summary(analysis) if analysis is not None else "")
-            )
+        if self._active_page is None:
+            return
         InfoBar.success(
             tr("done_title"),
-            message,
+            self._active_page.show_result(result),
             duration=5000,
             position=InfoBarPosition.TOP_RIGHT,
             parent=self._parent,

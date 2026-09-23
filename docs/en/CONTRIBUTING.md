@@ -48,7 +48,7 @@ Import boundaries are enforced statically by `tests/test_architecture.py`.
 
 ### Qt Desktop Conventions
 
-- UI pages handle rendering and signal emission; background jobs are orchestrated via `app/job_presenter.py` and executed by `app/job_runner.py`;
+- UI pages handle rendering and signal emission; background jobs are orchestrated via `app/job_presenter.py` and executed by `TaskRunner` in `shared/tasks.py`;
 - Cross-thread signal slots must be decorated with explicit types using `@Slot(<type>)`;
 - Prefer standard Qt components (e.g., `QAbstractTableModel` paired with Fluent `TableView`, `QNetworkAccessManager` for HTTP operations, `QSaveFile` for atomic disk writes);
 - Self-contained UI controls should be modularized within their respective feature packages.

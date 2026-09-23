@@ -6,6 +6,7 @@ import mmap
 import os
 import sys
 import tempfile
+from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -121,6 +122,12 @@ class AudioData:
                 self.bit_depth,
             )
         return AudioData(self.samples[:2], self.sample_rate, self.backing_path, self.bit_depth)
+
+    def __enter__(self) -> AudioData:
+        return self
+
+    def __exit__(self, *_exc: object) -> None:
+        self.cleanup()
 
     def cleanup(self) -> None:
         """Close and remove an owned temporary PCM mapping."""
@@ -305,6 +312,20 @@ def read_audio(path: str | Path, token: CancellationToken | None = None) -> Audi
         return _read_with_qt(source, cancel)
 
 
+def _resampled_blocks(
+    audio: AudioData, target_rate: int, cancel: CancellationToken
+) -> Iterator[np.ndarray]:
+    """Stream `audio` through soxr, one interleaved block out per block in."""
+    stream = soxr.ResampleStream(
+        audio.sample_rate, target_rate, audio.channels, dtype="float32", quality="HQ"
+    )
+    for start in range(0, audio.frames, BLOCK_FRAMES):
+        cancel.raise_if_cancelled()
+        end = min(start + BLOCK_FRAMES, audio.frames)
+        block = np.asarray(audio.samples[:, start:end].T, dtype=np.float32)
+        yield stream.resample_chunk(block, last=end == audio.frames)
+
+
 def _resample_in_memory(audio: AudioData, target_rate: int, cancel: CancellationToken) -> AudioData:
     """Resample into one buffer, for the platform where a temporary file is heap too.
 
@@ -312,17 +333,10 @@ def _resample_in_memory(audio: AudioData, target_rate: int, cancel: Cancellation
     heap on a real filesystem.  Under Emscripten it would hold the audio twice,
     so the same blocks are written straight into the destination instead.
     """
-    stream = soxr.ResampleStream(
-        audio.sample_rate, target_rate, audio.channels, dtype="float32", quality="HQ"
-    )
     estimated = math.ceil(audio.frames * target_rate / audio.sample_rate) + _RESAMPLE_MARGIN
     samples = np.zeros((audio.channels, estimated), dtype=np.float32)
     frames = 0
-    for start in range(0, audio.frames, BLOCK_FRAMES):
-        cancel.raise_if_cancelled()
-        end = min(start + BLOCK_FRAMES, audio.frames)
-        block = np.asarray(audio.samples[:, start:end].T, dtype=np.float32)
-        converted = stream.resample_chunk(block, last=end == audio.frames)
+    for converted in _resampled_blocks(audio, target_rate, cancel):
         produced = converted.shape[0]
         if frames + produced > samples.shape[1]:
             # The estimate is an upper bound in every case measured, so this is
@@ -353,21 +367,12 @@ def resample_audio(
         return _resample_in_memory(audio, target_rate, cancel)
     fd, temporary_name = tempfile.mkstemp(prefix="purivox-resample-", suffix=".pcm")
     temporary = Path(temporary_name)
-    output = os.fdopen(fd, "wb")
-    stream = soxr.ResampleStream(
-        audio.sample_rate, target_rate, audio.channels, dtype="float32", quality="HQ"
-    )
     frames = 0
     try:
-        block_size = BLOCK_FRAMES
-        for start in range(0, audio.frames, block_size):
-            cancel.raise_if_cancelled()
-            end = min(start + block_size, audio.frames)
-            block = np.asarray(audio.samples[:, start:end].T, dtype=np.float32)
-            converted = stream.resample_chunk(block, last=end == audio.frames)
-            output.write(converted.astype(np.float32, copy=False).tobytes())
-            frames += converted.shape[0]
-        output.close()
+        with os.fdopen(fd, "wb") as output:
+            for converted in _resampled_blocks(audio, target_rate, cancel):
+                output.write(converted.astype(np.float32, copy=False).tobytes())
+                frames += converted.shape[0]
         if frames <= 0:
             raise ValueError("resampler produced no samples")
         interleaved = np.memmap(
@@ -375,10 +380,23 @@ def resample_audio(
         )
         return AudioData(interleaved.T, target_rate, temporary, audio.bit_depth)
     except BaseException:
-        if not output.closed:
-            output.close()
         temporary.unlink(missing_ok=True)
         raise
+
+
+def conform_rate(audio: AudioData, target_rate: int, token: CancellationToken) -> AudioData:
+    """Bring `audio` to `target_rate`, releasing the original once it is replaced.
+
+    The pipelines resample a source onto the recording's timeline and never
+    read the original again, so its buffer is dropped here rather than held
+    until the job ends - under Emscripten that buffer is heap.
+    """
+    if audio.sample_rate == target_rate:
+        return audio
+    try:
+        return resample_audio(audio, target_rate, token)
+    finally:
+        audio.cleanup()
 
 
 def write_wav_atomic(

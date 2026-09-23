@@ -56,8 +56,8 @@ flowchart LR
     page["GUI 页面"] -->|不可变参数| job["任务数据类"]
     job --> window["MainWindow"]
     window --> presenter["JobPresenter<br/>页面状态管理"]
-    presenter --> runner["JobRunner<br/>线程独占调度"]
-    runner -->|拥有| worker["QThread + ProcessingWorker"]
+    presenter --> runner["TaskRunner<br/>线程独占调度"]
+    runner -->|拥有| worker["QThread + 任务对象"]
     worker --> pipeline["核心处理管线"]
     cli["CLI"] -->|同步调用| pipeline
     pipeline --> result["处理结果"]
@@ -66,9 +66,9 @@ flowchart LR
     token -.-> pipeline
 ```
 
-1. **状态协调**：`MainWindow` 构造不可变任务数据对象，转交 `JobPresenter` 管理界面控件的启用/禁用、进度展示及结果交互；
-2. **线程独占**：`JobRunner` 拥有 `QThread` 与 `ProcessingWorker` 的生命周期，确保单窗口同一时刻仅有一个后台任务处于运行状态；
-3. **安全退出**：`JobRunner` 仅在工作线程完成延迟删除（`deferred delete`）后发出 `finished` 信号，避免窗口关闭或测试析构时发生竞态；
+1. **状态协调**：`MainWindow` 构造不可变任务数据对象，转交 `JobPresenter` 管理界面控件的启用/禁用与进度展示；结果由页面自己的 `show_result()` 展示，`JobPresenter` 不依赖任何功能模块；
+2. **线程独占**：`shared/tasks.py` 的 `TaskRunner` 拥有 `QThread` 与任务对象的生命周期，确保单窗口同一时刻仅有一个后台任务处于运行状态；下载对话框的 `DownloadRunner` 复用同一个运行器；
+3. **安全退出**：`TaskRunner` 仅在工作线程完成延迟删除（`deferred delete`）后发出 `finished` 信号，避免窗口关闭或测试析构时发生竞态；
 4. **协作取消**：CLI 与 GUI 共用 `CancellationToken`。解码、分析、拉伸、矩阵解算与文件写出等密集循环定期调用 `raise_if_cancelled()`，确保及时响应中断请求。
 
 ## 音频数据与内存管理

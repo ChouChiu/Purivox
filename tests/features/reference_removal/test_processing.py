@@ -76,20 +76,10 @@ def test_reference_pipeline_retains_stage_duration_with_a_short_reference(tmp_pa
     assert data.shape == (2 * sample_rate, 2)
 
 
-def test_reference_pipeline_rejects_same_stage_and_source(tmp_path: Path):
+def test_reference_job_rejects_same_stage_and_source(tmp_path: Path):
     stage = tmp_path / "stage.wav"
-    stage.touch()
-    job = ReferenceJob(
-        stage,
-        stage,
-        tmp_path / "output.wav",
-        100,
-        8,
-        False,
-    )
-
-    with pytest.raises(ValueError, match="stage and source must be different"):
-        run_reference_job(job, CancellationToken())
+    with pytest.raises(ValueError, match="must not also be a source"):
+        ReferenceJob(stage, stage, tmp_path / "output.wav", 100, 8, False)
 
 
 def _cancellation_inputs(

@@ -42,7 +42,7 @@ from shared.config import cfg
 from shared.i18n import install_language, tr
 from shared.jobs import planned_outputs
 from shared.logging import set_log_level
-from shared.processing import ProcessingOperation
+from shared.tasks import Operation
 
 _GUI_REFERENCE_SIGMA_SECONDS = 3
 
@@ -397,7 +397,7 @@ class MainWindow(FluentWindow):
     def _start_worker(
         self,
         page: MrPage | StemPage,
-        operation: ProcessingOperation,
+        operation: Operation,
     ) -> None:
         # Kept as the single interception point for starting a job: the GUI
         # tests replace it to assert that validation rejects a job before any

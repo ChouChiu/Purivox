@@ -210,12 +210,18 @@ class StemPage(PageScrollArea):
         self.open_output.setEnabled(bool(result.outputs))
         self._render_result()
 
+    def show_result(self, result: StemSplitResult) -> str:
+        """Show the finished split and name its files for the notification."""
+        self.set_result(result)
+        self.status.setText(tr("stem_done_status", count=len(result.outputs)))
+        return "\n".join(map(str, result.outputs))
+
     def _render_result(self) -> None:
         self.stems.clear()
         if self._result is None:
             return
         for kind, path, stats in zip(
-            self._result.kinds, self._result.outputs, self._result.audio_stats, strict=False
+            self._result.kinds, self._result.outputs, self._result.audio_stats, strict=True
         ):
             self.stems.addItem(
                 tr(

@@ -233,8 +233,8 @@ class DownloadDialog(MessageBoxBase):
             return
         self._download(self.results[row].url)
 
-    def _searched(self, results: object) -> None:
-        self.results = tuple(results) if isinstance(results, tuple) else ()
+    def _searched(self, results: tuple[Track, ...]) -> None:
+        self.results = results
         self.result_list.clear()
         for track in self.results:
             item = QListWidgetItem(_describe(track))
@@ -247,9 +247,7 @@ class DownloadDialog(MessageBoxBase):
         self.result_list.setCurrentRow(0)
         self.status.setText(tr("download_results_found", count=len(self.results)))
 
-    def _downloaded(self, fetched: object) -> None:
-        if not isinstance(fetched, FetchedTrack):
-            return
+    def _downloaded(self, fetched: FetchedTrack) -> None:
         entry = self.cache.remember(fetched)
         self._fill_cache()
         self._select_cached(entry.path)

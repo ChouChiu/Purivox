@@ -32,6 +32,7 @@ from qfluentwidgets import (
 
 from features.reference_removal.models import (
     ClipKind,
+    IsolationResult,
     StageAnalysis,
     TimelineClip,
 )
@@ -489,20 +490,33 @@ class MrPage(PageScrollArea):
         self.output_edit.setText(str(path))
         return path
 
-    def set_analysis(self, analysis: StageAnalysis) -> None:
-        self.timeline_model.set_analysis(analysis)
-        self.status.setText(
-            tr(
-                "stage_analysis_summary",
-                songs=len(analysis.song_clips),
-                fragments=sum(clip.kind == ClipKind.FRAGMENT for clip in analysis.clips),
-                missing=len(analysis.missing_sources),
-            )
+    @staticmethod
+    def _summary(analysis: StageAnalysis) -> str:
+        return tr(
+            "stage_analysis_summary",
+            songs=len(analysis.song_clips),
+            fragments=sum(clip.kind == ClipKind.FRAGMENT for clip in analysis.clips),
+            missing=len(analysis.missing_sources),
         )
 
-    def invalidate_analysis(self, clear_timeline: bool = True) -> None:
-        if clear_timeline:
-            self.timeline_model.set_analysis(None)
+    def set_analysis(self, analysis: StageAnalysis) -> None:
+        self.timeline_model.set_analysis(analysis)
+        self.status.setText(self._summary(analysis))
+
+    def show_result(self, result: StageAnalysis | IsolationResult) -> str:
+        """Show what a job returned and name it for the notification."""
+        if isinstance(result, StageAnalysis):
+            # Find songs reports a timeline and writes nothing.
+            self.set_analysis(result)
+            return self._summary(result)
+        self.set_analysis(result.analysis)
+        stats = result.audio_stats[0] if result.audio_stats else None
+        self.set_result(result.outputs[0], stats)
+        self.status.setText(tr("done_status", path=result.outputs[0]))
+        return "\n".join(map(str, result.outputs))
+
+    def invalidate_analysis(self) -> None:
+        self.timeline_model.set_analysis(None)
 
     def _selected_manual_row(self) -> int | None:
         index = self.timeline.selectionModel().currentIndex()

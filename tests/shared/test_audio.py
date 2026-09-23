@@ -8,6 +8,7 @@ import soundfile as sf
 from shared.audio import (
     AudioData,
     analyze_audio,
+    conform_rate,
     copy_audio,
     create_pcm_audio,
     read_audio,
@@ -127,3 +128,24 @@ def test_atomic_writer_preserves_existing_file_when_the_write_is_abandoned(tmp_p
 def test_audio_data_rejects_a_depth_the_writer_cannot_produce():
     with pytest.raises(ValueError):
         AudioData(np.ones((1, 100), dtype=np.float32), 8_000, bit_depth=12)
+
+
+def test_audio_used_as_a_context_removes_its_mapping():
+    with create_pcm_audio(2, 1024, 8_000) as audio:
+        path = audio.backing_path
+        assert path is not None and path.exists()
+    assert not path.exists()
+
+
+def test_conform_rate_releases_the_original_only_when_it_resamples():
+    same = create_pcm_audio(1, 8_000, 8_000)
+    try:
+        assert conform_rate(same, 8_000, CancellationToken()) is same
+        assert same.backing_path is not None and same.backing_path.exists()
+    finally:
+        same.cleanup()
+    original = create_pcm_audio(1, 8_000, 8_000)
+    with conform_rate(original, 16_000, CancellationToken()) as converted:
+        assert converted.sample_rate == 16_000
+        assert abs(converted.frames - 16_000) <= 2
+    assert not original.backing_path.exists()

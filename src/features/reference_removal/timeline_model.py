@@ -1,11 +1,10 @@
 from __future__ import annotations
 
 import re
-from dataclasses import replace
 
 from PySide6.QtCore import QAbstractTableModel, QModelIndex, QObject, Qt, Signal
 
-from features.reference_removal.matching import add_manual_clip, remove_manual_clip
+from features.reference_removal.matching import add_manual_clip, edit_clip, remove_manual_clip
 from features.reference_removal.models import ClipKind, StageAnalysis, TimelineClip
 from shared.i18n import tr
 from shared.ui.cards import format_clock
@@ -152,40 +151,27 @@ class TimelineModel(QAbstractTableModel):
         return flags
 
     def setData(self, index: QModelIndex, value, role: int = 0) -> bool:
-        clip = self.clip(index.row())
-        if clip is None or self._analysis is None:
+        if self._analysis is None or self.clip(index.row()) is None:
             return False
+        row, column = index.row(), index.column()
+        edit = role == Qt.ItemDataRole.EditRole
         try:
-            updated = self._edited(clip, index.column(), value, role)
+            if column == ENABLED and role == Qt.ItemDataRole.CheckStateRole:
+                checked = Qt.CheckState(value) == Qt.CheckState.Checked
+                analysis = edit_clip(self._analysis, row, enabled=checked)
+            elif column == STAGE_RANGE and edit:
+                analysis = edit_clip(self._analysis, row, stage_range=parse_range(str(value)))
+            elif column == SOURCE_RANGE and edit:
+                analysis = edit_clip(self._analysis, row, source_range=parse_range(str(value)))
+            else:
+                return False
         except ValueError:
             self.edit_rejected.emit()
             return False
-        if updated is None:
-            return False
-        clips = list(self._analysis.clips)
-        clips[index.row()] = updated
-        self._analysis = replace(self._analysis, clips=tuple(clips))
+        self._analysis = analysis
         self.dataChanged.emit(index.siblingAtColumn(0), index.siblingAtColumn(SOURCE))
         self.clip_edited.emit()
         return True
-
-    def _edited(self, clip: TimelineClip, column: int, value, role: int) -> TimelineClip | None:
-        """Apply one cell edit to a clip, or raise `ValueError` if it is invalid."""
-        if column == ENABLED and role == Qt.ItemDataRole.CheckStateRole:
-            if clip.kind == ClipKind.UNMATCHED:
-                return None
-            return replace(clip, enabled=Qt.CheckState(value) == Qt.CheckState.Checked)
-        if role != Qt.ItemDataRole.EditRole:
-            return None
-        if column == STAGE_RANGE:
-            start, end = parse_range(str(value))
-            if end > self._analysis.duration_seconds:
-                raise ValueError("stage range exceeds duration")
-            return replace(clip, stage_start=start, stage_end=end)
-        if column == SOURCE_RANGE and clip.kind != ClipKind.UNMATCHED:
-            start, end = parse_range(str(value))
-            return replace(clip, source_start=start, source_end=end)
-        return None
 
     def add_clip(self, clip: TimelineClip) -> bool:
         """Insert a user-supplied clip and rebuild the gaps around it."""

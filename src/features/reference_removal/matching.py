@@ -26,6 +26,8 @@ logger = logging.getLogger(__name__)
 
 _FEATURE_RATE = 4_000
 _HOP_SECONDS = 0.04
+# Feature frames per second: every position the anchor search finds is in these.
+_FRAMES_PER_SECOND = 1.0 / _HOP_SECONDS
 _ANCHORS = 7
 # Hits this close to each other describe the same placement, not two of them.
 _CLUSTER_TOLERANCE_SECONDS = 0.8
@@ -199,19 +201,36 @@ def _cluster_hits(
     )
 
 
+def _anchor_hits(
+    anchor_index: int,
+    source_start: int,
+    scores: np.ndarray,
+    peaks: np.ndarray,
+    threshold: float,
+) -> list[_Hit]:
+    """Turn one anchor's correlation peaks into timeline predictions."""
+    source_seconds = float(source_start / _FRAMES_PER_SECOND)
+    return [
+        _Hit(anchor_index, source_seconds, float(peak / _FRAMES_PER_SECOND - source_seconds), score)
+        for peak in peaks
+        if (score := float(scores[peak])) >= threshold
+    ]
+
+
 def _source_candidates(
     stage_features: np.ndarray,
     source_features: np.ndarray,
     source_duration: float,
     token: CancellationToken,
 ) -> list[_Candidate]:
-    feature_rate = 1.0 / _HOP_SECONDS
     anchor_seconds = min(20.0, max(6.0, source_duration * 0.28))
-    anchor_width = min(max(round(anchor_seconds * feature_rate), 24), source_features.shape[1])
+    anchor_width = min(
+        max(round(anchor_seconds * _FRAMES_PER_SECOND), 24), source_features.shape[1]
+    )
     maximum_start = max(source_features.shape[1] - anchor_width, 0)
     anchor_starts = np.unique(np.linspace(0, maximum_start, _ANCHORS).astype(int))
     hits: list[_Hit] = []
-    peak_distance = max(round(4.0 * feature_rate), 1)
+    peak_distance = max(round(4.0 * _FRAMES_PER_SECOND), 1)
     stage = _stage_spectra(stage_features, anchor_width)
     for anchor_index, source_start in enumerate(anchor_starts):
         token.raise_if_cancelled()
@@ -225,21 +244,9 @@ def _source_candidates(
         if peaks.size == 0:
             peaks = np.asarray([int(np.argmax(scores))])
         selected = peaks[np.argsort(scores[peaks])[-12:]]
-        for peak in selected:
-            score = float(scores[peak])
-            if score < 0.08:
-                continue
-            source_seconds = float(source_start / feature_rate)
-            hits.append(
-                _Hit(
-                    anchor_index,
-                    source_seconds,
-                    float(peak / feature_rate - source_seconds),
-                    score,
-                )
-            )
+        hits.extend(_anchor_hits(anchor_index, source_start, scores, selected, 0.08))
 
-    return _cluster_hits(hits, source_duration, anchor_width / feature_rate)
+    return _cluster_hits(hits, source_duration, anchor_width / _FRAMES_PER_SECOND)
 
 
 def _boundary_fragment_candidates(
@@ -249,10 +256,9 @@ def _boundary_fragment_candidates(
     token: CancellationToken,
 ) -> list[_Candidate]:
     """Find short promo/outro uses without letting them replace the full song."""
-    feature_rate = 1.0 / _HOP_SECONDS
-    width = min(round(10.0 * feature_rate), source_features.shape[1])
-    step = max(round(5.0 * feature_rate), 1)
-    boundary = round(75.0 * feature_rate)
+    width = min(round(10.0 * _FRAMES_PER_SECOND), source_features.shape[1])
+    step = max(round(5.0 * _FRAMES_PER_SECOND), 1)
+    boundary = round(75.0 * _FRAMES_PER_SECOND)
     hits: list[_Hit] = []
     stage = _stage_spectra(stage_features, width)
     for anchor_index, source_start in enumerate(
@@ -272,21 +278,9 @@ def _boundary_fragment_candidates(
             )
         )
         selected = boundary_indices[np.argsort(scores[boundary_indices])[-4:]]
-        for peak in selected:
-            score = float(scores[peak])
-            if score < 0.22:
-                continue
-            source_seconds = float(source_start / feature_rate)
-            hits.append(
-                _Hit(
-                    anchor_index,
-                    source_seconds,
-                    float(peak / feature_rate - source_seconds),
-                    score,
-                )
-            )
+        hits.extend(_anchor_hits(anchor_index, source_start, scores, selected, 0.22))
 
-    return _cluster_hits(hits, source_duration, width / feature_rate)
+    return _cluster_hits(hits, source_duration, width / _FRAMES_PER_SECOND)
 
 
 def _verify_boundary_candidates(
@@ -398,7 +392,6 @@ def _find_fragments(
     duration: float,
 ) -> list[TimelineClip]:
     fragments: list[TimelineClip] = []
-    feature_rate = 1.0 / _HOP_SECONDS
     possible = [
         (candidate.votes, candidate.confidence, source_index, source, candidate)
         for source_index, (source, options) in enumerate(
@@ -419,7 +412,7 @@ def _find_fragments(
         end = min(duration, candidate.timeline_start + source_end)
         if candidate.votes < 2 or candidate.confidence < 0.16:
             continue
-        if end - start < max(5.0, 2.0 / feature_rate):
+        if end - start < max(5.0, 2.0 / _FRAMES_PER_SECOND):
             continue
         if any(_overlaps(song, start, end) for song in songs):
             continue
@@ -485,6 +478,45 @@ def remove_manual_clip(analysis: StageAnalysis, index: int) -> StageAnalysis:
     return _rebuilt(analysis, occupied)
 
 
+def edit_clip(
+    analysis: StageAnalysis,
+    index: int,
+    *,
+    enabled: bool | None = None,
+    stage_range: tuple[float, float] | None = None,
+    source_range: tuple[float, float] | None = None,
+) -> StageAnalysis:
+    """Apply one in-place edit to a clip, or raise if the timeline cannot hold it.
+
+    Enabling and the two ranges change the clip itself; inserting and removing
+    go through `add_manual_clip`/`remove_manual_clip` because those rebuild the
+    gaps around the change.  `TimelineClip` validates its own ranges, so an
+    empty or reversed one raises from `replace`.
+    """
+    if not 0 <= index < len(analysis.clips):
+        raise IndexError("timeline index out of range")
+    clip = analysis.clips[index]
+    unmatched = clip.kind == ClipKind.UNMATCHED
+    fields: dict[str, object] = {}
+    if enabled is not None:
+        if unmatched:
+            raise ValueError("an unmatched clip cannot be enabled")
+        fields["enabled"] = enabled
+    if stage_range is not None:
+        if stage_range[1] > analysis.duration_seconds:
+            raise ValueError("stage range exceeds duration")
+        fields["stage_start"], fields["stage_end"] = stage_range
+    if source_range is not None:
+        if unmatched:
+            raise ValueError("an unmatched clip has no source range")
+        fields["source_start"], fields["source_end"] = source_range
+    if not fields:
+        return analysis
+    clips = list(analysis.clips)
+    clips[index] = replace(clip, **fields)
+    return replace(analysis, clips=tuple(clips))
+
+
 def _unmatched_clips(duration: float, occupied: list[TimelineClip]) -> list[TimelineClip]:
     minimum_gap = 0.25
     merged: list[tuple[float, float]] = []
@@ -509,83 +541,72 @@ def analyze_stage(
     token: CancellationToken,
     progress: ProgressCallback = lambda _event: None,
 ) -> StageAnalysis:
-    stage_audio = None
-    try:
-        report_progress(progress, 0, "stage_loading")
-        stage_audio = read_audio(job.stage, token)
+    report_progress(progress, 0, "stage_loading")
+    with read_audio(job.stage, token) as stage_audio:
         duration = stage_audio.frames / stage_audio.sample_rate
         report_progress(progress, 8, "stage_fingerprinting")
         stage_proxy = _proxy(stage_audio, token)
-        stage_features = _features(stage_proxy)
-        stage_audio.cleanup()
-        stage_audio = None
+    stage_features = _features(stage_proxy)
 
-        source_paths = tuple(source.expanduser().resolve() for source in job.sources)
-        candidate_groups: list[list[_Candidate]] = []
-        fragment_candidate_groups: list[list[_Candidate]] = []
-        speeds: list[float] = []
-        for index, source in enumerate(source_paths):
-            token.raise_if_cancelled()
-            value = 12 + round(70 * index / len(source_paths))
-            report_progress(
-                progress,
-                value,
-                "stage_matching_source",
-                current=index + 1,
-                total=len(source_paths),
-                name=source.name,
+    source_paths = tuple(source.expanduser().resolve() for source in job.sources)
+    candidate_groups: list[list[_Candidate]] = []
+    fragment_candidate_groups: list[list[_Candidate]] = []
+    speeds: list[float] = []
+    for index, source in enumerate(source_paths):
+        token.raise_if_cancelled()
+        report_progress(
+            progress,
+            12 + round(70 * index / len(source_paths)),
+            "stage_matching_source",
+            current=index + 1,
+            total=len(source_paths),
+            name=source.name,
+        )
+        with read_audio(source, token) as source_audio:
+            source_duration = source_audio.frames / source_audio.sample_rate
+            source_proxy = _proxy(source_audio, token)
+        speed = _match_speed(stage_proxy, source_proxy, source.name, token)
+        match_proxy = source_proxy
+        if speed != 1.0:
+            match_proxy = time_stretch(source_proxy[None, :], _FEATURE_RATE, speed, token)[0]
+        source_features = _features(match_proxy)
+        # The candidates below describe positions on the stretched proxy,
+        # which is the stage's own clock; `speeds` converts them back.
+        match_duration = source_duration * speed
+        speeds.append(speed)
+        candidate_groups.append(
+            _source_candidates(stage_features, source_features, match_duration, token)
+        )
+        fragment_candidate_groups.append(
+            _verify_boundary_candidates(
+                stage_proxy,
+                match_proxy,
+                _boundary_fragment_candidates(
+                    stage_features, source_features, match_duration, token
+                ),
             )
-            source_audio = read_audio(source, token)
-            try:
-                source_duration = source_audio.frames / source_audio.sample_rate
-                source_proxy = _proxy(source_audio, token)
-            finally:
-                source_audio.cleanup()
-            speed = _match_speed(stage_proxy, source_proxy, source.name, token)
-            match_proxy = source_proxy
-            if speed != 1.0:
-                match_proxy = time_stretch(source_proxy[None, :], _FEATURE_RATE, speed, token)[0]
-            source_features = _features(match_proxy)
-            # The candidates below describe positions on the stretched proxy,
-            # which is the stage's own clock; `speeds` converts them back.
-            match_duration = source_duration * speed
-            speeds.append(speed)
-            candidate_groups.append(
-                _source_candidates(stage_features, source_features, match_duration, token)
-            )
-            fragment_candidate_groups.append(
-                _verify_boundary_candidates(
-                    stage_proxy,
-                    match_proxy,
-                    _boundary_fragment_candidates(
-                        stage_features, source_features, match_duration, token
-                    ),
-                )
-            )
+        )
 
-        songs, missing = _choose_songs(candidate_groups, source_paths, tuple(speeds), duration)
-        fragments = _find_fragments(
-            [
-                full_candidates + boundary_candidates
-                for full_candidates, boundary_candidates in zip(
-                    candidate_groups, fragment_candidate_groups, strict=True
-                )
-            ],
-            source_paths,
-            tuple(speeds),
-            songs,
-            duration,
-        )
-        clips = _timeline(duration, songs + fragments)
-        report_progress(progress, 100, "stage_analysis_done", count=len(songs))
-        logger.info(
-            "stage analysis completed: stage=%s songs=%d fragments=%d missing=%d",
-            job.stage,
-            len(songs),
-            len(fragments),
-            len(missing),
-        )
-        return StageAnalysis(duration, clips, tuple(missing))
-    finally:
-        if stage_audio is not None:
-            stage_audio.cleanup()
+    songs, missing = _choose_songs(candidate_groups, source_paths, tuple(speeds), duration)
+    fragments = _find_fragments(
+        [
+            full_candidates + boundary_candidates
+            for full_candidates, boundary_candidates in zip(
+                candidate_groups, fragment_candidate_groups, strict=True
+            )
+        ],
+        source_paths,
+        tuple(speeds),
+        songs,
+        duration,
+    )
+    clips = _timeline(duration, songs + fragments)
+    report_progress(progress, 100, "stage_analysis_done", count=len(songs))
+    logger.info(
+        "stage analysis completed: stage=%s songs=%d fragments=%d missing=%d",
+        job.stage,
+        len(songs),
+        len(fragments),
+        len(missing),
+    )
+    return StageAnalysis(duration, clips, tuple(missing))

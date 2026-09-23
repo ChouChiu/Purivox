@@ -57,3 +57,16 @@ def planned_outputs(output: Path, tracks: OutputTracks) -> tuple[Path, ...]:
     if tracks is not OutputTracks.BOTH:
         return (output,)
     return (output, backing_path(output))
+
+
+def validate_job_paths(
+    stage: Path, sources: tuple[Path, ...], output: Path, tracks: OutputTracks
+) -> None:
+    """Refuse a job that reads the recording as a source or writes over an input."""
+    resolved_stage = stage.expanduser().resolve()
+    resolved_sources = {source.expanduser().resolve() for source in sources}
+    if resolved_stage in resolved_sources:
+        raise ValueError("stage audio must not also be a source")
+    inputs = {resolved_stage, *resolved_sources}
+    if any(path.expanduser().resolve() in inputs for path in planned_outputs(output, tracks)):
+        raise ValueError("output path must not overwrite an input file")

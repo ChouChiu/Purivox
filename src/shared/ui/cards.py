@@ -131,10 +131,8 @@ class PageScrollArea(ScrollArea):
     def stop_clock(self) -> None:
         """Freeze the clock on the total the job took."""
         self._elapsed_timer.stop()
-        if self._elapsed_started is not None:
-            elapsed = time.monotonic() - self._elapsed_started
-            self.elapsed.setText(format_clock(elapsed, millis=True))
-            self._elapsed_started = None
+        self._tick_elapsed()
+        self._elapsed_started = None
 
     def _tick_elapsed(self) -> None:
         if self._elapsed_started is not None:

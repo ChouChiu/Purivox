@@ -48,7 +48,7 @@ QT_QPA_PLATFORM=offscreen uv run --locked purivox --selftest   # 无头模式执
 
 ### Qt 与桌面端交互
 
-- 页面组件仅负责界面渲染与事件发射，后台异步任务统一由 `app/job_presenter.py` 协调并交由 `app/job_runner.py` 调度执行；
+- 页面组件仅负责界面渲染与事件发射，后台异步任务统一由 `app/job_presenter.py` 协调并交由 `shared/tasks.py` 的 `TaskRunner` 调度执行；
 - 跨线程接收信号的槽函数必须显式标注 `@Slot(<type>)`，确保 Qt 运行时正确派发排队连接；
 - 优先采用 Qt 推荐的最佳实践（如表格数据使用 `QAbstractTableModel` 与 Fluent `TableView` 结合，网络请求使用 `QNetworkAccessManager`，文件校验写入使用 `QSaveFile`）；
 - 单一功能包内的独立控件应进行组件化拆分。

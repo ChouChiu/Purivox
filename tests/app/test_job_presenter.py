@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from threading import Event
 
 import numpy as np
 import soundfile as sf
@@ -9,7 +10,10 @@ from PySide6.QtWidgets import QWidget
 from app.job_presenter import JobPresenter
 from features.reference_removal import ClipKind, IsolationResult, StageAnalysis, TimelineClip
 from features.reference_removal.page import MrPage
-from shared.processing import ProcessingResult, ProgressEvent
+from features.stem_split import StemKind, StemLayout, StemSplitResult
+from features.stem_split.page import StemPage
+from shared.audio import AudioStats
+from shared.processing import ProgressEvent
 
 
 def test_job_presenter_owns_page_running_and_progress_state(qtbot, monkeypatch):
@@ -19,19 +23,23 @@ def test_job_presenter_owns_page_running_and_progress_state(qtbot, monkeypatch):
     presenter = JobPresenter(parent)
     monkeypatch.setattr("app.job_presenter.InfoBar.success", lambda *_args, **_kwargs: None)
 
+    release = Event()
+
     def operation(_token, report):
         report(ProgressEvent(64, "处理中"))
-        return ProcessingResult(())
+        release.wait(2)
+        return _analysis(Path("/work/song.wav"))
 
     with qtbot.waitSignal(presenter.finished, timeout=2_000):
         presenter.start(page, operation)
         assert presenter.running
         assert not page.start_button.isEnabled()
+        qtbot.waitUntil(lambda: page.status.text() == "处理中", timeout=2_000)
+        assert page.progress.value() == 64
+        release.set()
 
     assert not presenter.running
     assert page.start_button.isEnabled()
-    assert page.progress.value() == 64
-    assert page.status.text() == "处理中"
     # The presenter brackets the clock around the job, so the page ends up with
     # a total rather than the empty readout it started from.
     assert page.elapsed.text() != ""
@@ -83,3 +91,21 @@ def test_an_analysis_only_result_leaves_the_preview_alone(qtbot, monkeypatch):
     assert page.analysis is analysis
     assert page._result_path is None
     assert not page.preview_play.isEnabled()
+
+
+def test_a_stem_split_result_fills_the_stem_page(qtbot, monkeypatch, tmp_path: Path):
+    parent = QWidget()
+    page = StemPage(parent)
+    qtbot.addWidget(parent)
+    monkeypatch.setattr("app.job_presenter.InfoBar.success", lambda *_args, **_kwargs: None)
+    presenter = JobPresenter(parent)
+    stats = AudioStats(1.0, 8_000, 1, 16, -6.0, -12.0)
+    result = StemSplitResult(
+        StemLayout.MONO, (StemKind.LOW,), (tmp_path / "take_low.wav",), (stats,)
+    )
+
+    with qtbot.waitSignal(presenter.finished, timeout=2_000):
+        presenter.start(page, lambda _token, _report: result)
+
+    assert page.open_output.isEnabled()
+    assert page.stems.count() == 1

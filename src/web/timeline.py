@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -11,6 +10,7 @@ from features.reference_removal import (
     add_manual_clip,
     remove_manual_clip,
 )
+from features.reference_removal import edit_clip as edit_timeline_clip
 
 
 def clip_to_dict(clip: TimelineClip) -> dict[str, Any]:
@@ -81,34 +81,29 @@ def remove_clip(analysis_data: dict[str, Any], index: int) -> dict[str, Any]:
 def edit_clip(analysis_data: dict[str, Any], index: int, changes: dict[str, Any]) -> dict[str, Any]:
     """Apply one in-place cell edit to a clip and hand back the whole analysis.
 
-    This mirrors `TimelineModel._edited`: enabling, the stage range and the
-    source range are edited on the clip itself, while inserting and removing go
-    through `matching` because those rebuild the gaps around the change.
+    The rule is `features.reference_removal.edit_clip`, the one `TimelineModel`
+    applies to the desktop table; this only reads the page's partial change.
     """
     analysis = analysis_from_dict(analysis_data)
-    if not 0 <= index < len(analysis.clips):
-        raise IndexError("clip index out of range")
-    clip = analysis.clips[index]
-    unmatched = clip.kind == ClipKind.UNMATCHED
-    fields: dict[str, Any] = {}
-    if "enabled" in changes:
-        if unmatched:
-            raise ValueError("an unmatched clip cannot be enabled")
-        fields["enabled"] = bool(changes["enabled"])
-    if "stage_start" in changes or "stage_end" in changes:
-        start = float(changes.get("stage_start", clip.stage_start))
-        end = float(changes.get("stage_end", clip.stage_end))
-        if end > analysis.duration_seconds:
-            raise ValueError("stage range exceeds duration")
-        fields["stage_start"], fields["stage_end"] = start, end
-    if "source_start" in changes or "source_end" in changes:
-        if unmatched:
-            raise ValueError("an unmatched clip has no source range")
-        fields["source_start"] = float(changes.get("source_start", clip.source_start))
-        fields["source_end"] = float(changes.get("source_end", clip.source_end))
-    if not fields:
-        return analysis_to_dict(analysis)
-    clips = list(analysis.clips)
-    # TimelineClip validates its own ranges, so an invalid edit raises here.
-    clips[index] = replace(clip, **fields)
-    return analysis_to_dict(replace(analysis, clips=tuple(clips)))
+    clip = analysis.clips[index] if 0 <= index < len(analysis.clips) else None
+    stage_range = source_range = None
+    if clip is not None and ("stage_start" in changes or "stage_end" in changes):
+        stage_range = (
+            float(changes.get("stage_start", clip.stage_start)),
+            float(changes.get("stage_end", clip.stage_end)),
+        )
+    if clip is not None and ("source_start" in changes or "source_end" in changes):
+        source_range = (
+            float(changes.get("source_start", clip.source_start)),
+            float(changes.get("source_end", clip.source_end)),
+        )
+    enabled = bool(changes["enabled"]) if "enabled" in changes else None
+    return analysis_to_dict(
+        edit_timeline_clip(
+            analysis,
+            index,
+            enabled=enabled,
+            stage_range=stage_range,
+            source_range=source_range,
+        )
+    )

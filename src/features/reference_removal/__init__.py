@@ -1,4 +1,4 @@
-from .matching import add_manual_clip, analyze_stage, remove_manual_clip
+from .matching import add_manual_clip, analyze_stage, edit_clip, remove_manual_clip
 from .models import (
     ClipKind,
     IsolationJob,
@@ -19,6 +19,7 @@ __all__ = [
     "TimelineClip",
     "add_manual_clip",
     "analyze_stage",
+    "edit_clip",
     "remove_manual_clip",
     "render_stage_job",
     "run_isolation_job",

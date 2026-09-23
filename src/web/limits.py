@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from shared.jobs import OutputTracks
+
 # Pyodide compiles to wasm32, whose linear memory tops out at 4 GiB, and
 # Emscripten's temporary filesystem lives inside that same memory.  The
 # `np.memmap` discipline the pipelines follow therefore saves nothing in a
@@ -64,8 +66,7 @@ def isolation_peak_bytes(
     stage_seconds: float,
     longest_source_seconds: float,
     file_bytes: int = 0,
-    both_tracks: bool = False,
-    backing: bool = False,
+    tracks: OutputTracks = OutputTracks.VOCAL,
 ) -> MemoryEstimate:
     """Estimate the peak for `run_isolation_job`, whichever path it takes.
 
@@ -81,12 +82,13 @@ def isolation_peak_bytes(
     full-length buffer before the alignment reads it.  Which one runs depends
     on the material, so the estimate is the larger of the two.  The backing
     track is rendered from the source rather than subtracted from the stage, so
-    exporting it holds one more full-length buffer; `both_tracks` adds the first
-    stem's file staying on the filesystem.
+    exporting it holds one more full-length buffer, and exporting both adds the
+    first stem's file staying on the filesystem.
     """
     stage = buffer_bytes(sample_rate, stage_seconds)
     source = buffer_bytes(sample_rate, longest_source_seconds)
-    written = written_bytes(sample_rate, stage_seconds) if both_tracks else 0
+    backing = tracks is not OutputTracks.VOCAL
+    written = written_bytes(sample_rate, stage_seconds) if tracks is OutputTracks.BOTH else 0
     synthesised = stage if backing else 0
     render = file_bytes + 2 * stage + (5 if backing else 4) * source + synthesised + written
     fallback = file_bytes + stage + 2 * source + max(stage, source) + synthesised + written

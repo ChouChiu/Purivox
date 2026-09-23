@@ -36,8 +36,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     parser.add_argument("--selftest", action="store_true", help=argparse.SUPPRESS)
     commands = parser.add_subparsers(dest="command")
+    # Every command reports progress and errors in the interface language.
+    language = argparse.ArgumentParser(add_help=False)
+    language.add_argument("--lang", choices=SUPPORTED_LANGUAGES, default=SUPPORTED_LANGUAGES[0])
 
-    reference = commands.add_parser("mr", help="reference-guided vocal extraction")
+    reference = commands.add_parser(
+        "mr", parents=[language], help="reference-guided vocal extraction"
+    )
     reference.add_argument("stage", type=Path, help="the stage / live recording")
     # One or many: the pipeline matches each source against the recording, and a
     # lone source about as long as it is cancelled over the whole recording.
@@ -58,9 +63,10 @@ def build_parser() -> argparse.ArgumentParser:
         choices=list(OutputTracks),
         default=OutputTracks.VOCAL,
     )
-    reference.add_argument("--lang", choices=SUPPORTED_LANGUAGES, default=SUPPORTED_LANGUAGES[0])
 
-    split = commands.add_parser("split", help="split one recording into acoustic stems")
+    split = commands.add_parser(
+        "split", parents=[language], help="split one recording into acoustic stems"
+    )
     split.add_argument("source", type=Path, help="the recording to split")
     # Named after the recording rather than required: a split writes several
     # files, so what it needs is a folder, and there is an obvious one.
@@ -77,9 +83,8 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="HZ",
         help=f"the band stems are split at (default: {DEFAULT_CROSSOVER_HZ:g} Hz)",
     )
-    split.add_argument("--lang", choices=SUPPORTED_LANGUAGES, default=SUPPORTED_LANGUAGES[0])
 
-    download = commands.add_parser("fetch", help="download audio from a link")
+    download = commands.add_parser("fetch", parents=[language], help="download audio from a link")
     download.add_argument(
         "query",
         nargs="?",
@@ -91,7 +96,6 @@ def build_parser() -> argparse.ArgumentParser:
     download.add_argument("--limit", type=int, help="how many search results to list")
     download.add_argument("--pick", type=int, help="download this result of a search, 1-based")
     download.add_argument("--list", action="store_true", help="list what has been downloaded")
-    download.add_argument("--lang", choices=SUPPORTED_LANGUAGES, default=SUPPORTED_LANGUAGES[0])
     return parser
 
 

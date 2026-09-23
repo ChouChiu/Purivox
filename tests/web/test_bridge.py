@@ -329,9 +329,11 @@ def test_estimate_charges_for_the_second_exported_file(reference_scene):
             "file_bytes": 0,
         }
     )
-    single = json.loads(bridge.estimate_isolation(request))
+    single = json.loads(
+        bridge.estimate_isolation(json.dumps({**json.loads(request), "tracks": "backing"}))
+    )
     both = json.loads(
-        bridge.estimate_isolation(json.dumps({**json.loads(request), "both_tracks": True}))
+        bridge.estimate_isolation(json.dumps({**json.loads(request), "tracks": "both"}))
     )
     # The stem sitting in the Emscripten filesystem is heap like everything else.
     assert both["peak_bytes"] > single["peak_bytes"]

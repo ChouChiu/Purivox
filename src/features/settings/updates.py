@@ -144,8 +144,6 @@ class UpdateChecker(QObject):
     def _reply_finished(self) -> None:
         reply = self._reply
         self._reply = None
-        if reply is None:
-            return
         payload = reply.readAll().data()
         error = reply.error()
         message = reply.errorString()

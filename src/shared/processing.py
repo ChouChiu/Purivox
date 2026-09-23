@@ -4,7 +4,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from threading import Event
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from shared.audio.analysis import AudioStats
@@ -24,14 +24,6 @@ class ProgressEvent:
 class ProcessingResult:
     outputs: tuple[Path, ...]
     audio_stats: tuple[AudioStats, ...] = ()
-
-
-class ProcessingResultLike(Protocol):
-    @property
-    def outputs(self) -> tuple[Path, ...]: ...
-
-    @property
-    def audio_stats(self) -> tuple[AudioStats, ...]: ...
 
 
 @dataclass(slots=True)
@@ -55,4 +47,3 @@ class ProcessingCancelled(RuntimeError):
 
 
 ProgressCallback = Callable[[ProgressEvent], None]
-ProcessingOperation = Callable[[CancellationToken, ProgressCallback], ProcessingResultLike]

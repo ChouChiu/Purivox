@@ -56,8 +56,8 @@ flowchart LR
     page["GUI Page"] -->|Immutable Parameters| job["Job Dataclass"]
     job --> window["MainWindow"]
     window --> presenter["JobPresenter<br/>Page State & Progress"]
-    presenter --> runner["JobRunner<br/>Exclusive Execution"]
-    runner -->|Owns| worker["QThread + ProcessingWorker"]
+    presenter --> runner["TaskRunner<br/>Exclusive Execution"]
+    runner -->|Owns| worker["QThread + Task"]
     worker --> pipeline["Processing Pipeline"]
     cli["CLI"] -->|Synchronous Invocation| pipeline
     pipeline --> result["Result Dataclass"]
@@ -66,9 +66,9 @@ flowchart LR
     token -.-> pipeline
 ```
 
-1. **State Coordination**: `MainWindow` constructs immutable job objects and delegates UI state management to `JobPresenter`;
-2. **Thread Exclusivity**: `JobRunner` manages the lifecycles of `QThread` and `ProcessingWorker`, enforcing that each window runs at most one background task concurrently;
-3. **Clean Teardown**: `JobRunner` emits its `finished` signal only after thread deferred deletion completes, preventing race conditions during application shutdown or test teardown;
+1. **State Coordination**: `MainWindow` constructs immutable job objects and delegates UI state and progress to `JobPresenter`; each page shows its own result through `show_result()`, so `JobPresenter` depends on no feature;
+2. **Thread Exclusivity**: `TaskRunner` in `shared/tasks.py` manages the lifecycles of the `QThread` and its task, enforcing that each window runs at most one background task concurrently; the download dialog's `DownloadRunner` reuses the same runner;
+3. **Clean Teardown**: `TaskRunner` emits its `finished` signal only after thread deferred deletion completes, preventing race conditions during application shutdown or test teardown;
 4. **Cooperative Cancellation**: CLI and GUI share a cooperative `CancellationToken`. Long-running processing loops periodically invoke `raise_if_cancelled()` to respond to abort signals.
 
 ## Audio Data and Memory Management

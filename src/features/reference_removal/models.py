@@ -5,7 +5,7 @@ from enum import StrEnum
 from pathlib import Path
 
 from shared.audio import AudioStats
-from shared.jobs import OutputTracks, planned_outputs, validate_reference_settings
+from shared.jobs import OutputTracks, validate_job_paths, validate_reference_settings
 
 
 @dataclass(frozen=True, slots=True)
@@ -27,6 +27,7 @@ class ReferenceJob:
 
     def __post_init__(self) -> None:
         validate_reference_settings(self.strength, self.sigma)
+        validate_job_paths(self.stage, (self.source,), self.output, OutputTracks(self.tracks))
 
 
 class ClipKind(StrEnum):
@@ -109,14 +110,7 @@ class IsolationJob:
         if not self.sources:
             raise ValueError("at least one source is required")
         validate_reference_settings(self.strength, self.sigma)
-        resolved_stage = self.stage.expanduser().resolve()
-        resolved_sources = tuple(source.expanduser().resolve() for source in self.sources)
-        inputs = {resolved_stage, *resolved_sources}
-        planned = planned_outputs(self.output, OutputTracks(self.tracks))
-        if any(output.expanduser().resolve() in inputs for output in planned):
-            raise ValueError("output path must not overwrite an input file")
-        if resolved_stage in resolved_sources:
-            raise ValueError("stage audio must not also be a source")
+        validate_job_paths(self.stage, self.sources, self.output, OutputTracks(self.tracks))
 
 
 @dataclass(frozen=True, slots=True)

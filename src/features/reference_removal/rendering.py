@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from pathlib import Path
+from contextlib import ExitStack
 
 import numpy as np
 
@@ -10,17 +10,12 @@ from features.reference_removal.models import (
     IsolationJob,
     IsolationResult,
     StageAnalysis,
+    TimelineClip,
 )
-from shared.audio import (
-    AudioStats,
-    copy_audio,
-    create_pcm_audio,
-    export_audio,
-    read_audio,
-    resample_audio,
-)
+from features.reference_removal.outputs import export_tracks
+from shared.audio import AudioData, conform_rate, copy_audio, create_pcm_audio, read_audio
 from shared.dsp import time_stretch
-from shared.jobs import OutputTracks, planned_outputs
+from shared.jobs import OutputTracks
 from shared.processing import CancellationToken, ProgressCallback
 from shared.progress import report_progress
 
@@ -73,6 +68,97 @@ def _blend_segment(destination: np.ndarray, processed: np.ndarray, sample_rate: 
     destination += processed * weight
 
 
+def _placed_source(
+    stage: np.ndarray,
+    source: np.ndarray,
+    sample_rate: int,
+    name: str,
+    token: CancellationToken,
+    output: np.ndarray,
+) -> np.ndarray:
+    """Drift-align a matched slice, unless that fits the stage worse than the match did."""
+    aligned = align_audio(stage, source, sample_rate, token, output, detect_speed=False)
+    raw_quality = _alignment_quality(stage, source, sample_rate)
+    aligned_quality = _alignment_quality(stage, aligned, sample_rate)
+    if raw_quality > aligned_quality:
+        logger.info(
+            "keeping matched timeline position for %s (quality %.4f > aligned %.4f)",
+            name,
+            raw_quality,
+            aligned_quality,
+        )
+        return source
+    logger.info(
+        "using drift alignment for %s (quality %.4f >= raw %.4f)",
+        name,
+        aligned_quality,
+        raw_quality,
+    )
+    return aligned
+
+
+def _render_clip(
+    job: IsolationJob,
+    clip: TimelineClip,
+    stage: AudioData,
+    output: AudioData,
+    backing: AudioData | None,
+    token: CancellationToken,
+) -> None:
+    """Cancel one clip's source out of its stretch of the stage, in place."""
+    rate = stage.sample_rate
+    stage_start = round(clip.stage_start * rate)
+    stage_end = min(stage.frames, round(clip.stage_end * rate))
+    length = stage_end - stage_start
+    stage_slice = stage.samples[:, stage_start:stage_end]
+    with ExitStack() as owned:
+        reference = conform_rate(read_audio(clip.source, token).stereo(), rate, token)
+        owned.callback(reference.cleanup)
+        source_start = round(clip.source_start * rate)
+        source_end = min(reference.frames, round(clip.source_end * rate))
+        if length <= 0 or source_end <= source_start:
+            return
+        source_values = reference.samples[:, source_start:source_end]
+        if abs(clip.speed - 1.0) > 1e-9:
+            # The analysis found this source at a different tempo, so the slice
+            # comes out short or long by exactly that factor; the clip records
+            # the ratio, not a stretched file, because the timeline stays in the
+            # source's own clock.
+            logger.info("stretching %s by %.4f", clip.source.name, clip.speed)
+            source_values = time_stretch(source_values, rate, clip.speed, token)
+        aligned_audio = owned.enter_context(create_pcm_audio(reference.channels, length, rate))
+        aligned = source_values
+        if job.auto_align:
+            aligned = _placed_source(
+                stage_slice, source_values, rate, clip.source.name, token, aligned_audio.samples
+            )
+        if aligned is not aligned_audio.samples:
+            aligned_audio.samples.fill(0.0)
+            common = min(length, aligned.shape[1])
+            aligned_audio.samples[:, :common] = aligned[:, :common]
+        processed = owned.enter_context(create_pcm_audio(stage.channels, length, rate))
+        processed_backing = (
+            owned.enter_context(create_pcm_audio(stage.channels, length, rate))
+            if backing is not None
+            else None
+        )
+        process_audio(
+            stage_slice,
+            aligned_audio.samples,
+            rate,
+            job.strength / 100.0,
+            job.sigma,
+            token,
+            processed.samples,
+            processed_backing.samples if processed_backing is not None else None,
+        )
+        _blend_segment(output.samples[:, stage_start:stage_end], processed.samples, rate)
+        if processed_backing is not None:
+            _blend_segment(
+                backing.samples[:, stage_start:stage_end], processed_backing.samples, rate
+            )
+
+
 def render_stage_job(
     job: IsolationJob,
     analysis: StageAnalysis,
@@ -90,141 +176,31 @@ def render_stage_job(
         raise ValueError("no source could be matched to the stage audio")
 
     tracks = OutputTracks(job.tracks)
-    planned = planned_outputs(job.output, tracks)
-    stage = output = backing_audio = None
-    try:
+    with ExitStack() as owned:
         report_progress(progress, 31, "stage_render_loading")
-        stage = read_audio(job.stage, token).stereo()
+        stage = owned.enter_context(read_audio(job.stage, token).stereo())
         # The render is the stage recording with matched clips cancelled out of
         # it, so it keeps the stage's own rate and depth on the way back out.
-        output = create_pcm_audio(stage.channels, stage.frames, stage.sample_rate, stage.bit_depth)
+        shape = (stage.channels, stage.frames, stage.sample_rate, stage.bit_depth)
+        output = owned.enter_context(create_pcm_audio(*shape))
         copy_audio(stage, output, token)
-        if tracks is not OutputTracks.VOCAL:
-            # The backing track is synthesised from each clip's source, so it
-            # starts silent: a range no clip covers carries no estimate.
-            backing_audio = create_pcm_audio(
-                stage.channels, stage.frames, stage.sample_rate, stage.bit_depth
-            )
+        # The backing track is synthesised from each clip's source, so it starts
+        # silent: a range no clip covers carries no estimate.
+        backing = (
+            owned.enter_context(create_pcm_audio(*shape))
+            if tracks is not OutputTracks.VOCAL
+            else None
+        )
         for index, clip in enumerate(matched):
             token.raise_if_cancelled()
             report_progress(
                 progress,
-                35 + round(48 * index / max(len(matched), 1)),
+                35 + round(48 * index / len(matched)),
                 "stage_render_clip",
                 current=index + 1,
                 total=len(matched),
-                name=clip.source.name if clip.source else "",
+                name=clip.source.name,
             )
-            reference = aligned_audio = processed_audio = processed_backing = None
-            try:
-                reference = read_audio(clip.source, token).stereo()
-                if reference.sample_rate != stage.sample_rate:
-                    resampled = resample_audio(reference, stage.sample_rate, token)
-                    reference.cleanup()
-                    reference = resampled
-
-                stage_start = max(0, round(clip.stage_start * stage.sample_rate))
-                stage_end = min(stage.frames, round(clip.stage_end * stage.sample_rate))
-                source_start = max(0, round(clip.source_start * stage.sample_rate))
-                source_end = min(reference.frames, round(clip.source_end * stage.sample_rate))
-                length = stage_end - stage_start
-                if length <= 0 or source_end <= source_start:
-                    continue
-                aligned_audio = create_pcm_audio(reference.channels, length, stage.sample_rate)
-                source_values = reference.samples[:, source_start:source_end]
-                if abs(clip.speed - 1.0) > 1e-9:
-                    # The analysis found this source at a different tempo, so the
-                    # slice comes out short or long by exactly that factor; the
-                    # clip records the ratio, not a stretched file, because the
-                    # timeline stays in the source's own clock.
-                    logger.info("stretching %s by %.4f", clip.source.name, clip.speed)
-                    source_values = time_stretch(
-                        source_values, stage.sample_rate, clip.speed, token
-                    )
-                if job.auto_align:
-                    aligned = align_audio(
-                        stage.samples[:, stage_start:stage_end],
-                        source_values,
-                        stage.sample_rate,
-                        token,
-                        aligned_audio.samples,
-                        detect_speed=False,
-                    )
-                    raw_quality = _alignment_quality(
-                        stage.samples[:, stage_start:stage_end],
-                        source_values,
-                        stage.sample_rate,
-                    )
-                    aligned_quality = _alignment_quality(
-                        stage.samples[:, stage_start:stage_end],
-                        aligned,
-                        stage.sample_rate,
-                    )
-                    if raw_quality > aligned_quality:
-                        logger.info(
-                            "keeping matched timeline position for %s "
-                            "(quality %.4f > aligned %.4f)",
-                            clip.source.name,
-                            raw_quality,
-                            aligned_quality,
-                        )
-                        aligned = source_values
-                    else:
-                        logger.info(
-                            "using drift alignment for %s (quality %.4f >= raw %.4f)",
-                            clip.source.name,
-                            aligned_quality,
-                            raw_quality,
-                        )
-                else:
-                    aligned = source_values
-                if aligned is not aligned_audio.samples:
-                    aligned_audio.samples.fill(0.0)
-                    common = min(length, aligned.shape[1])
-                    aligned_audio.samples[:, :common] = aligned[:, :common]
-                processed_audio = create_pcm_audio(stage.channels, length, stage.sample_rate)
-                if backing_audio is not None:
-                    processed_backing = create_pcm_audio(stage.channels, length, stage.sample_rate)
-                process_audio(
-                    stage.samples[:, stage_start:stage_end],
-                    aligned_audio.samples,
-                    stage.sample_rate,
-                    job.strength / 100.0,
-                    job.sigma,
-                    token,
-                    processed_audio.samples,
-                    processed_backing.samples if processed_backing is not None else None,
-                )
-                _blend_segment(
-                    output.samples[:, stage_start:stage_end],
-                    processed_audio.samples,
-                    stage.sample_rate,
-                )
-                if processed_backing is not None:
-                    _blend_segment(
-                        backing_audio.samples[:, stage_start:stage_end],
-                        processed_backing.samples,
-                        stage.sample_rate,
-                    )
-            finally:
-                for audio in (processed_backing, processed_audio, aligned_audio, reference):
-                    if audio is not None:
-                        audio.cleanup()
-
-        outputs: list[Path] = []
-        stats: list[AudioStats] = []
-        if tracks is not OutputTracks.BACKING:
-            stats.append(export_audio(output, job.output, token, progress, 86, 89))
-            output.release_pages()
-            outputs.append(job.output.resolve())
-        if backing_audio is not None:
-            stats.append(export_audio(backing_audio, planned[-1], token, progress, 94, 96))
-            backing_audio.release_pages()
-            outputs.append(planned[-1].resolve())
-        report_progress(progress, 100, "done_status", path=outputs[0])
-        logger.info("stage render completed: %s", ", ".join(str(path) for path in outputs))
-        return IsolationResult(analysis, tuple(outputs), tuple(stats))
-    finally:
-        for audio in (backing_audio, output, stage):
-            if audio is not None:
-                audio.cleanup()
+            _render_clip(job, clip, stage, output, backing, token)
+        outputs, stats = export_tracks(output, backing, job.output, tracks, token, progress)
+        return IsolationResult(analysis, outputs, stats)

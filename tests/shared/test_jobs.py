@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from shared.jobs import OutputTracks, backing_path, planned_outputs
+from shared.jobs import OutputTracks, backing_path, planned_outputs, validate_job_paths
 
 
 def test_backing_path_replaces_the_vocal_marker():
@@ -33,3 +33,22 @@ def test_both_derives_the_second_path_and_keeps_the_writing_order():
 def test_an_unknown_track_name_is_rejected():
     with pytest.raises(ValueError):
         OutputTracks("nope")
+
+
+def test_job_paths_refuse_the_recording_as_a_source():
+    stage = Path("/tmp/show.wav")
+    with pytest.raises(ValueError, match="must not also be a source"):
+        validate_job_paths(
+            stage, (Path("/tmp/song.wav"), stage), Path("/tmp/out.wav"), OutputTracks.VOCAL
+        )
+
+
+def test_job_paths_refuse_a_derived_output_over_an_input():
+    source = Path("/tmp/show_backing.wav")
+    with pytest.raises(ValueError, match="overwrite an input"):
+        validate_job_paths(
+            Path("/tmp/live.wav"), (source,), Path("/tmp/show_vocals.wav"), OutputTracks.BOTH
+        )
+    validate_job_paths(
+        Path("/tmp/live.wav"), (source,), Path("/tmp/show_vocals.wav"), OutputTracks.VOCAL
+    )

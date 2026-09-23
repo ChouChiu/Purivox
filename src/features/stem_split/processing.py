@@ -12,7 +12,7 @@ from __future__ import annotations
 import logging
 import math
 from collections.abc import Iterator
-from contextlib import closing
+from contextlib import ExitStack, closing
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -70,7 +70,7 @@ class _Bar:
     total: int
 
     def value(self, index: int, fraction: float) -> int:
-        span = (_RENDERED - _DECODED) / max(self.total, 1)
+        span = (_RENDERED - _DECODED) / self.total
         return min(_RENDERED, round(_DECODED + span * (index + fraction)))
 
     def path(self, kind: StemKind) -> Path:
@@ -113,9 +113,10 @@ def _surround_stems(
     gain = downmix_gain(channel_peaks(source, token))
     if gain < 1.0:
         logger.info("the fold-down is held %.2f dB down to fit", 20.0 * math.log10(gain))
-    pair = create_pcm_audio(2, frames, rate, depth)
-    mono = create_pcm_audio(1, frames, rate, depth)
-    try:
+    with (
+        create_pcm_audio(2, frames, rate, depth) as pair,
+        create_pcm_audio(1, frames, rate, depth) as mono,
+    ):
         path = bar.start(0, StemKind.SURROUND)
         surround_into(pair, source, token)
         yield StemKind.SURROUND, path, pair
@@ -135,8 +136,7 @@ def _surround_stems(
         path = bar.start(4, StemKind.FRONT_NO_CENTER)
         # A fresh buffer: the spectral pass adds its blocks into what it is
         # given, so it has to start from silence rather than the last stem.
-        cleaned = create_pcm_audio(2, frames, rate, depth)
-        try:
+        with create_pcm_audio(2, frames, rate, depth) as cleaned:
             cancel_centre_from_front(
                 source,
                 cleaned,
@@ -146,29 +146,22 @@ def _surround_stems(
                 bar.tracker(4, StemKind.FRONT_NO_CENTER),
             )
             yield StemKind.FRONT_NO_CENTER, path, cleaned
-        finally:
-            cleaned.cleanup()
 
         # The fold-down and its two bands are one decomposition - the bands add
         # back up to it - so all three are rendered before any of them is
         # written, and held under full scale by one shared factor.
         downmix = bar.start(5, StemKind.DOWNMIX)
         downmix_into(pair, source, gain, token)
-        low = create_pcm_audio(2, frames, rate, depth)
-        high = create_pcm_audio(2, frames, rate, depth)
-        try:
+        with (
+            create_pcm_audio(2, frames, rate, depth) as low,
+            create_pcm_audio(2, frames, rate, depth) as high,
+        ):
             lowpass(pair, low, job.crossover_hz, token)
             difference(high, pair, low, token)
             fit_group((pair, low, high), token)
             yield StemKind.DOWNMIX, downmix, pair
             yield StemKind.LOW, bar.start(6, StemKind.LOW), low
             yield StemKind.HIGH, bar.start(7, StemKind.HIGH), high
-        finally:
-            high.cleanup()
-            low.cleanup()
-    finally:
-        mono.cleanup()
-        pair.cleanup()
 
 
 def _stereo_stems(
@@ -180,9 +173,10 @@ def _stereo_stems(
     """A stereo master, where the centre is implied by the two channels rather than carried."""
     stereo = source.stereo()
     frames, rate, depth = stereo.frames, stereo.sample_rate, stereo.bit_depth
-    centre = create_pcm_audio(1, frames, rate, depth)
-    instrumental = create_pcm_audio(2, frames, rate, depth)
-    try:
+    with (
+        create_pcm_audio(1, frames, rate, depth) as centre,
+        create_pcm_audio(2, frames, rate, depth) as instrumental,
+    ):
         path = bar.start(0, StemKind.CENTER)
         separate_centre(stereo, centre, instrumental, token, bar.tracker(0, StemKind.CENTER))
         # The centre and what is left of the mix without it are the two halves
@@ -190,13 +184,9 @@ def _stereo_stems(
         fit_group((centre, instrumental), token)
         yield StemKind.CENTER, path, centre
         yield StemKind.INSTRUMENTAL, bar.start(1, StemKind.INSTRUMENTAL), instrumental
-    finally:
-        instrumental.cleanup()
-        centre.cleanup()
     # Both are bounded by the loudest channel of the mix, so neither can pass
     # full scale unless the mix already did, and they reuse one buffer.
-    mono = create_pcm_audio(1, frames, rate, depth)
-    try:
+    with create_pcm_audio(1, frames, rate, depth) as mono:
         path = bar.start(2, StemKind.SIDE)
         side_into(mono, stereo, token)
         yield StemKind.SIDE, path, mono
@@ -204,20 +194,16 @@ def _stereo_stems(
         path = bar.start(3, StemKind.MID)
         mid_into(mono, stereo, token)
         yield StemKind.MID, path, mono
-    finally:
-        mono.cleanup()
-    low = create_pcm_audio(2, frames, rate, depth)
-    high = create_pcm_audio(2, frames, rate, depth)
-    try:
+    with (
+        create_pcm_audio(2, frames, rate, depth) as low,
+        create_pcm_audio(2, frames, rate, depth) as high,
+    ):
         path = bar.start(4, StemKind.LOW)
         lowpass(stereo, low, job.crossover_hz, token)
         difference(high, stereo, low, token)
         fit_group((low, high), token)
         yield StemKind.LOW, path, low
         yield StemKind.HIGH, bar.start(5, StemKind.HIGH), high
-    finally:
-        high.cleanup()
-        low.cleanup()
 
 
 def _mono_stems(
@@ -233,11 +219,10 @@ def _mono_stems(
     recording instead of overlapping around each corner.
     """
     frames, rate, depth = source.frames, source.sample_rate, source.bit_depth
-    presence = create_pcm_audio(1, frames, rate, depth)
-    low = create_pcm_audio(1, frames, rate, depth)
-    middle = create_pcm_audio(1, frames, rate, depth)
-    high = create_pcm_audio(1, frames, rate, depth)
-    try:
+    with ExitStack() as owned:
+        presence, low, middle, high = (
+            owned.enter_context(create_pcm_audio(1, frames, rate, depth)) for _ in range(4)
+        )
         path = bar.start(0, StemKind.LOW)
         lowpass(source, presence, PRESENCE_HZ, token)
         lowpass(source, low, job.crossover_hz, token)
@@ -247,11 +232,6 @@ def _mono_stems(
         yield StemKind.LOW, path, low
         yield StemKind.MID_BAND, bar.start(1, StemKind.MID_BAND), middle
         yield StemKind.HIGH, bar.start(2, StemKind.HIGH), high
-    finally:
-        high.cleanup()
-        middle.cleanup()
-        low.cleanup()
-        presence.cleanup()
 
 
 _SPLITTERS = {
@@ -271,8 +251,7 @@ def run_stem_split_job(
     output_dir = job.output_dir.expanduser().resolve()
     logger.info("starting stem split: %s -> %s", source_path, output_dir)
     report_progress(progress, 0, "stem_reading")
-    audio = read_audio(source_path, token)
-    try:
+    with read_audio(source_path, token) as audio:
         layout = layout_for(audio.channels)
         kinds = layout_stems(layout)
         logger.info(
@@ -284,7 +263,6 @@ def run_stem_split_job(
         stats: list[AudioStats] = []
         with closing(_SPLITTERS[layout](job, audio, bar, token)) as stems:
             for index, (kind, path, stem) in enumerate(stems):
-                token.raise_if_cancelled()
                 stats.append(
                     export_audio(
                         stem,
@@ -297,7 +275,5 @@ def run_stem_split_job(
                 )
                 outputs.append(path.resolve())
                 logger.info("wrote the %s stem: %s", kind.value, path)
-        report_progress(progress, 100, "done_status", path=outputs[0])
-        return StemSplitResult(layout, kinds, tuple(outputs), tuple(stats))
-    finally:
-        audio.cleanup()
+    report_progress(progress, 100, "done_status", path=outputs[0])
+    return StemSplitResult(layout, kinds, tuple(outputs), tuple(stats))

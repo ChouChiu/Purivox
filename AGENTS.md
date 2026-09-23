@@ -81,7 +81,7 @@ backend (<https://purivox.wwchun.top/>, `docs/web.md`).
 
 ```text
 src/entrypoints/   cli.py, gui.py — startup only
-src/app/           MainWindow, JobPresenter, JobRunner/worker
+src/app/           MainWindow, JobPresenter
 src/features/      reference_removal, home, settings
 src/shared/        audio/, download/, dsp/, ui/, config, i18n, jobs, logging, processing, progress,
                    branding
@@ -100,13 +100,13 @@ CLI — both need moves down into `shared`: `BLOCK_FRAMES`, `AUDIO_EXTENSIONS`,
 
 | Path | What lives there |
 |---|---|
-| `src/app/` | `main_window.py` (FluentWindow shell: navigation, i18n/theme, the window `QShortcut`s), `job_presenter.py` (page and result state), `job_runner.py`/`worker.py` (QThread lifecycle and adapter), `version.py` |
-| `src/features/reference_removal/` | `dsp/algorithms.py` (complex subtraction + residual mask, linked peak protection), `dsp/transfer.py` (smoothed spectra, vectorised LDL^H solve, adjusted multiple coherence), `dsp/alignment.py` (tempo correction + GCC-PHAT + drift tracking + Lanczos warp), `matching.py` (multi-source fingerprint matching, candidate clustering, manual clip edits), `timeline_model.py` (`QAbstractTableModel` behind the editable timeline, `clip_edited`/`edit_rejected`), `rendering.py` (segmented per-clip render), `processing.py` (both engines and `run_isolation_job`), `models.py`, `page.py`, `preview.py` |
+| `src/app/` | `main_window.py` (FluentWindow shell: navigation, i18n/theme, the window `QShortcut`s), `job_presenter.py` (page running/progress state; each page shows its own result through `show_result()`), `version.py` |
+| `src/features/reference_removal/` | `dsp/algorithms.py` (complex subtraction + residual mask, linked peak protection), `dsp/transfer.py` (smoothed spectra, vectorised LDL^H solve, adjusted multiple coherence), `dsp/alignment.py` (tempo correction + GCC-PHAT + drift tracking + Lanczos warp), `matching.py` (multi-source fingerprint matching, candidate clustering, manual clip edits — `edit_clip` is the one rule the desktop table and the browser timeline both apply), `timeline_model.py` (`QAbstractTableModel` behind the editable timeline, `clip_edited`/`edit_rejected`), `rendering.py` (segmented per-clip render), `processing.py` (both engines and `run_isolation_job`), `outputs.py` (`export_tracks`, how both engines write what `OutputTracks` asked for), `models.py`, `page.py`, `preview.py` |
 | `src/features/stem_split/` | `dsp/crossover.py` (Linkwitz-Riley low-pass, streamed with carried `zi`; every other band is a difference of low-passes), `dsp/matrix.py` (M/S, discrete channels, BS.775 fold-down, `fit_group` levels), `dsp/panning.py` (per-cell centre estimate with bass protection and per-channel tilt, per-bin complex front-minus-centre), `models.py` (`StemKind` values are the file markers *and* the i18n key suffixes), `processing.py` (one generator per layout, yielding a stem at a time), `page.py` |
 | `src/features/home/`, `settings/` | Brand and entry cards; language/theme/log level, `updates.py` (GitHub release query + version compare) and `dialog.py`. The app never installs an update — the dialog opens the release page |
-| `src/shared/` (root) | `config.py` (the `cfg` `QConfig`), `i18n.py` (`tr()`, `install_language()`, `SUPPORTED_LANGUAGES`), `jobs.py` (the settings contract behind `ReferenceJob`, `IsolationJob` and the CLI: `SIGMA_CHOICES`, `STRENGTH_RANGE`, `validate_reference_settings`, `OutputTracks`, `planned_outputs`), `logging.py`, `processing.py` (`CancellationToken`, `ProgressEvent`, `ProcessingResult`), `progress.py`, `branding.py` |
-| `src/shared/audio/` | `io.py`: mapped I/O, soxr resample, atomic WAV write, `BLOCK_FRAMES` (262 144), `AUDIO_EXTENSIONS`, `release_mapped_pages()`; `analysis.py`: `AudioStats`, peak/RMS, block-wise `copy_audio`, `export_audio` |
-| `src/shared/download/` | `media.py`: the yt-dlp wrapper — `search()` (`ytsearch`, flat), `fetch()` (best audio, `noplaylist` — a watch URL carrying a radio `list` is hundreds of entries — WAV through ffmpeg when it is there, the container as it arrived when it is not, cancellable in extraction through `match_filter` as well as in transfer through the progress hook), `looks_like_url`, `ffmpeg_available`; `cache.py`: the `downloads.json` index under AppLocalData, so a link is fetched once — matched by video id as well as by URL, because the link pasted is rarely the canonical one recorded; `runner.py`: the `QThread` behind one search or download. YouTube Music is link-only — its search answers with channels, not songs |
+| `src/shared/` (root) | `config.py` (the `cfg` `QConfig`), `i18n.py` (`tr()`, `install_language()`, `SUPPORTED_LANGUAGES`), `jobs.py` (the settings contract behind `ReferenceJob`, `IsolationJob` and the CLI: `SIGMA_CHOICES`, `STRENGTH_RANGE`, `validate_reference_settings`, `validate_job_paths`, `OutputTracks`, `planned_outputs`), `logging.py`, `processing.py` (`CancellationToken`, `ProgressEvent`, `ProcessingResult`), `progress.py`, `tasks.py` (`TaskRunner`: the one `QThread` lifecycle, behind jobs and downloads), `branding.py` |
+| `src/shared/audio/` | `io.py`: mapped I/O (`AudioData` is a context manager over its mapping), soxr resample and `conform_rate`, atomic WAV write, `BLOCK_FRAMES` (262 144), `AUDIO_EXTENSIONS`, `release_mapped_pages()`; `analysis.py`: `AudioStats`, peak/RMS, block-wise `copy_audio`, `export_audio` |
+| `src/shared/download/` | `media.py`: the yt-dlp wrapper — `search()` (`ytsearch`, flat), `fetch()` (best audio, `noplaylist` — a watch URL carrying a radio `list` is hundreds of entries — WAV through ffmpeg when it is there, the container as it arrived when it is not, cancellable in extraction through `match_filter` as well as in transfer through the progress hook), `looks_like_url`, `ffmpeg_available`; `cache.py`: the `downloads.json` index under AppLocalData, so a link is fetched once — matched by video id as well as by URL, because the link pasted is rarely the canonical one recorded; `runner.py`: `DownloadRunner`, a `TaskRunner` that names which answer a result is. YouTube Music is link-only — its search answers with channels, not songs |
 | `src/shared/dsp/` | `spectral.py`: librosa-compatible `stft`/`istft` (`n_fft=2048`, `hop=512`) and `log_flux_bands()`, shared by source matching and coarse alignment; `rate.py`: the global tempo scale search the pipeline runs before matching; `stretch.py`: pitch-preserving WSOLA, numpy/scipy only because Pyodide runs the same pipeline |
 | `src/shared/ui/` | `responsive.py` (`LayoutMode`/`LayoutMetrics`, `ResponsiveColumns`, `FoldingRow`, `allow_shrinking`, `HeightForWidth`, `ElidedLabel`), `cards.py` (`FormCard`, `PageScrollArea`, `format_clock`), `widgets.py` (`SmoothComboBox`, file filters, `normalized_wav_path`), `download_dialog.py` (the fetch dialog the page opens, imported in the slot rather than at module scope — yt-dlp is a tenth of a second of startup) |
 | `src/resources/` | `i18n/{zh_cn,zh_tw,en_us,ja_jp,ko_kr}.{ts,qm}`, `purivox.svg`, `resource_path` |
@@ -140,9 +140,9 @@ Ranges no clip covers are copied through untouched, so the backing track is sile
 nothing was cancelled.
 
 **Job lifecycle**: a page emits `start_requested`/`cancel_requested`; `MainWindow` builds the job
-dataclass and hands it to `JobPresenter`, which owns page and result state and delegates to
-`JobRunner`, which owns the `QThread` and `ProcessingWorker` and emits
-`progress`/`succeeded`/`failed`/`cancelled`/`finished`. Cancellation is cooperative —
+dataclass and hands it to `JobPresenter`, which owns page running and progress state, hands the
+result to the page's `show_result()`, and delegates to `shared/tasks.py:TaskRunner`, which owns the
+`QThread` and emits `progress`/`succeeded`/`failed`/`cancelled`/`finished`. Cancellation is cooperative —
 `CancellationToken.raise_if_cancelled()`, never swallowed. The CLI runs the same jobs synchronously
 and cancels the token on SIGINT.
 

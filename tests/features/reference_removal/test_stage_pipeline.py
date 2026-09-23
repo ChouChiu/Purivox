@@ -13,6 +13,7 @@ from features.reference_removal import (
     TimelineClip,
     add_manual_clip,
     analyze_stage,
+    edit_clip,
     remove_manual_clip,
 )
 from shared.processing import CancellationToken
@@ -153,3 +154,39 @@ def test_a_source_played_at_a_different_tempo_is_matched_and_stretched(tmp_path:
     assert clip.source_start == pytest.approx(0.0, abs=0.05)
     assert clip.source_end == pytest.approx(12.0, abs=0.2)
     assert clip.duration == pytest.approx(12.0 * clip.speed, abs=0.2)
+
+
+def _edited_timeline(source: Path) -> StageAnalysis:
+    return StageAnalysis(
+        12.0,
+        (
+            TimelineClip(ClipKind.UNMATCHED, 0.0, 2.0),
+            TimelineClip(ClipKind.SONG, 2.0, 10.0, source, 0, 0.0, 8.0, 0.9),
+            TimelineClip(ClipKind.UNMATCHED, 10.0, 12.0),
+        ),
+    )
+
+
+def test_edit_clip_changes_one_clip_and_keeps_the_rest():
+    analysis = _edited_timeline(Path("/work/song.wav"))
+    edited = edit_clip(analysis, 1, enabled=False, stage_range=(3.0, 9.0), source_range=(1.0, 7.0))
+    clip = edited.clips[1]
+    assert (clip.enabled, clip.stage_start, clip.stage_end) == (False, 3.0, 9.0)
+    assert (clip.source_start, clip.source_end) == (1.0, 7.0)
+    assert edited.clips[0] is analysis.clips[0] and edited.clips[2] is analysis.clips[2]
+    assert edit_clip(analysis, 1) is analysis
+
+
+@pytest.mark.parametrize(
+    ("index", "change", "error"),
+    [
+        (5, {"enabled": True}, IndexError),
+        (0, {"enabled": True}, ValueError),
+        (0, {"source_range": (0.0, 1.0)}, ValueError),
+        (1, {"stage_range": (3.0, 13.0)}, ValueError),
+        (1, {"stage_range": (9.0, 3.0)}, ValueError),
+    ],
+)
+def test_edit_clip_refuses_what_the_timeline_cannot_hold(index, change, error):
+    with pytest.raises(error):
+        edit_clip(_edited_timeline(Path("/work/song.wav")), index, **change)
