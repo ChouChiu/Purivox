@@ -89,7 +89,7 @@ CLI — both need moves down into `shared`: `BLOCK_FRAMES`, `AUDIO_EXTENSIONS`,
 | Path | What lives there |
 |---|---|
 | `src/app/` | `main_window.py` (FluentWindow shell: navigation, i18n/theme, the window `QShortcut`s), `job_presenter.py` (page running/progress state; each page shows its own result through `show_result()`), `version.py` |
-| `src/features/reference_removal/` | `dsp/algorithms.py` (complex subtraction + residual mask, linked peak protection), `dsp/transfer.py` (smoothed spectra, vectorised LDL^H solve, adjusted multiple coherence), `dsp/alignment.py` (tempo correction + GCC-PHAT + drift tracking + Lanczos warp), `matching.py` (multi-source fingerprint matching, candidate clustering, manual clip edits — `edit_clip` is the one rule the desktop table and the browser timeline both apply), `timeline_model.py` (`QAbstractTableModel` behind the editable timeline, `clip_edited`/`edit_rejected`), `rendering.py` (segmented per-clip render), `processing.py` (both engines and `run_isolation_job`), `outputs.py` (`export_tracks`, how both engines write what `OutputTracks` asked for), `models.py`, `page.py`, `preview.py` |
+| `src/features/reference_removal/` | `dsp/algorithms.py` (complex subtraction + residual mask, linked peak protection), `dsp/transfer.py` (smoothed spectra, vectorised LDL^H solve, adjusted multiple coherence), `dsp/alignment.py` (tempo correction + GCC-PHAT + drift tracking + Lanczos warp), `matching.py` (multi-source fingerprint matching, candidate clustering, manual clip edits — `edit_clip` is the one rule the desktop table and the browser timeline both apply), `timeline_model.py` (`QAbstractTableModel` behind the editable timeline, `clip_edited`/`edit_rejected`), `rendering.py` (segmented per-clip render), `processing.py` (both engines and `run_isolation_job`), `outputs.py` (`export_tracks`, how both engines write what `OutputTracks` asked for), `models.py`, `page.py` (inputs, sources, parameters, status with the actions, timeline), `preview.py` (`PreviewCard` player, `AudioDataCard`, `SeekSlider`) |
 | `src/features/home/`, `settings/` | Brand and entry cards; language/theme/log level, `updates.py` (GitHub release query + version compare) and `dialog.py`. The app never installs an update — the dialog opens the release page |
 | `src/shared/` (root) | `config.py` (the `cfg` `QConfig`), `i18n.py` (`tr()`, `install_language()`, `SUPPORTED_LANGUAGES`), `jobs.py` (the settings contract behind `ReferenceJob`, `IsolationJob` and the CLI: `SIGMA_CHOICES`, `STRENGTH_RANGE`, `validate_reference_settings`, `validate_job_paths`, `OutputTracks`, `planned_outputs`), `logging.py`, `processing.py` (`CancellationToken`, `ProgressEvent`, `ProcessingResult`), `progress.py`, `tasks.py` (`TaskRunner`: the one `QThread` lifecycle, behind jobs and downloads), `branding.py` |
 | `src/shared/audio/` | `io.py`: mapped I/O (`AudioData` is a context manager over its mapping), soxr resample and `conform_rate`, atomic WAV write, `BLOCK_FRAMES` (262 144), `AUDIO_EXTENSIONS`, `release_mapped_pages()`; `analysis.py`: `AudioStats`, peak/RMS, block-wise `copy_audio`, `export_audio` |
@@ -201,6 +201,12 @@ and cancels the token on SIGINT.
 - Files arrive through `QFileDialog` only, funnelled into one method per input (`set_stage`,
   `add_source_paths`) that also does the follow-up — a default output name, an invalidated
   analysis.
+- The page's actions (cancel, find songs, start) sit in the status card under the progress bar:
+  first in the second lane on a wide window, right after the parameters in one column. A pane
+  with nothing to show says what to do instead (the source list, the timeline), and the audio-data
+  card stays hidden until a job has written a file.
+- Settings strings Fluent words through its own catalogue (switch states, option texts) are set
+  from `tr()` in `retranslate()`, because this application installs only its own translator.
 - No tooltips on transport controls: a Fluent `Tooltip` opens on keyboard focus, not just hover, so
   it covers what is above the button every time it is tabbed to. Put the word on the button.
 

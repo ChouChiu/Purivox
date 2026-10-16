@@ -4,20 +4,12 @@
 <context>
     <name>Purivox</name>
     <message>
-        <source>window_title</source>
-        <translation>Purivox v1.1</translation>
-    </message>
-    <message>
         <source>file_select</source>
         <translation>選擇音訊</translation>
     </message>
     <message>
         <source>mr_audio_label</source>
         <translation>舞台 / 現場音訊:</translation>
-    </message>
-    <message>
-        <source>source_label</source>
-        <translation>歌曲音源:</translation>
     </message>
     <message>
         <source>output_file</source>
@@ -237,7 +229,7 @@
     </message>
     <message>
         <source>lang_label</source>
-        <translation>語言:</translation>
+        <translation>語言</translation>
     </message>
     <message>
         <source>nav_home</source>
@@ -372,10 +364,6 @@
         <translation>辨識歌曲</translation>
     </message>
     <message>
-        <source>stage_need_sources</source>
-        <translation>請至少加入一個歌曲音源。</translation>
-    </message>
-    <message>
         <source>stage_need_analysis</source>
         <translation>請先辨識歌曲並檢查處理範圍。</translation>
     </message>
@@ -425,11 +413,11 @@
     </message>
     <message>
         <source>theme_label</source>
-        <translation>佈景主題:</translation>
+        <translation>佈景主題</translation>
     </message>
     <message>
         <source>log_level_label</source>
-        <translation>記錄詳細程度:</translation>
+        <translation>記錄詳細程度</translation>
     </message>
     <message>
         <source>log_level_description</source>
@@ -666,6 +654,30 @@
     <message>
         <source>download_stopping</source>
         <translation>正在停止...</translation>
+    </message>
+    <message>
+        <source>sources_title</source>
+        <translation>歌曲音源</translation>
+    </message>
+    <message>
+        <source>theme_light</source>
+        <translation>淺色</translation>
+    </message>
+    <message>
+        <source>theme_dark</source>
+        <translation>深色</translation>
+    </message>
+    <message>
+        <source>theme_auto</source>
+        <translation>跟隨系統</translation>
+    </message>
+    <message>
+        <source>switch_on</source>
+        <translation>開啟</translation>
+    </message>
+    <message>
+        <source>switch_off</source>
+        <translation>關閉</translation>
     </message>
 </context>
 </TS>

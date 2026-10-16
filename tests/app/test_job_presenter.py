@@ -72,9 +72,9 @@ def test_an_isolation_result_fills_the_timeline_the_preview_and_the_status(
         presenter.start(page, lambda _token, _report: IsolationResult(analysis, (result_path,)))
 
     assert page.analysis is analysis
-    assert page.preview_status.text() == result_path.name
+    assert page.preview.status.text() == result_path.name
     assert str(result_path) in page.status.text()
-    assert page.preview_play.isEnabled()
+    assert page.preview.play_button.isEnabled()
 
 
 def test_an_analysis_only_result_leaves_the_preview_alone(qtbot, monkeypatch):
@@ -86,5 +86,5 @@ def test_an_analysis_only_result_leaves_the_preview_alone(qtbot, monkeypatch):
         presenter.start(page, lambda _token, _report: analysis)
 
     assert page.analysis is analysis
-    assert page._result_path is None
-    assert not page.preview_play.isEnabled()
+    assert page.preview.path is None
+    assert not page.preview.play_button.isEnabled()

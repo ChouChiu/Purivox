@@ -4,20 +4,12 @@
 <context>
     <name>Purivox</name>
     <message>
-        <source>window_title</source>
-        <translation>Purivox v1.1</translation>
-    </message>
-    <message>
         <source>file_select</source>
         <translation>오디오 선택</translation>
     </message>
     <message>
         <source>mr_audio_label</source>
         <translation>무대 / 라이브 오디오:</translation>
-    </message>
-    <message>
-        <source>source_label</source>
-        <translation>곡 음원:</translation>
     </message>
     <message>
         <source>output_file</source>
@@ -237,7 +229,7 @@
     </message>
     <message>
         <source>lang_label</source>
-        <translation>언어:</translation>
+        <translation>언어</translation>
     </message>
     <message>
         <source>nav_home</source>
@@ -372,10 +364,6 @@
         <translation>곡 찾기</translation>
     </message>
     <message>
-        <source>stage_need_sources</source>
-        <translation>곡 음원을 하나 이상 추가해 주세요.</translation>
-    </message>
-    <message>
         <source>stage_need_analysis</source>
         <translation>먼저 노래를 찾고 처리 범위를 확인해 주세요.</translation>
     </message>
@@ -425,11 +413,11 @@
     </message>
     <message>
         <source>theme_label</source>
-        <translation>테마:</translation>
+        <translation>테마</translation>
     </message>
     <message>
         <source>log_level_label</source>
-        <translation>로그 상세 수준:</translation>
+        <translation>로그 상세 수준</translation>
     </message>
     <message>
         <source>log_level_description</source>
@@ -666,6 +654,30 @@
     <message>
         <source>download_stopping</source>
         <translation>중지하는 중...</translation>
+    </message>
+    <message>
+        <source>sources_title</source>
+        <translation>곡 음원</translation>
+    </message>
+    <message>
+        <source>theme_light</source>
+        <translation>라이트</translation>
+    </message>
+    <message>
+        <source>theme_dark</source>
+        <translation>다크</translation>
+    </message>
+    <message>
+        <source>theme_auto</source>
+        <translation>시스템 설정 사용</translation>
+    </message>
+    <message>
+        <source>switch_on</source>
+        <translation>켬</translation>
+    </message>
+    <message>
+        <source>switch_off</source>
+        <translation>끔</translation>
     </message>
 </context>
 </TS>

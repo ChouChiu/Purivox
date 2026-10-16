@@ -8,9 +8,12 @@ them complains about a missing entry; the build simply leaves the code out.
 from __future__ import annotations
 
 import configparser
+import json
 import re
 import tomllib
 from pathlib import Path
+
+from app.version import __version__
 
 ROOT = Path(__file__).parents[1]
 SOURCE = ROOT / "src"
@@ -68,3 +71,9 @@ def test_the_console_script_and_version_point_at_real_code():
     source = (SOURCE / module.replace(".", "/")).with_suffix(".py").read_text(encoding="utf-8")
     assert f"def {function}(" in source
     assert (ROOT / config["tool"]["hatch"]["version"]["path"]).is_file()
+
+
+def test_the_browser_build_carries_the_application_version():
+    """The site's header reads its version from package.json, the desktop from version.py."""
+    package = json.loads((ROOT / "web/package.json").read_text(encoding="utf-8"))
+    assert package["version"] == __version__

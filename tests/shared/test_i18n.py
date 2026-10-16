@@ -101,7 +101,7 @@ def test_traditional_chinese_uses_taiwanese_terminology():
     assert tr("audio_sample_rate") == "取樣率"
     assert tr("audio_file_size") == "檔案大小"
     assert tr("stage_analyze") == "辨識歌曲"
-    assert tr("theme_label") == "佈景主題:"
+    assert tr("theme_label") == "佈景主題"
 
 
 def _literal_keys() -> set[str]:

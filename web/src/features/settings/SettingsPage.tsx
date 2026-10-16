@@ -61,9 +61,9 @@ export function SettingsPage({ theme, onTheme }: Props) {
 						value={theme}
 						onChange={(_event, data) => onTheme(data.value as ThemeChoice)}
 					>
-						<option value="auto">auto</option>
-						<option value="light">light</option>
-						<option value="dark">dark</option>
+						<option value="auto">{t("theme_auto")}</option>
+						<option value="light">{t("theme_light")}</option>
+						<option value="dark">{t("theme_dark")}</option>
 					</Select>
 				</Field>
 				<Text className={styles.hint}>{t("web_boot_hint")}</Text>

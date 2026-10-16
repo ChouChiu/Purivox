@@ -4,20 +4,12 @@
 <context>
     <name>Purivox</name>
     <message>
-        <source>window_title</source>
-        <translation>Purivox v1.1</translation>
-    </message>
-    <message>
         <source>file_select</source>
         <translation>オーディオを選択</translation>
     </message>
     <message>
         <source>mr_audio_label</source>
         <translation>ステージ / ライブ音声:</translation>
-    </message>
-    <message>
-        <source>source_label</source>
-        <translation>楽曲音源:</translation>
     </message>
     <message>
         <source>output_file</source>
@@ -237,7 +229,7 @@
     </message>
     <message>
         <source>lang_label</source>
-        <translation>言語:</translation>
+        <translation>言語</translation>
     </message>
     <message>
         <source>nav_home</source>
@@ -372,10 +364,6 @@
         <translation>楽曲を検出</translation>
     </message>
     <message>
-        <source>stage_need_sources</source>
-        <translation>楽曲音源を少なくとも一つ追加してください。</translation>
-    </message>
-    <message>
         <source>stage_need_analysis</source>
         <translation>先に楽曲を検出し、処理範囲を確認してください。</translation>
     </message>
@@ -425,11 +413,11 @@
     </message>
     <message>
         <source>theme_label</source>
-        <translation>テーマ:</translation>
+        <translation>テーマ</translation>
     </message>
     <message>
         <source>log_level_label</source>
-        <translation>ログの詳細度:</translation>
+        <translation>ログの詳細度</translation>
     </message>
     <message>
         <source>log_level_description</source>
@@ -666,6 +654,30 @@
     <message>
         <source>download_stopping</source>
         <translation>停止しています...</translation>
+    </message>
+    <message>
+        <source>sources_title</source>
+        <translation>楽曲音源</translation>
+    </message>
+    <message>
+        <source>theme_light</source>
+        <translation>ライト</translation>
+    </message>
+    <message>
+        <source>theme_dark</source>
+        <translation>ダーク</translation>
+    </message>
+    <message>
+        <source>theme_auto</source>
+        <translation>システム設定に従う</translation>
+    </message>
+    <message>
+        <source>switch_on</source>
+        <translation>オン</translation>
+    </message>
+    <message>
+        <source>switch_off</source>
+        <translation>オフ</translation>
     </message>
 </context>
 </TS>

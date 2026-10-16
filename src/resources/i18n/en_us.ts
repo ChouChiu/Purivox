@@ -4,20 +4,12 @@
 <context>
     <name>Purivox</name>
     <message>
-        <source>window_title</source>
-        <translation>Purivox v1.1</translation>
-    </message>
-    <message>
         <source>file_select</source>
         <translation>Choose audio</translation>
     </message>
     <message>
         <source>mr_audio_label</source>
         <translation>Stage / live audio:</translation>
-    </message>
-    <message>
-        <source>source_label</source>
-        <translation>Song source:</translation>
     </message>
     <message>
         <source>output_file</source>
@@ -237,7 +229,7 @@
     </message>
     <message>
         <source>lang_label</source>
-        <translation>Language:</translation>
+        <translation>Language</translation>
     </message>
     <message>
         <source>nav_home</source>
@@ -372,10 +364,6 @@
         <translation>Find songs</translation>
     </message>
     <message>
-        <source>stage_need_sources</source>
-        <translation>Add at least one song source.</translation>
-    </message>
-    <message>
         <source>stage_need_analysis</source>
         <translation>Find the songs first, then check the processing ranges.</translation>
     </message>
@@ -425,11 +413,11 @@
     </message>
     <message>
         <source>theme_label</source>
-        <translation>Theme:</translation>
+        <translation>Theme</translation>
     </message>
     <message>
         <source>log_level_label</source>
-        <translation>Log detail:</translation>
+        <translation>Log detail</translation>
     </message>
     <message>
         <source>log_level_description</source>
@@ -666,6 +654,30 @@
     <message>
         <source>download_stopping</source>
         <translation>Stopping...</translation>
+    </message>
+    <message>
+        <source>sources_title</source>
+        <translation>Song sources</translation>
+    </message>
+    <message>
+        <source>theme_light</source>
+        <translation>Light</translation>
+    </message>
+    <message>
+        <source>theme_dark</source>
+        <translation>Dark</translation>
+    </message>
+    <message>
+        <source>theme_auto</source>
+        <translation>Use system setting</translation>
+    </message>
+    <message>
+        <source>switch_on</source>
+        <translation>On</translation>
+    </message>
+    <message>
+        <source>switch_off</source>
+        <translation>Off</translation>
     </message>
 </context>
 </TS>

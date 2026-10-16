@@ -288,10 +288,6 @@ export function MrPage({ client, ready, active, onBind }: Props) {
 			setNotice(t("stage_need_analysis"));
 			return;
 		}
-		if (sources.length === 0) {
-			setNotice(t("stage_need_sources"));
-			return;
-		}
 		// Start inside the first gap the matcher left, which is where a spliced
 		// backing track's missing pieces almost always belong.
 		const gap = analysis.clips.find((clip) => clip.kind === "unmatched");
@@ -408,7 +404,7 @@ export function MrPage({ client, ready, active, onBind }: Props) {
 			</Card>
 
 			<Card className={styles.card}>
-				<CardHeader header={<Title3>{t("source_label")}</Title3>} />
+				<CardHeader header={<Title3>{t("sources_title")}</Title3>} />
 				<Text className={styles.hint}>{t("stage_sources_hint")}</Text>
 				<FilePicker
 					label={t("stage_add_sources")}

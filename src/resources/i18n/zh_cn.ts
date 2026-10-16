@@ -4,20 +4,12 @@
 <context>
     <name>Purivox</name>
     <message>
-        <source>window_title</source>
-        <translation>Purivox v1.1</translation>
-    </message>
-    <message>
         <source>file_select</source>
         <translation>选择音频</translation>
     </message>
     <message>
         <source>mr_audio_label</source>
         <translation>舞台 / 现场音频:</translation>
-    </message>
-    <message>
-        <source>source_label</source>
-        <translation>歌曲音源:</translation>
     </message>
     <message>
         <source>output_file</source>
@@ -237,7 +229,7 @@
     </message>
     <message>
         <source>lang_label</source>
-        <translation>语言:</translation>
+        <translation>语言</translation>
     </message>
     <message>
         <source>nav_home</source>
@@ -372,10 +364,6 @@
         <translation>识别歌曲</translation>
     </message>
     <message>
-        <source>stage_need_sources</source>
-        <translation>请至少添加一个歌曲音源。</translation>
-    </message>
-    <message>
         <source>stage_need_analysis</source>
         <translation>请先识别歌曲并检查处理范围。</translation>
     </message>
@@ -425,11 +413,11 @@
     </message>
     <message>
         <source>theme_label</source>
-        <translation>主题:</translation>
+        <translation>主题</translation>
     </message>
     <message>
         <source>log_level_label</source>
-        <translation>日志详细程度:</translation>
+        <translation>日志详细程度</translation>
     </message>
     <message>
         <source>log_level_description</source>
@@ -666,6 +654,30 @@
     <message>
         <source>download_stopping</source>
         <translation>正在停止...</translation>
+    </message>
+    <message>
+        <source>sources_title</source>
+        <translation>歌曲音源</translation>
+    </message>
+    <message>
+        <source>theme_light</source>
+        <translation>浅色</translation>
+    </message>
+    <message>
+        <source>theme_dark</source>
+        <translation>深色</translation>
+    </message>
+    <message>
+        <source>theme_auto</source>
+        <translation>跟随系统</translation>
+    </message>
+    <message>
+        <source>switch_on</source>
+        <translation>开</translation>
+    </message>
+    <message>
+        <source>switch_off</source>
+        <translation>关</translation>
     </message>
 </context>
 </TS>

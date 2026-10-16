@@ -13,7 +13,7 @@ import {
 	tokens,
 } from "@fluentui/react-components";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-
+import { version } from "../../package.json";
 import { HomePage } from "../features/home/HomePage";
 import { MrPage } from "../features/reference_removal/MrPage";
 import { SettingsPage } from "../features/settings/SettingsPage";
@@ -123,7 +123,7 @@ export function App() {
 				<header className={styles.header}>
 					<BrandMark size={40} />
 					<div className={styles.headerText}>
-						<Title2>{t("window_title")}</Title2>
+						<Title2>{`Purivox v${version}`}</Title2>
 						<Text className={styles.hint}>{t("web_boot_hint")}</Text>
 					</div>
 				</header>

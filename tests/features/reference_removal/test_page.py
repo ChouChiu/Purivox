@@ -135,8 +135,41 @@ def test_export_choice_survives_a_language_switch(qtbot):
     assert page.selected_tracks() is OutputTracks.BOTH
 
 
-def test_a_running_job_locks_every_input_and_leaves_only_cancel(qtbot):
+def test_the_source_list_and_its_remove_button_appear_with_a_source(qtbot, tmp_path: Path):
     page = _page(qtbot)
+    page.show()
+    assert page.sources_empty.isVisible() and not page.sources.isVisible()
+    assert not page.remove_source.isEnabled()
+
+    page.add_source_paths([str(tmp_path / "song.wav")])
+    assert page.sources.isVisible() and not page.sources_empty.isVisible()
+    assert not page.remove_source.isEnabled(), "nothing is selected yet"
+
+    page.sources.setCurrentRow(0)
+    assert page.remove_source.isEnabled()
+    page.remove_source.click()
+    assert page.source_paths() == ()
+    assert page.sources_empty.isVisible()
+
+
+def test_the_timeline_shows_what_to_do_until_there_is_one(qtbot, tmp_path: Path):
+    page = _page(qtbot)
+    page.show()
+    assert page.timeline_empty.isVisible() and not page.timeline.isVisible()
+    assert not page.add_clip.isEnabled()
+
+    page.set_analysis(StageAnalysis(30.0, (_song((tmp_path / "song.wav").resolve(), 0.0, 20.0),)))
+
+    assert page.timeline.isVisible() and not page.timeline_empty.isVisible()
+    assert page.add_clip.isEnabled()
+
+
+def test_a_running_job_locks_every_input_and_leaves_only_cancel(qtbot, tmp_path: Path):
+    page = _page(qtbot)
+    source = (tmp_path / "song.wav").resolve()
+    page.add_source_paths([str(source)])
+    page.sources.setCurrentRow(0)
+    page.set_analysis(StageAnalysis(30.0, (_song(source, 0.0, 20.0),)))
     inputs = (
         page.stage_button,
         page.stage_download,
@@ -166,20 +199,24 @@ def test_a_result_enables_the_preview_and_fills_the_audio_data(qtbot, tmp_path: 
     sf.write(output, np.zeros((8_000, 2), dtype=np.float32), 8_000, subtype="PCM_24")
     stats = AudioStats(1.0, 8_000, 2, 24, -1.2, float("-inf"), output.stat().st_size)
 
+    page.show()
+    assert not page.audio_data.isVisible(), "no tiles of dashes before there is a result"
+
     page.set_result(output, stats)
 
-    assert page.preview_play.isEnabled()
-    assert page.preview_status.text() == output.name
-    assert page.stat_values["duration"].text() == "00:01"
-    assert page.stat_values["sample_rate"].text() == "8 kHz"
-    assert page.stat_values["bit_depth"].text() == "24-bit PCM"
-    assert page.stat_values["peak"].text() == "-1.2 dBFS"
-    assert page.stat_values["rms"].text() == "-inf dBFS"
+    assert page.audio_data.isVisible()
+    assert page.preview.play_button.isEnabled()
+    assert page.preview.status.text() == output.name
+    assert page.audio_data.values["duration"].text() == "00:01"
+    assert page.audio_data.values["sample_rate"].text() == "8 kHz"
+    assert page.audio_data.values["bit_depth"].text() == "24-bit PCM"
+    assert page.audio_data.values["peak"].text() == "-1.2 dBFS"
+    assert page.audio_data.values["rms"].text() == "-inf dBFS"
 
     page.clear_result()
 
-    assert not page.preview_play.isEnabled()
-    assert page.stat_values["duration"].text() == "--"
+    assert not page.preview.play_button.isEnabled()
+    assert not page.audio_data.isVisible()
 
 
 def test_a_long_output_path_does_not_widen_the_page(qtbot, tmp_path: Path):
@@ -195,7 +232,7 @@ def test_a_long_output_path_does_not_widen_the_page(qtbot, tmp_path: Path):
 
     page.output_edit.setText(str(long_path))
     page.status.setText(f"处理完成! 文件已保存到: {long_path}")
-    page.preview_status.setText("very-long-output-name-" * 80 + ".wav")
+    page.preview.status.setText("very-long-output-name-" * 80 + ".wav")
     page.content.layout().invalidate()
     page.content.layout().activate()
     QApplication.processEvents()
@@ -211,7 +248,7 @@ def test_the_audio_data_tiles_reflow_with_the_window(qtbot):
     qtbot.waitExposed(page)
 
     def rows() -> int:
-        grid = page.stats_grid
+        grid = page.audio_data.grid
         return len({grid.getItemPosition(index)[0] for index in range(grid.count())})
 
     page.apply_layout(layout_metrics(QSize(1200, 800)))

@@ -166,7 +166,7 @@ def test_a_portrait_window_folds_every_row_into_one_column(window: MainWindow, q
     assert window.mr.metrics.mode is LayoutMode.PORTRAIT
     assert window.mr.columns.lane_widgets(Lane.SECONDARY) == ()
     assert window.mr.files.layout.itemAt(1).widget().is_folded()
-    assert window.mr.preview_controls.is_folded()
+    assert window.mr.preview.controls.is_folded()
     # Nothing may demand more width than the page was given, or the page would
     # simply be cut off: the horizontal scroll bar is switched off.
     assert window.mr.content.minimumSizeHint().width() <= window.mr.viewport().width()
@@ -185,8 +185,8 @@ def test_an_ultrawide_window_splits_the_page_into_two_capped_lanes(window: MainW
     assert window.mr.columns.lane_widgets(Lane.SECONDARY) == (
         window.mr.status_card,
         window.mr.timeline_card,
-        window.mr.preview_card,
-        window.mr.data_card,
+        window.mr.preview,
+        window.mr.audio_data,
     )
     assert not window.mr.files.layout.itemAt(1).widget().is_folded()
     # A form stretched the whole width of an ultrawide screen is unreadable,

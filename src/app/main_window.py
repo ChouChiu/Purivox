@@ -25,6 +25,7 @@ from qfluentwidgets import (
 )
 
 from app.job_presenter import JobPresenter
+from app.version import __version__
 from features.home import HomePage
 from features.reference_removal import (
     IsolationJob,
@@ -35,12 +36,11 @@ from features.reference_removal.page import MrPage
 from features.settings import SettingsPage
 from features.settings.dialog import UpdateDialog
 from features.settings.updates import Release, UpdateChecker, installed_version
-from shared.branding import application_icon
+from shared.branding import APPLICATION_NAME, application_icon
 from shared.config import cfg
 from shared.i18n import install_language, tr
 from shared.jobs import PathConflict, path_conflict
 from shared.logging import set_log_level
-from shared.tasks import Operation
 
 _CONFLICT_WARNINGS = {
     PathConflict.STAGE_IS_SOURCE: "warn_same_inputs",
@@ -52,6 +52,7 @@ class MainWindow(FluentWindow):
     def __init__(self):
         super().__init__()
         self.setWindowIcon(application_icon())
+        self.setWindowTitle(f"{APPLICATION_NAME} v{__version__}")
         install_language(str(cfg.language.value))
         self.jobs = JobPresenter(self)
         self.updates = UpdateChecker(self)
@@ -109,20 +110,20 @@ class MainWindow(FluentWindow):
         return self.stackedWidget.currentWidget()
 
     def _browse_current_input(self) -> None:
-        if isinstance(self.current_page(), MrPage):
+        if self.current_page() is self.mr:
             self.mr.browse_primary_input()
 
     def _start_current(self) -> None:
-        if isinstance(self.current_page(), MrPage):
+        if self.current_page() is self.mr:
             self.mr.start_requested.emit()
 
     def _analyze_current(self) -> None:
-        if isinstance(self.current_page(), MrPage):
+        if self.current_page() is self.mr:
             self.mr.analyze_requested.emit()
 
     def _toggle_preview(self) -> None:
-        if isinstance(self.current_page(), MrPage):
-            self.mr.toggle_preview()
+        if self.current_page() is self.mr:
+            self.mr.preview.toggle()
 
     def _connect(self) -> None:
         self.home.mr_requested.connect(self._open_mr)
@@ -131,8 +132,8 @@ class MainWindow(FluentWindow):
         self.mr.analyze_requested.connect(self.analyze_sources)
         self.mr.download_requested.connect(self._download)
         cfg.language.valueChanged.connect(self._language_changed)
-        cfg.theme.valueChanged.connect(lambda value: self._apply_theme(str(value)))
-        cfg.log_level.valueChanged.connect(lambda value: set_log_level(str(value)))
+        cfg.theme.valueChanged.connect(self._theme_changed)
+        cfg.log_level.valueChanged.connect(self._log_level_changed)
         self.settings.update_check_requested.connect(self.check_updates)
         self.updates.update_available.connect(self._update_available)
         self.updates.up_to_date.connect(self._update_up_to_date)
@@ -140,9 +141,17 @@ class MainWindow(FluentWindow):
         self.updates.finished.connect(self._update_check_finished)
         self.jobs.finished.connect(self._job_finished)
 
+    # Bound methods rather than lambdas: Qt drops a connection to a method when
+    # its window is destroyed, while a lambda would keep the window alive.
     def _language_changed(self, value: object) -> None:
         install_language(str(value))
         self.retranslate()
+
+    def _theme_changed(self, value: object) -> None:
+        self._apply_theme(str(value))
+
+    def _log_level_changed(self, value: object) -> None:
+        set_log_level(str(value))
 
     def _open_mr(self) -> None:
         self.switchTo(self.mr)
@@ -169,7 +178,6 @@ class MainWindow(FluentWindow):
         return super().event(event)
 
     def retranslate(self) -> None:
-        self.setWindowTitle(tr("window_title"))
         for page in (self.home, self.mr, self.settings):
             page.retranslate()
         self._apply_shortcut_hints()
@@ -187,7 +195,7 @@ class MainWindow(FluentWindow):
             (self.mr.start_button, self.start_shortcut),
             (self.mr.analyze_button, self.analyze_shortcut),
             (self.mr.cancel_button, self.cancel_shortcut),
-            (self.mr.preview_play, self.preview_shortcut),
+            (self.mr.preview.play_button, self.preview_shortcut),
         ):
             keys = shortcut.key().toString(QKeySequence.SequenceFormat.NativeText)
             control.setToolTip(f"{control.text()} ({keys})")
@@ -291,11 +299,12 @@ class MainWindow(FluentWindow):
         self.mr.clear_result()
         # An analysis the page already holds carries the timeline the user
         # checked and possibly edited; without one the pipeline matches first.
-        self._start_worker(self.mr, partial(run_isolation_job, job, self.mr.analysis))
+        self.jobs.start(self.mr, partial(run_isolation_job, job, self.mr.analysis))
 
     def _isolation_job(self) -> IsolationJob | None:
         """Build the job from what the page collected, or warn and return None."""
-        if not self.mr.stage_edit.text():
+        stage = self.mr.stage_path()
+        if stage is None:
             self._warning("warn_no_stage")
             return None
         sources = self.mr.source_paths()
@@ -306,7 +315,6 @@ class MainWindow(FluentWindow):
         if output is None:
             self._warning("warn_no_out")
             return None
-        stage = Path(self.mr.stage_edit.text()).expanduser().resolve()
         tracks = self.mr.selected_tracks()
         if (conflict := path_conflict(stage, sources, output, tracks)) is not None:
             self._warning(_CONFLICT_WARNINGS[conflict])
@@ -331,17 +339,7 @@ class MainWindow(FluentWindow):
         if job is None:
             return
         self.mr.invalidate_analysis()
-        self._start_worker(self.mr, partial(analyze_stage, job))
-
-    def _start_worker(
-        self,
-        page: MrPage,
-        operation: Operation,
-    ) -> None:
-        # Kept as the single interception point for starting a job: the GUI
-        # tests replace it to assert that validation rejects a job before any
-        # thread is created.
-        self.jobs.start(page, operation)
+        self.jobs.start(self.mr, partial(analyze_stage, job))
 
     def _job_finished(self) -> None:
         if self.close_pending:
@@ -352,7 +350,7 @@ class MainWindow(FluentWindow):
         self.jobs.cancel()
 
     def closeEvent(self, event: QCloseEvent) -> None:
-        self.mr.stop_preview()
+        self.mr.preview.stop()
         if self.jobs.running:
             self.close_pending = True
             self.jobs.cancel()
