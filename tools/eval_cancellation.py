@@ -18,17 +18,22 @@ import argparse
 import json
 import sys
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 import numpy as np
-from scipy.signal import fftconvolve, istft, stft
+import soxr
+from scipy.signal import butter, fftconvolve, istft, sosfilt, stft
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from features.reference_removal.dsp import align_audio, process_audio
 
 SAMPLE_RATE = 16_000
+# At 16 kHz the alignment proxy runs on the signal's own grid, so a lag error
+# smaller than one of its samples cannot show.  The clock-drift scenes run full
+# band, where the same error is a phase error across everything above it.
+FULL_BAND_RATE = 44_100
 
 
 @dataclass(frozen=True, slots=True)
@@ -48,6 +53,7 @@ class Scene:
     kind: str = "cancel"
     extra: np.ndarray | None = None
     align: bool = False
+    sample_rate: int = SAMPLE_RATE
 
 
 def _music(rng: np.random.Generator, length: int, seed_tones: tuple[float, ...]) -> np.ndarray:
@@ -103,6 +109,74 @@ def _room_scene(rt60_ms: float, seconds: float = 6.0) -> Scene:
     )
 
 
+def _phrased_music(rng: np.random.Generator, length: int) -> np.ndarray:
+    """Notes with rests between them, and a beat: dynamics a hall's tail is heard against.
+
+    `_music` is stationary, so a reverberant tail of it sits at a constant level
+    that no power-domain fit can tell from a live floor, and the room scenes
+    above measure the coherent stage alone.
+    """
+    time = np.arange(length) / SAMPLE_RATE
+    signal = np.zeros(length)
+    note = SAMPLE_RATE // 4
+    for start in range(0, length, note):
+        if rng.random() < 0.25:
+            continue
+        end = min(length, start + note)
+        root = rng.choice((110.0, 131.0, 147.0, 165.0, 196.0, 220.0, 247.0, 262.0))
+        envelope = np.exp(-np.arange(end - start) / (0.08 * SAMPLE_RATE))
+        for harmonic in range(1, 10):
+            signal[start:end] += (
+                (0.3 / harmonic) * envelope * np.sin(2 * np.pi * root * harmonic * time[start:end])
+            )
+    hit = SAMPLE_RATE // 10
+    for start in range(0, length - hit, SAMPLE_RATE // 2):
+        decay = np.exp(-np.arange(hit) / (0.0125 * SAMPLE_RATE))
+        signal[start : start + hit] += 0.7 * rng.normal(0.0, 1.0, hit) * decay
+    return signal
+
+
+def _vibrato_voice(length: int, sample_rate: int, level: float) -> np.ndarray:
+    time = np.arange(length) / sample_rate
+    pitch = 431.0 * (1.0 + 0.01 * np.sin(2 * np.pi * 5.0 * time))
+    phase = 2 * np.pi * np.cumsum(pitch) / sample_rate
+    return sum((level / harmonic) * np.sin(harmonic * phase) for harmonic in range(1, 9))
+
+
+def _hall_scene(rt60_ms: float, seconds: float = 10.0) -> Scene:
+    rng = np.random.default_rng(int(rt60_ms) + 2000)
+    length = int(SAMPLE_RATE * seconds)
+    reference = np.stack([_phrased_music(rng, length), _phrased_music(rng, length)])
+    reference *= 0.25 / np.max(np.abs(reference))
+
+    def response() -> np.ndarray:
+        values = _room_response(rng, rt60_ms)
+        # A direct path that is actually there, whatever the noise drew under it.
+        values[0] = abs(values[0]) + 1.0
+        return values / np.sqrt(np.sum(values**2))
+
+    responses = [[response() for _ in range(2)] for _ in range(2)]
+    gains = ((0.85, 0.30), (-0.22, 0.78))
+    accompaniment = np.stack(
+        [
+            sum(
+                gains[row][column] * fftconvolve(reference[column], responses[row][column])[:length]
+                for column in range(2)
+            )
+            for row in range(2)
+        ]
+    )
+    voice = _vibrato_voice(length, SAMPLE_RATE, 0.05)
+    live = np.stack([voice, 0.9 * voice])
+    return Scene(
+        name=f"hall_{int(rt60_ms)}ms",
+        mixture=live + accompaniment,
+        reference=reference,
+        live=live,
+        accompaniment=accompaniment,
+    )
+
+
 def _wide_backing_quiet_vocal() -> Scene:
     rng = np.random.default_rng(126)
     length = SAMPLE_RATE * 6
@@ -147,6 +221,65 @@ def _drift_scene(rate: float) -> Scene:
     )
 
 
+def _full_band_music(rng: np.random.Generator, length: int) -> np.ndarray:
+    """Changing chords, a beat and a broadband floor that reaches past 10 kHz."""
+    time = np.arange(length) / FULL_BAND_RATE
+    signal = np.zeros(length)
+    chord = FULL_BAND_RATE // 2
+    for start in range(0, length, chord):
+        end = min(length, start + chord)
+        root = rng.choice((110.0, 131.0, 147.0, 165.0, 196.0, 220.0))
+        for harmonic in range(1, 12):
+            signal[start:end] += (0.3 / harmonic) * np.sin(
+                2 * np.pi * root * harmonic * time[start:end] + rng.uniform(0, 2 * np.pi)
+            )
+    hit = FULL_BAND_RATE // 10
+    for start in range(0, length - hit, FULL_BAND_RATE // 2):
+        decay = np.exp(-np.arange(hit) / (0.014 * FULL_BAND_RATE))
+        signal[start : start + hit] += 0.8 * rng.normal(0.0, 1.0, hit) * decay
+    noise = rng.normal(0.0, 1.0, length)
+    return signal + 0.15 * np.convolve(noise, np.ones(8) / 8, mode="same") + 0.05 * noise
+
+
+def _clock_drift_scene(ppm: float) -> Scene:
+    """Two device clocks that disagree by `ppm`, the drift every real capture has.
+
+    Unlike the drift scenes above, which are tempo-sized, this lag moves by a
+    fraction of a sample per second, and only the high band shows whether the
+    track follows it.
+    """
+    rng = np.random.default_rng(int(ppm) + 77)
+    length = FULL_BAND_RATE * 20
+    reference = np.stack([_full_band_music(rng, length), _full_band_music(rng, length)])
+    reference *= 0.25 / np.max(np.abs(reference))
+    played = soxr.resample(
+        reference.T, FULL_BAND_RATE, FULL_BAND_RATE * (1.0 + ppm * 1e-6), quality="VHQ"
+    ).T[:, :length]
+    multipath = np.zeros(round(0.004 * FULL_BAND_RATE))
+    multipath[[0, 37, 101]] = (1.0, 0.35, -0.2)
+    gains = ((0.85, 0.30), (-0.22, 0.78))
+    accompaniment = np.stack(
+        [
+            sum(
+                gains[row][column] * fftconvolve(played[column], multipath)[:length]
+                for column in range(2)
+            )
+            for row in range(2)
+        ]
+    )
+    voice = _vibrato_voice(length, FULL_BAND_RATE, 0.06)
+    live = np.stack([voice, 0.9 * voice])
+    return Scene(
+        name=f"clock_drift_{int(ppm)}ppm",
+        mixture=live + accompaniment,
+        reference=reference,
+        live=live,
+        accompaniment=accompaniment,
+        align=True,
+        sample_rate=FULL_BAND_RATE,
+    )
+
+
 def _unrelated_reference() -> Scene:
     # Broadband noise on both sides, not tones: a tonal pair occupies too few
     # bins for a spurious fit to show up, and spurious fitting is the whole
@@ -163,6 +296,12 @@ def _unrelated_reference() -> Scene:
         accompaniment=np.zeros_like(mixture),
         kind="bypass",
     )
+
+
+def _quiet_unrelated_reference() -> Scene:
+    """An unrelated source far quieter than the stage must still change nothing."""
+    scene = _unrelated_reference()
+    return replace(scene, name="unrelated_quiet_reference", reference=scene.reference / 100.0)
 
 
 def _reference_only_word() -> Scene:
@@ -256,6 +395,17 @@ def _phase_correlated_stereo() -> Scene:
     )
 
 
+def _hot_playback() -> Scene:
+    """A stage that carries the playback 12 dB hotter than the source file.
+
+    A quiet master against a phone's automatic gain, or a PA run hot, puts the
+    whole transfer above a fixed bound on its gain.  This is the phase-correlated
+    scene with the source turned down, so the two should score alike.
+    """
+    scene = _phase_correlated_stereo()
+    return replace(scene, name="hot_playback_12db", reference=scene.reference / 4.0)
+
+
 SCENES: tuple[Callable[[], Scene], ...] = (
     lambda: _room_scene(25.0),
     lambda: _room_scene(60.0),
@@ -263,12 +413,20 @@ SCENES: tuple[Callable[[], Scene], ...] = (
     lambda: _room_scene(500.0),
     lambda: _room_scene(1000.0),
     lambda: _room_scene(2000.0),
+    lambda: _hall_scene(250.0),
+    lambda: _hall_scene(500.0),
+    lambda: _hall_scene(1000.0),
+    lambda: _hall_scene(2000.0),
     _wide_backing_quiet_vocal,
     lambda: _drift_scene(0.004),
     lambda: _drift_scene(0.01),
+    lambda: _clock_drift_scene(0.0),
+    lambda: _clock_drift_scene(60.0),
     _unrelated_reference,
+    _quiet_unrelated_reference,
     _reference_only_word,
     _phase_correlated_stereo,
+    _hot_playback,
     _phase_decorrelated_stage,
 )
 
@@ -296,24 +454,25 @@ def measure(scene: Scene, strength: float, sigma: int) -> dict[str, float]:
     and how much of the live source it kept, and the backing, on how close the
     source rendered through the estimate comes to what the playback carried.
     """
+    rate = scene.sample_rate
     reference = scene.reference.astype(np.float32)
     if scene.align:
         # The drift scenes measure what survives alignment, which is what the
         # real pipeline hands to the canceller.
-        reference = align_audio(scene.mixture.astype(np.float32), reference, SAMPLE_RATE)
+        reference = align_audio(scene.mixture.astype(np.float32), reference, rate)
     output = np.empty_like(scene.mixture, dtype=np.float32)
     backing = np.empty_like(output)
     process_audio(
         scene.mixture.astype(np.float32),
         reference,
-        SAMPLE_RATE,
+        rate,
         strength,
         sigma,
         None,
         output,
         backing,
     )
-    body = slice(SAMPLE_RATE // 2, scene.mixture.shape[1] - SAMPLE_RATE // 2)
+    body = slice(rate // 2, scene.mixture.shape[1] - rate // 2)
     # process_audio caps the output at -1 dBFS, which would otherwise show up as
     # a fidelity loss that has nothing to do with cancellation.
     scale = _projection(output[:, body], scene.live[:, body]) if scene.kind != "bypass" else 1.0
@@ -335,6 +494,17 @@ def measure(scene: Scene, strength: float, sigma: int) -> dict[str, float]:
         "backing_corr": _correlation(backing[:, body], scene.accompaniment[:, body]),
         "backing_db": _level_db(backing[:, body], scene.accompaniment[:, body]),
     }
+    if rate > SAMPLE_RATE:
+        # A lag error of a few microseconds is already a phase error up here.
+        high = butter(6, 4000.0, "high", fs=rate, output="sos")
+        high_residual = sosfilt(high, residual, axis=1)
+        high_accompaniment = sosfilt(high, scene.accompaniment[:, body], axis=1)
+        result["depth_above_4k_db"] = float(
+            10.0
+            * np.log10(
+                float(np.mean(high_accompaniment**2)) / max(float(np.mean(high_residual**2)), 1e-20)
+            )
+        )
     if scene.extra is not None:
         result["injection"] = abs(_projection(output[:, body], scene.extra[:, body]))
         result["backing_injection"] = abs(_projection(backing[:, body], scene.extra[:, body]))
