@@ -15,7 +15,6 @@ src/entrypoints/                 Entry points: startup shims for GUI and CLI
 src/app/                         Desktop shell: MainWindow, presenters, and thread runners
 src/features/                    Feature implementations: pages, models, and domain pipelines
 ├── reference_removal/           Reference cancellation: matching, timeline, dual engines, and DSP
-├── stem_split/                  Acoustic stem split: channel dispatch, crossovers, and adaptive panning
 ├── home/                        Landing view and navigation shortcuts
 └── settings/                    Configuration, localization, and release update checks
 src/shared/                      Shared foundations: audio I/O, general DSP, config, logging, and UI cards

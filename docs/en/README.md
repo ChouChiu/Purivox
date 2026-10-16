@@ -13,7 +13,6 @@ This directory contains technical specifications, digital signal processing (DSP
 | [Architecture and Data Flow](architecture.md) | Architectural layering, task execution model, chunked memory management, responsive UI, and error handling |
 | [Reference Cancellation](reference-removal.md) | Global tempo and time alignment, complex transfer estimation, residual masking, and backing track generation |
 | [Source Matching, the Timeline, and Segmented Rendering](matching.md) | Multi-source log-flux features, candidate clustering, timeline models, and segmented rendering pipelines |
-| [Stem Split](stem-split.md) | Channel layout dispatch, complementary Linkwitz-Riley crossovers, panning-adaptive center extraction, and grouped gain normalization |
 | [Browser Build (WebAssembly)](web.md) | Pyodide runtime integration, Qt-free / single-thread constraints, heap memory budgeting, and lifecycle management |
 | [Contributing](CONTRIBUTING.md) | Environment setup, code and i18n conventions, testing matrix, CI/CD pipelines, and release procedures |
 
@@ -22,7 +21,6 @@ This directory contains technical specifications, digital signal processing (DSP
 - **System Architecture and Concurrency**: Review [Architecture and Data Flow](architecture.md) to understand how the GUI, CLI, worker threads, and core processing pipelines interact.
 - **Cancellation Algorithms and Tuning**: Review [Reference Cancellation](reference-removal.md) for frequency-domain complex subtraction, adaptive regularization, and leakage regression models.
 - **Multi-Source Detection**: Review [Source Matching, the Timeline, and Segmented Rendering](matching.md) for acoustic fingerprinting, cross-correlation searches, and engine selection heuristics.
-- **Reference-Free Stem Extraction**: Review [Stem Split](stem-split.md) for complementary filter phases and generalized Gaussian panning window formulations.
 - **WebAssembly Deployment**: Review [Browser Build (WebAssembly)](web.md) for Emscripten memory layout and client-side execution constraints.
 - **Development and Verification**: Review [Contributing](CONTRIBUTING.md) for architectural linting rules, testing requirements, and commit conventions.
 

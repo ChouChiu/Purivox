@@ -10,9 +10,6 @@ from PySide6.QtWidgets import QWidget
 from app.job_presenter import JobPresenter
 from features.reference_removal import ClipKind, IsolationResult, StageAnalysis, TimelineClip
 from features.reference_removal.page import MrPage
-from features.stem_split import StemKind, StemLayout, StemSplitResult
-from features.stem_split.page import StemPage
-from shared.audio import AudioStats
 from shared.processing import ProgressEvent
 
 
@@ -91,21 +88,3 @@ def test_an_analysis_only_result_leaves_the_preview_alone(qtbot, monkeypatch):
     assert page.analysis is analysis
     assert page._result_path is None
     assert not page.preview_play.isEnabled()
-
-
-def test_a_stem_split_result_fills_the_stem_page(qtbot, monkeypatch, tmp_path: Path):
-    parent = QWidget()
-    page = StemPage(parent)
-    qtbot.addWidget(parent)
-    monkeypatch.setattr("app.job_presenter.InfoBar.success", lambda *_args, **_kwargs: None)
-    presenter = JobPresenter(parent)
-    stats = AudioStats(1.0, 8_000, 1, 16, -6.0, -12.0)
-    result = StemSplitResult(
-        StemLayout.MONO, (StemKind.LOW,), (tmp_path / "take_low.wav",), (stats,)
-    )
-
-    with qtbot.waitSignal(presenter.finished, timeout=2_000):
-        presenter.start(page, lambda _token, _report: result)
-
-    assert page.open_output.isEnabled()
-    assert page.stems.count() == 1

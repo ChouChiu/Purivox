@@ -15,7 +15,6 @@ src/entrypoints/                 程序入口：启动 GUI 或解析 CLI 命令�
 src/app/                         桌面应用外壳：主窗口、页面协调器与工作线程管理
 src/features/                    业务功能实现：独立功能页面、数据模型与处理管线
 ├── reference_removal/           参考对消：音源匹配、时间线模型、双引擎与 DSP
-├── stem_split/                  声学分轨：声道分派、互补分频、自适应声像分离与页面
 ├── home/                        应用首页与导航入口
 └── settings/                    系统设置、语言主题与更新检查
 src/shared/                      共享层：音频 I/O、通用 DSP、配置、日志、协议与通用 UI 控件

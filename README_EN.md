@@ -28,7 +28,6 @@ For blind two-track separation without reference audio, consider dedicated neura
 - **Crash Reporting**: Daily rotating log files; unhandled exceptions provide structured diagnostics and a preformatted issue submission workflow.
 - **Keyboard Shortcuts**: `Ctrl+O` to open files, `Ctrl+Return` to start, `F5` to identify songs, `Esc` to cancel, and `Ctrl+P` to toggle preview playback.
 - **Link Fetching**: Built-in downloader for YouTube and YouTube Music URLs with local deduplication caching.
-- **Acoustic Stem Split**: Reference-free stem extraction based on channel layout, supporting center, instrumental, M/S, and complementary crossover band stems.
 - **Isomorphic Core**: The desktop GUI, CLI, and WebAssembly browser build share the identical signal-processing pipeline.
 
 ## Installation
@@ -72,15 +71,6 @@ uv run --locked purivox
 6. Adjust the removal strength and start processing. If live vocals sound thin or show audible pumping, reduce the strength setting or verify the reference track match.
 
 > **Note**: Use reference tracks that match the live arrangement as closely as possible. Pitch shifts, tempo variations, or modified edits reduce cancellation performance. Unmatched intervals retain the original live audio without truncation.
-
-### Acoustic Stem Split
-
-1. Open the **Stem Split** page and select an audio file (no reference track required).
-2. Adjust the crossover frequency if needed (default: 150 Hz). The high- and low-frequency bands are complementary; adding them perfectly reconstructs the original signal.
-3. Start processing. Output stems are determined by input channel count: 8 stems for surround, 6 stems for stereo, and 3 stems for mono.
-4. Review the generated stems, channel counts, and peak levels directly in the result list.
-
-Stereo center and instrumental extraction uses an adaptive panning distribution model that handles off-center vocals and reverberation while retaining center bass and kick drums. See [Stem Split](docs/en/stem-split.md) for details.
 
 ### Fetching Reference Audio from URLs
 
@@ -128,19 +118,6 @@ Options:
 | `--tracks` | `vocal`, `backing`, `both` | Tracks to export (default: `vocal`) |
 | `--lang` | `zh_cn`, `zh_tw`, `en_us`, `ja_jp`, `ko_kr` | Output progress language |
 
-### Acoustic Stem Split
-
-```bash
-uv run --locked purivox split "recording.flac"                         # Defaults to recording_stems/
-uv run --locked purivox split "recording.flac" "output_dir" --crossover 180
-```
-
-| Option | Values | Description |
-|---|---:|---|
-| `output_dir` | Path | Destination directory (defaults to `<name>_stems`) |
-| `--crossover` | Hz | Crossover split frequency (default: `150`) |
-| `--lang` | Locale | Progress reporting language |
-
 ### Reference Download
 
 ```bash
@@ -173,7 +150,6 @@ Detailed architecture, DSP algorithms, and development references are documented
 - [Architecture and Data Flow](docs/en/architecture.md)
 - [Reference Cancellation](docs/en/reference-removal.md)
 - [Source Matching, the Timeline, and Segmented Rendering](docs/en/matching.md)
-- [Stem Split](docs/en/stem-split.md)
 - [Browser Build (WebAssembly)](docs/en/web.md)
 - [Contributing](docs/en/CONTRIBUTING.md)
 

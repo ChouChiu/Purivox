@@ -16,8 +16,6 @@ from app.main_window import MainWindow
 from features.reference_removal import ClipKind, StageAnalysis, TimelineClip
 from features.reference_removal.page import MrPage
 from features.settings.updates import Release
-from features.stem_split import StemKind, StemLayout, StemSplitResult
-from features.stem_split.page import StemPage
 from shared.audio import AudioStats
 from shared.config import cfg, load_config
 from shared.i18n import tr
@@ -38,8 +36,8 @@ def test_main_window_has_one_vocal_isolation_page(qtbot):
     qtbot.addWidget(window)
     assert not window.windowIcon().isNull()
     assert not window.windowIcon().pixmap(32, 32).isNull()
-    pages = (window.home, window.mr, window.stems, window.settings)
-    assert len({page.objectName() for page in pages}) == 4
+    pages = (window.home, window.mr, window.settings)
+    assert len({page.objectName() for page in pages}) == 3
     assert window.mr.title.text() == "垫音消除"
     assert window.settings.log_level_card.configItem is cfg.log_level
     previous_level = cfg.log_level.value
@@ -296,78 +294,6 @@ def test_start_forwards_fixed_job_settings(qtbot, tmp_path: Path, monkeypatch):
     assert started[0].args[1] is None, "a job with no analysis matches before it renders"
 
 
-def test_the_home_page_opens_the_stem_split(qtbot):
-    load_config()
-    window = MainWindow()
-    qtbot.addWidget(window)
-    window.home.retranslate()
-
-    assert window.home.stems_card.title.text() == "声学分轨"
-    window.home.stems_card.open_button.click()
-
-    assert window.stackedWidget.currentWidget() is window.stems
-    assert window.current_page() is window.stems
-
-
-def test_a_stem_split_without_a_recording_warns_before_the_worker(qtbot, monkeypatch):
-    load_config()
-    window = MainWindow()
-    qtbot.addWidget(window)
-    warnings = []
-    monkeypatch.setattr(window, "_warning", warnings.append)
-    monkeypatch.setattr(
-        window,
-        "_start_worker",
-        lambda *_args, **_kwargs: pytest.fail("worker must not start"),
-    )
-
-    window.start_stem_split()
-
-    assert warnings == ["warn_no_stem_source"]
-
-
-def test_a_stem_split_names_its_own_output_folder(qtbot, tmp_path: Path, monkeypatch):
-    load_config()
-    window = MainWindow()
-    qtbot.addWidget(window)
-    window.stems.set_source(str(tmp_path / "show.wav"))
-    started = []
-    monkeypatch.setattr(window, "_start_worker", lambda page, operation: started.append(operation))
-
-    window.start_stem_split()
-
-    assert len(started) == 1
-    job = started[0].args[0]
-    assert job.output_dir == (tmp_path / "show_stems").resolve()
-    assert job.crossover_hz == 150.0
-
-
-def test_a_stem_result_is_listed_with_its_peak(qtbot, tmp_path: Path):
-    page = StemPage()
-    qtbot.addWidget(page)
-    page.retranslate()
-    stats = AudioStats(12.0, 44100, 2, 24, -1.5, -14.0, 2048)
-    result = StemSplitResult(
-        StemLayout.STEREO,
-        (StemKind.CENTER,),
-        (tmp_path / "show_center.wav",),
-        (stats,),
-    )
-
-    page.set_result(result)
-
-    assert page.stems.count() == 1
-    row = page.stems.item(0).text()
-    assert "show_center.wav" in row
-    assert "-1.5" in row
-    assert page.open_output.isEnabled()
-
-    page.clear_result()
-
-    assert page.stems.count() == 0
-    assert not page.open_output.isEnabled()
-
-
 def test_combo_boxes_use_stable_menu_without_opacity_animation(qtbot):
     combo = SmoothComboBox()
     qtbot.addWidget(combo)
@@ -545,14 +471,6 @@ def test_pages_fold_into_one_column_on_a_portrait_window(qtbot):
     # would simply be cut off: the horizontal scroll bar is switched off.
     assert window.mr.content.minimumSizeHint().width() <= window.mr.viewport().width()
 
-    window.switchTo(window.stems)
-    _resize_window(window, 500, 900)
-
-    assert window.stems.metrics.mode is LayoutMode.PORTRAIT
-    assert window.stems.columns.columns() == 1
-    assert window.stems.columns.lane_widgets(Lane.SECONDARY) == ()
-    assert window.stems.content.minimumSizeHint().width() <= window.stems.viewport().width()
-
 
 def test_an_ultrawide_window_splits_the_pages_into_two_lanes(qtbot):
     load_config()
@@ -582,19 +500,6 @@ def test_an_ultrawide_window_splits_the_pages_into_two_lanes(qtbot):
     left, _top, right, _bottom = window.mr.layout.getContentsMargins()
     assert window.mr.viewport().width() - left - right <= CONTENT_MAX_WIDTH
     assert left == right
-
-    window.switchTo(window.stems)
-    _resize_window(window, 2560, 1080)
-
-    assert window.stems.metrics.mode is LayoutMode.ULTRAWIDE
-    assert window.stems.columns.lane_widgets(Lane.PRIMARY) == (
-        window.stems.files,
-        window.stems.parameters,
-    )
-    assert window.stems.columns.lane_widgets(Lane.SECONDARY) == (
-        window.stems.status_card,
-        window.stems.stems_card,
-    )
 
 
 def test_the_audio_data_tiles_reflow_with_the_window(qtbot):

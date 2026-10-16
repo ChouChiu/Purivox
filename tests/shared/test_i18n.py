@@ -7,7 +7,6 @@ from xml.etree import ElementTree
 
 from PySide6.QtCore import QTranslator
 
-from features.stem_split import StemKind, StemLayout
 from resources import resource_path
 from shared.i18n import (
     DEFAULT_LANGUAGE,
@@ -126,20 +125,6 @@ def test_traditional_chinese_uses_taiwanese_terminology():
     assert tr("audio_file_size") == "檔案大小"
     assert tr("stage_analyze") == "辨識歌曲"
     assert tr("theme_label") == "佈景主題:"
-
-
-def test_every_stem_is_named_in_every_locale():
-    """The stem keys are built from the marker a stem is named by.
-
-    `tr(f"stem_{kind.value}")` is not a literal the collector below can see, so
-    the whole set is checked here instead; a missing one would otherwise reach
-    the interface as its own key.
-    """
-    expected = {f"stem_{kind.value}" for kind in StemKind}
-    expected |= {f"stem_layout_{layout.value}" for layout in StemLayout}
-    for language in SUPPORTED_LANGUAGES:
-        missing = sorted(expected - set(_source_catalogue(language)))
-        assert not missing, f"{language} is missing {missing}"
 
 
 def _literal_keys() -> set[str]:

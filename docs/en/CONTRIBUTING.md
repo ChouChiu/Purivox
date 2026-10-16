@@ -62,8 +62,8 @@ Import boundaries are enforced statically by `tests/test_architecture.py`.
 
 ### DSP Evolution Guidelines
 
-- Cancellation and stem outputs must reconstruct solely from original mix audio; reference waveforms or their inversions must never be written directly to output files;
-- Algorithm changes require quantitative verification using `tools/eval_cancellation.py` and `tools/eval_stems.py`, paired with comparative listening on live audio recordings.
+- Cancellation outputs must reconstruct solely from original mix audio; reference waveforms or their inversions must never be written directly to output files;
+- Algorithm changes require quantitative verification using `tools/eval_cancellation.py`, paired with comparative listening on live audio recordings.
 
 ## Localization (i18n)
 

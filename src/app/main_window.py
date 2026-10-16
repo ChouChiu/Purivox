@@ -35,8 +35,6 @@ from features.reference_removal.page import MrPage
 from features.settings import SettingsPage
 from features.settings.dialog import UpdateDialog
 from features.settings.updates import Release, UpdateChecker, installed_version
-from features.stem_split import StemSplitJob, run_stem_split_job
-from features.stem_split.page import StemPage
 from shared.branding import application_icon
 from shared.config import cfg
 from shared.i18n import install_language, tr
@@ -60,7 +58,6 @@ class MainWindow(FluentWindow):
         self.close_pending = False
         self.home = HomePage(self)
         self.mr = MrPage()
-        self.stems = StemPage()
         self.settings = SettingsPage(self)
         self.resize(1040, 760)
         # Small enough to dock the window to a portrait half of a screen; the
@@ -78,7 +75,6 @@ class MainWindow(FluentWindow):
     def _build_navigation(self) -> None:
         self.home_nav = self.addSubInterface(self.home, FluentIcon.HOME, "")
         self.mr_nav = self.addSubInterface(self.mr, FluentIcon.MUSIC, "")
-        self.stems_nav = self.addSubInterface(self.stems, FluentIcon.ALBUM, "")
         self.settings_nav = self.addSubInterface(
             self.settings, FluentIcon.SETTING, "", NavigationItemPosition.BOTTOM
         )
@@ -110,14 +106,12 @@ class MainWindow(FluentWindow):
         return self.stackedWidget.currentWidget()
 
     def _browse_current_input(self) -> None:
-        page = self.current_page()
-        if isinstance(page, MrPage | StemPage):
-            page.browse_primary_input()
+        if isinstance(self.current_page(), MrPage):
+            self.mr.browse_primary_input()
 
     def _start_current(self) -> None:
-        page = self.current_page()
-        if isinstance(page, MrPage | StemPage):
-            page.start_requested.emit()
+        if isinstance(self.current_page(), MrPage):
+            self.mr.start_requested.emit()
 
     def _analyze_current(self) -> None:
         if isinstance(self.current_page(), MrPage):
@@ -129,11 +123,6 @@ class MainWindow(FluentWindow):
 
     def _connect(self) -> None:
         self.home.mr_requested.connect(self._open_mr)
-        self.home.stems_requested.connect(self._open_stems)
-        self.stems.start_requested.connect(self.start_stem_split)
-        self.stems.cancel_requested.connect(self.cancel)
-        self.stems.download_requested.connect(self._download_stem_source)
-        self.stems.open_output_requested.connect(self._open_stem_output)
         self.mr.start_requested.connect(self.start_isolation)
         self.mr.cancel_requested.connect(self.cancel)
         self.mr.analyze_requested.connect(self.analyze_sources)
@@ -154,9 +143,6 @@ class MainWindow(FluentWindow):
 
     def _open_mr(self) -> None:
         self.switchTo(self.mr)
-
-    def _open_stems(self) -> None:
-        self.switchTo(self.stems)
 
     def _apply_theme(self, value: str) -> None:
         theme = {"light": Theme.LIGHT, "dark": Theme.DARK}.get(value, Theme.AUTO)
@@ -181,13 +167,12 @@ class MainWindow(FluentWindow):
 
     def retranslate(self) -> None:
         self.setWindowTitle(tr("window_title"))
-        for page in (self.home, self.mr, self.stems, self.settings):
+        for page in (self.home, self.mr, self.settings):
             page.retranslate()
         self._apply_shortcut_hints()
         for navigation, key in (
             (self.home_nav, "nav_home"),
             (self.mr_nav, "nav_mr"),
-            (self.stems_nav, "nav_stems"),
             (self.settings_nav, "nav_settings"),
         ):
             navigation.setText(tr(key))
@@ -200,9 +185,6 @@ class MainWindow(FluentWindow):
             (self.mr.analyze_button, self.analyze_shortcut),
             (self.mr.cancel_button, self.cancel_shortcut),
             (self.mr.preview_play, self.preview_shortcut),
-            (self.stems.source_button, self.open_shortcut),
-            (self.stems.start_button, self.start_shortcut),
-            (self.stems.cancel_button, self.cancel_shortcut),
         ):
             keys = shortcut.key().toString(QKeySequence.SequenceFormat.NativeText)
             control.setToolTip(f"{control.text()} ({keys})")
@@ -296,46 +278,6 @@ class MainWindow(FluentWindow):
         else:
             self.mr.set_stage(str(chosen[0]))
 
-    def _download_stem_source(self) -> None:
-        if self.jobs.running:
-            return
-        if chosen := self._fetch_audio(multiple=False):
-            self.stems.set_source(str(chosen[0]))
-
-    def _open_stem_output(self) -> None:
-        """Show the folder the stems went to; opening it is the obvious next move."""
-        if (directory := self.stems.output_directory()) is not None and directory.is_dir():
-            QDesktopServices.openUrl(QUrl.fromLocalFile(str(directory)))
-
-    def start_stem_split(self) -> None:
-        if self.jobs.running:
-            return
-        job = self._stem_job()
-        if job is None:
-            return
-        self.stems.clear_result()
-        self._start_worker(self.stems, partial(run_stem_split_job, job))
-
-    def _stem_job(self) -> StemSplitJob | None:
-        """Build the split from what the page collected, or warn and return None."""
-        source = self.stems.source_path()
-        if source is None:
-            self._warning("warn_no_stem_source")
-            return None
-        output_dir = self.stems.output_directory()
-        if output_dir is None:
-            self._warning("warn_no_out")
-            return None
-        try:
-            return StemSplitJob(
-                source=source,
-                output_dir=output_dir,
-                crossover_hz=self.stems.crossover_hz(),
-            )
-        except ValueError:
-            self._warning("warn_invalid_parameters")
-            return None
-
     def start_isolation(self) -> None:
         if self.jobs.running:
             return
@@ -396,7 +338,7 @@ class MainWindow(FluentWindow):
 
     def _start_worker(
         self,
-        page: MrPage | StemPage,
+        page: MrPage,
         operation: Operation,
     ) -> None:
         # Kept as the single interception point for starting a job: the GUI

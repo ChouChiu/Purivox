@@ -62,8 +62,8 @@ QT_QPA_PLATFORM=offscreen uv run --locked purivox --selftest   # 无头模式执
 
 ### DSP 算法演进准则
 
-- 所有对消与分轨算法的输出信号仅允许从原始混音中重构提取，禁止将参考信号或其反相波形直接写入输出；
-- DSP 算法改动须通过量化指标验证（使用 `tools/eval_cancellation.py` 与 `tools/eval_stems.py` 执行基线比对），并配合实际现场素材进行试听核对。
+- 所有对消算法的输出信号仅允许从原始混音中重构提取，禁止将参考信号或其反相波形直接写入输出；
+- DSP 算法改动须通过量化指标验证（使用 `tools/eval_cancellation.py` 执行基线比对），并配合实际现场素材进行试听核对。
 
 ## 多语言国际化（i18n）
 

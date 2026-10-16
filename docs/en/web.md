@@ -13,7 +13,6 @@ The Purivox browser build is a backend-free static web application operating alo
 | Feature Module | Browser Support | Notes |
 |---|:---:|---|
 | Vocal Isolation (Matching + Timeline + Dual Engines) | ✅ | Fully ported and verified without Qt dependencies |
-| Acoustic Stem Split | Planned | Awaiting memory optimization for WebAssembly |
 
 Core DSP algorithms reuse the code under `src/features/` directly, packaged into `purivox-src.zip` during build. No separate TypeScript implementations exist.
 
