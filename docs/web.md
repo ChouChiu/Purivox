@@ -56,7 +56,7 @@ web/src/
 ## 无 Qt 与单线程环境适配
 
 1. **多语言与进度解耦**：`shared/i18n.py` 在无 Qt 环境中自动降级，进度事件携带原始 key 下发，由前端加载对应的多语言 JSON 进行渲染。
-2. **串行任务调度**：Pyodide 编译的 CPython 不支持 POSIX 线程池，`process_audio` 引入串行调度分支，分块计算结果与多线程路径逐位一致（由 `test_dsp_execution.py` 验证）。
+2. **串行任务调度**：Pyodide 编译的 CPython 不支持 POSIX 线程池，`process_audio` 引入串行调度分支，分块计算结果与多线程路径逐位一致（由 `tests/features/reference_removal/dsp/test_algorithms.py` 验证）。
 3. **直接堆内存分配**：在 Emscripten 虚拟文件系统中，`mmap` 无法别名映射到 WebAssembly 线性内存，仍需额外复制，因此 `create_pcm_audio` 直接在堆中分配连续内存，避免内存开销翻倍。
 4. **跨步切帧优化**：`shared/dsp/spectral.py` 的 `stft` 与 `log_flux_bands` 直接按帧移（hop）跨步提取切片，避免旧实现生成超长临时高维视图导致超出 wasm32 的 32 位寻址空间。
 

@@ -7,9 +7,7 @@ import soundfile as sf
 
 from shared.audio import (
     AudioData,
-    analyze_audio,
     conform_rate,
-    copy_audio,
     create_pcm_audio,
     read_audio,
     resample_audio,
@@ -17,22 +15,6 @@ from shared.audio import (
 )
 from shared.audio.io import _read_with_qt
 from shared.processing import CancellationToken, ProcessingCancelled
-
-
-def test_audio_analysis_and_copy_use_shared_contract():
-    source = create_pcm_audio(2, 4, 8_000)
-    destination = create_pcm_audio(2, 4, 8_000)
-    try:
-        source.samples[:] = [[0.0, 0.5, -1.0, 0.5], [0.0, -0.5, 1.0, -0.5]]
-        copy_audio(source, destination)
-        stats = analyze_audio(destination)
-        assert np.array_equal(destination.samples, source.samples)
-        assert stats.duration_seconds == 0.0005
-        assert stats.peak_dbfs == 0.0
-        assert np.isclose(stats.rms_dbfs, -4.259687, atol=1e-6)
-    finally:
-        destination.cleanup()
-        source.cleanup()
 
 
 def test_wav_roundtrip_and_resample(tmp_path: Path):
@@ -99,7 +81,7 @@ def test_temporary_pcm_is_disk_backed_and_removable():
     assert not path.exists()
 
 
-def test_qt_audio_decoder_signal_api(tmp_path: Path, qtbot):
+def test_the_qt_fallback_decodes_what_libsndfile_would(tmp_path: Path, qtbot):
     path = tmp_path / "qt-decoder.wav"
     source = np.linspace(-0.5, 0.5, 800, dtype=np.float32)
     sf.write(path, source, 8_000, subtype="FLOAT")

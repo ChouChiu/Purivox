@@ -56,7 +56,7 @@ Frontend architecture is checked statically via `scripts/check-architecture.mjs`
 ## Adaptations for Qt-Free and Single-Threaded Environments
 
 1. **Localization Decoupling**: `shared/i18n.py` degrades gracefully without Qt, forwarding raw translation keys so the frontend can render strings from precompiled JSON catalogs.
-2. **Sequential Dispatch**: Because Pyodide CPython lacks POSIX thread pooling, `process_audio` incorporates a sequential processing branch whose output is bit-identical to the multi-threaded path (verified by `test_dsp_execution.py`).
+2. **Sequential Dispatch**: Because Pyodide CPython lacks POSIX thread pooling, `process_audio` incorporates a sequential processing branch whose output is bit-identical to the multi-threaded path (verified by `tests/features/reference_removal/dsp/test_algorithms.py`).
 3. **Direct Heap Allocation**: In Emscripten, `mmap` cannot alias memory directly to the wasm32 heap. To prevent redundant allocations, `create_pcm_audio` allocates audio arrays directly on the heap.
 4. **Strided STFT Slicing**: `shared/dsp/spectral.py` extracts frames via direct stride hops rather than large intermediate matrices, preventing index overflows on 32-bit wasm32 addressing.
 

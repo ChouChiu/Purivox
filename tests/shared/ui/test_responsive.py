@@ -134,9 +134,13 @@ def test_a_card_gives_back_padding_when_the_window_is_narrow(qtbot):
     assert card.layout.getContentsMargins() < roomy
 
 
+# Long enough to overflow a lane of the widest window below in any UI font: a
+# shorter line fits half of a 1600 px page in a narrow typeface, and the tests
+# then measure a label that never had to wrap or elide.
 LONG_STATUS = (
     "processing finished, saved to /home/singer/Videos/MR/2026 KWDA awards stage backing/"
-    "R14 - Hit 'Em_vocals.wav"
+    "rehearsal takes, second night, front of house mix/R14 - Hit 'Em (encore, extended "
+    "version with the crowd singing the last chorus)_vocals.wav"
 )
 
 

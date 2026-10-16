@@ -45,8 +45,13 @@ class AppConfig(QConfig):
 cfg = AppConfig()
 
 
-def load_config() -> None:
+def config_path() -> Path:
+    """Where the settings live: `config.json` in the platform's application config folder."""
     directory = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppConfigLocation)
-    path = Path(directory or Path.home() / ".config/purivox") / "config.json"
+    return Path(directory or Path.home() / ".config/purivox") / "config.json"
+
+
+def load_config() -> None:
+    path = config_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     qconfig.load(str(path), cfg)

@@ -94,29 +94,6 @@ def test_unknown_key_translates_to_itself():
     assert tr("no_such_translation_key") == "no_such_translation_key"
 
 
-def test_english_terms_name_the_merged_workflow():
-    """One workflow, and the four names the product uses for its parts."""
-    install_language("en_us")
-    assert tr("nav_mr") == "Vocal Isolation"
-    assert tr("mr_audio_label") == "Stage / live audio:"
-    assert tr("source_label") == "Song source:"
-    assert tr("track_vocal") == "Vocal"
-    assert tr("track_backing") == "Backing track"
-    assert tr("stage_analyze") == "Find songs"
-
-
-def test_japanese_and_korean_mr_terms_are_unambiguous():
-    install_language("ja_jp")
-    assert tr("nav_mr") == "ライブボーカル抽出"
-    assert tr("stage_clip_enabled") == "処理"
-    assert tr("stage_unmatched_label") == "トーク / 広告 / 空き時間"
-
-    install_language("ko_kr")
-    assert tr("nav_mr") == "라이브 보컬 추출"
-    assert tr("stage_clip_enabled") == "처리"
-    assert tr("stage_confidence") == "매칭 신뢰도"
-
-
 def test_traditional_chinese_uses_taiwanese_terminology():
     """A character-by-character conversion of zh_cn passes every other test."""
     install_language("zh_tw")

@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import time
+from threading import Event
+
 import pytest
 
 from shared.processing import ProgressEvent
@@ -28,14 +31,22 @@ def test_task_runner_reports_progress_and_releases_thread(qtbot):
 
 def test_task_runner_cancels_cooperatively(qtbot):
     runner = TaskRunner()
+    started = Event()
+    results: list[object] = []
+    runner.succeeded.connect(results.append)
 
     def operation(token, _report):
+        started.set()
+        while not token.cancelled:
+            time.sleep(0.001)
         token.raise_if_cancelled()
 
     with qtbot.waitSignals([runner.cancelled, runner.finished], timeout=2_000):
         runner.start(operation)
+        assert started.wait(2)
         runner.cancel()
 
+    assert results == []
     assert not runner.running
 
 

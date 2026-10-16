@@ -1,6 +1,7 @@
 import tracemalloc
 
 import numpy as np
+from scipy.signal import get_window
 from scipy.signal import stft as scipy_stft
 
 from shared.dsp import istft, log_flux_bands, stft
@@ -27,31 +28,25 @@ def test_stft_preserves_single_precision_fast_path():
     assert np.max(np.abs(restored - signal)) < 1e-5
 
 
-def test_framing_matches_the_sliding_window_it_replaces():
-    """The hop-strided view must frame exactly what subsampling every offset did.
+def test_stft_frames_the_signal_the_way_librosa_centres_it():
+    """Each frame is the hop-strided, reflect-padded window, transformed.
 
-    `stft` cannot build every offset first: numpy rejects a view whose nominal
-    size exceeds a pointer, and under wasm32 that is two gigabytes, which a few
-    seconds of 44.1 kHz audio passes. This pins the two formulations together.
+    `stft` strides straight to the hop positions instead of framing every
+    offset first: numpy rejects a view whose nominal size exceeds a pointer,
+    and under wasm32 that is two gigabytes, which a few seconds of 44.1 kHz
+    audio passes.  This holds the shortcut to the plain formulation.
     """
     n_fft, hop = 64, 16
-    signal = np.sin(np.arange(4_000) / 40.0).astype(np.float32)
+    signal = np.sin(np.arange(4_000) / 40.0)
 
     padded = np.pad(signal, (n_fft // 2, n_fft // 2), mode="reflect")
     remainder = (padded.size - n_fft) % hop
     if remainder:
         padded = np.pad(padded, (0, hop - remainder), mode="reflect")
-    expected = np.lib.stride_tricks.sliding_window_view(padded, n_fft)[::hop]
+    frames = np.lib.stride_tricks.sliding_window_view(padded, n_fft)[::hop]
+    expected = np.fft.rfft(frames * get_window("hann", n_fft, fftbins=True), axis=1)
 
-    stride = padded.strides[0]
-    count = (padded.size - n_fft) // hop + 1
-    produced = np.lib.stride_tricks.as_strided(
-        padded, shape=(count, n_fft), strides=(hop * stride, stride), writeable=False
-    )
-
-    assert produced.shape == expected.shape
-    assert np.array_equal(produced, expected)
-    assert stft(signal, n_fft=n_fft, hop=hop).shape[0] == count
+    np.testing.assert_allclose(stft(signal, n_fft=n_fft, hop=hop), expected, atol=1e-12)
 
 
 def _scipy_log_flux_bands(signal: np.ndarray, n_fft: int, hop: int) -> np.ndarray:

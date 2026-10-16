@@ -117,7 +117,7 @@ stereo → resample the song source to the stage recording's rate (soxr) → opt
 `process_audio` (blocks from the spectral-cell budget, ~45 s at 44.1 kHz, ≥2 s overlap, cos²/sin²
 crossfade) → peak/RMS stats → atomic WAV at the stage recording's own rate and bit depth.
 `process_audio` has a pooled and an inline schedule because Pyodide has no pthreads;
-`test_dsp_execution.py` holds them to the same output.
+`dsp/test_algorithms.py` holds them to the same output.
 
 **Segmented** (`render_stage_job`): the recording is read once into the output buffer, then each
 enabled clip reads and resamples its source, stretches it by the clip's tempo ratio, aligns the
@@ -300,13 +300,18 @@ Language keys: `zh_cn`, `zh_tw`, `en_us`, `ja_jp`, `ko_kr`.
 - Offscreen is mandatory (conftest sets it); `slow` tests are auto-skipped unless `--runslow`, which
   runs the 15-minute 44.1 kHz stereo benchmark (`tests/benchmarks/test_long_audio.py`: seam
   smoothness, peak RSS ≤ 2 GiB).
-- `tests/` mirrors `src/` path-for-path, so a change's tests are at the mirrored path: DSP,
-  alignment, matching, timeline and render regressions under `tests/features/reference_removal/`,
-  runner and presenter lifecycles and the pytest-qt GUI/layout tests under `tests/app/`, the browser
+- `tests/` mirrors `src/` path-for-path, so a change's tests are at the mirrored path: the DSP
+  under `tests/features/reference_removal/dsp/`, matching, timeline, render and the page beside
+  them, the window's shortcuts, routing and window-shape layouts under `tests/app/`, the browser
   shell's JSON contract and Qt-free imports under `tests/web/`.
+- conftest starts every test from the default language and default settings and deletes the
+  test-mode `config.json`, so a test that calls `cfg.set` leaks nothing into the next one.
+- A test asserts behaviour a user or a caller relies on. Pinning copy, restating a config file, or
+  checking that a patched function was called is not a test; the raw-key check in
+  `test_main_window.py` covers "every label is translated" for all five locales at once.
 - Three repository-wide gates: `test_architecture.py` (import boundaries), `test_packaging.py`
-  (shipped-source roster, compiled catalogues), `test_documentation.py` (README index, doc
-  translation pairing, internal links).
+  (the wheel, `pysidedeploy.spec` and the PySide roster against the tree, compiled catalogues),
+  `test_documentation.py` (README index, doc translation pairing, internal links).
 - No test reaches a real host — the update tests repoint `updates.RELEASES_API` at a localhost
   server.
 - DSP changes are accepted on measurement, not argument: run `purivox --selftest` and

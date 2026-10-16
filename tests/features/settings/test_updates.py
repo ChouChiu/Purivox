@@ -44,7 +44,7 @@ def local_release_host(monkeypatch):
     _Handler.payload = json.dumps(RELEASE).encode()
     _Handler.status = 200
     httpd = ThreadingHTTPServer(("127.0.0.1", 0), _Handler)
-    thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+    thread = threading.Thread(target=httpd.serve_forever, args=(0.01,), daemon=True)
     thread.start()
     monkeypatch.setattr(
         updates, "RELEASES_API", f"http://127.0.0.1:{httpd.server_address[1]}/latest"

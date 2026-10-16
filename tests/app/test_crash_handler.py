@@ -1,5 +1,4 @@
 import logging
-import sys
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
@@ -108,16 +107,6 @@ def test_keyboard_interrupt_is_left_to_the_previous_hook(crash, monkeypatch):
     assert seen == [KeyboardInterrupt]
     assert crash == []
     assert _StubMessageBox.last is None
-
-
-def test_install_replaces_the_interpreter_hook(monkeypatch):
-    previous = sys.excepthook
-    monkeypatch.setattr(sys, "excepthook", previous)
-
-    crash_handler.install_crash_handler()
-
-    assert sys.excepthook is crash_handler.report_crash
-    assert crash_handler._previous_excepthook is previous
 
 
 def _query(url: str) -> dict[str, list[str]]:

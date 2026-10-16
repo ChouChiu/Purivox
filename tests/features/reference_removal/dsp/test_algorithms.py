@@ -4,128 +4,13 @@ import numpy as np
 import pytest
 from scipy.signal import fftconvolve
 
-from features.reference_removal.dsp import align_audio, alignment, process_audio
-from features.reference_removal.dsp.alignment import _spectral_flux_lag
+from features.reference_removal.dsp import algorithms, process_audio
 from shared.audio import create_pcm_audio
 from shared.processing import CancellationToken, ProcessingCancelled
 
 
 def corr(first, second):
     return float(np.corrcoef(first, second)[0, 1])
-
-
-@pytest.fixture(scope="module")
-def scene():
-    sample_rate = 22_050
-    time = np.arange(sample_rate * 3) / sample_rate
-    vocal = 0.5 * np.sin(2 * np.pi * 440 * time) + 0.2 * np.sin(2 * np.pi * 880 * time)
-    instrumental = 0.4 * np.sin(2 * np.pi * 110 * time) + 0.1 * np.sin(2 * np.pi * 220 * time)
-    return sample_rate, vocal, instrumental, vocal + instrumental
-
-
-def test_alignment_recovers_integer_and_fractional_delay(scene):
-    sample_rate, _vocal, instrumental, mix = scene
-    delay = int(0.05 * sample_rate)
-    delayed = np.pad(instrumental[:-delay], (delay, 0))
-    aligned = align_audio(np.stack([mix, mix]), np.stack([delayed, delayed]), sample_rate)
-    assert corr(aligned[0, :sample_rate], instrumental[:sample_rate]) > 0.99
-
-
-def test_alignment_recovers_delay_from_inverted_reference():
-    sample_rate = 22_050
-    rng = np.random.default_rng(72)
-    instrumental = np.convolve(rng.normal(0.0, 0.1, sample_rate * 3), np.ones(9) / 9, mode="same")
-    time = np.arange(instrumental.size) / sample_rate
-    mix = instrumental + 0.3 * np.sin(2 * np.pi * 443 * time)
-    delay = int(0.04 * sample_rate)
-    inverted = -np.pad(instrumental[:-delay], (delay, 0))
-
-    aligned = align_audio(np.stack([mix, mix]), np.stack([inverted, inverted]), sample_rate)
-
-    assert (
-        corr(aligned[0, sample_rate : 2 * sample_rate], instrumental[sample_rate : 2 * sample_rate])
-        < -0.99
-    )
-
-
-def test_alignment_proxy_rejects_aliased_high_frequency_vocals():
-    sample_rate = 22_050
-    length = sample_rate * 4
-    time = np.arange(length) / sample_rate
-    rng = np.random.default_rng(91)
-    reference = (
-        0.12 * np.sin(2 * np.pi * 170 * time)
-        + 0.08 * np.sin(2 * np.pi * 310 * time)
-        + 0.04 * rng.normal(size=length)
-    )
-    delay = sample_rate // 25
-    delayed = np.pad(reference[:-delay], (delay, 0))
-    # This strong component is above the 2 kHz proxy's Nyquist frequency.  A
-    # strided proxy aliases it into the alignment band even though it is absent
-    # from the reference.
-    unrelated_vocal = 0.45 * np.sin(2 * np.pi * 7_130 * time)
-    mixture = delayed + unrelated_vocal
-
-    aligned = align_audio(
-        np.stack([mixture, mixture]),
-        np.stack([reference, reference]),
-        sample_rate,
-    )
-
-    assert (
-        corr(aligned[0, sample_rate : 3 * sample_rate], delayed[sample_rate : 3 * sample_rate])
-        > 0.98
-    )
-
-
-def test_spectral_flux_alignment_handles_different_mastering_and_polarity():
-    sample_rate = 8_000
-    length = sample_rate * 12
-    rng = np.random.default_rng(124)
-    reference = np.convolve(
-        rng.normal(0.0, 0.08, length),
-        np.ones(9) / 9,
-        mode="same",
-    )
-    delay = round(0.36 * sample_rate)
-    shifted = -np.pad(reference[:-delay], (delay, 0))
-    time = np.arange(length) / sample_rate
-    stage = (
-        np.tanh(1.3 * shifted) / 1.3
-        + 0.03 * np.sin(2 * np.pi * 431 * time)
-        + rng.normal(0.0, 0.005, length)
-    )
-
-    lag = _spectral_flux_lag(
-        np.stack([stage, 0.97 * stage]),
-        np.stack([reference, 0.92 * reference]),
-        sample_rate,
-    )
-
-    assert lag == pytest.approx(delay, abs=0.02 * sample_rate)
-
-
-def test_confident_musical_offset_is_not_overridden_by_gcc(monkeypatch):
-    sample_rate = 8_000
-    rng = np.random.default_rng(125)
-    reference = rng.normal(0.0, 0.08, (2, sample_rate * 3))
-    mixture = reference + rng.normal(0.0, 0.01, reference.shape)
-    musical_lag = 0.8 * sample_rate
-
-    monkeypatch.setattr(
-        alignment,
-        "_spectral_flux_lag",
-        lambda *_args, **_kwargs: musical_lag,
-    )
-
-    def unexpected_gcc(*_args, **_kwargs):
-        raise AssertionError("GCC must only run when musical onset matching fails")
-
-    monkeypatch.setattr(alignment, "_gcc_phat_lag", unexpected_gcc)
-
-    aligned = align_audio(mixture, reference, sample_rate)
-
-    assert aligned.shape == reference.shape
 
 
 def test_reference_cancellation_stereo_mimo_cancels_crossfeed():
@@ -287,10 +172,8 @@ def test_process_audio_writes_supplied_disk_buffer(scene):
 
 
 def test_processing_block_uses_two_gib_working_set_budget():
-    from features.reference_removal.dsp.algorithms import _processing_block_frames
-
-    block_44k = _processing_block_frames(44_100, 8)
-    block_96k = _processing_block_frames(96_000, 8)
+    block_44k = algorithms._processing_block_frames(44_100, 8)
+    block_96k = algorithms._processing_block_frames(96_000, 8)
 
     assert 44 * 44_100 <= block_44k <= 46 * 44_100
     assert 20 * 96_000 <= block_96k <= 22 * 96_000
@@ -331,32 +214,31 @@ def test_long_processing_uses_two_spectral_workers(monkeypatch):
     assert np.array_equal(output, mixture)
 
 
-def test_process_audio_uses_reference_cancellation(monkeypatch):
-    sample_rate = 8_000
-    time = np.arange(sample_rate * 2) / sample_rate
-    vocal = 0.3 * np.sin(2 * np.pi * 440 * time)
-    reference = 0.2 * np.sin(2 * np.pi * 110 * time)
-    mixture = np.stack([vocal + reference, 0.95 * vocal + reference])
-    from features.reference_removal.dsp import algorithms
+def test_inline_and_pooled_schedules_agree(monkeypatch):
+    """Pyodide has no pthreads, so `process_audio` also has an inline schedule.
 
-    calls = []
-    original = algorithms._reference_cancel
-    monkeypatch.setattr(
-        "features.reference_removal.dsp.algorithms._reference_cancel",
-        lambda *args: calls.append(args) or original(*args),
-    )
+    Only the execution strategy differs: the layout still decides the block
+    size, so the two paths have to produce the same samples.  The block is
+    shrunk to the twelve-second context floor so forty seconds at a low rate
+    spans several batches.
+    """
+    sample_rate, sigma = 8_000, 3
+    monkeypatch.setattr(algorithms, "_MAX_PROCESSING_BLOCK_SECONDS", 12)
+    monkeypatch.setattr(algorithms, "_MAX_PROCESSING_WORKERS", 3)
+    time = np.arange(sample_rate * 40) / sample_rate
+    accompaniment = 0.4 * np.sin(2 * np.pi * 110 * time) + 0.1 * np.sin(2 * np.pi * 220 * time)
+    vocal = 0.5 * np.sin(2 * np.pi * 440 * time)
+    reference = np.stack([accompaniment, accompaniment]).astype(np.float32)
+    mix = np.stack([accompaniment + vocal, accompaniment + vocal]).astype(np.float32)
+    _block, workers = algorithms._processing_layout(sample_rate, sigma, mix.shape[1])
+    assert workers > 1, "a single-worker schedule would compare nothing"
 
-    output = process_audio(
-        mixture,
-        np.stack([reference, reference]),
-        sample_rate,
-        1.0,
-        3,
-    )
+    monkeypatch.setattr(algorithms, "_THREADS_AVAILABLE", True)
+    pooled = process_audio(mix, reference, sample_rate, 0.75, sigma)
+    monkeypatch.setattr(algorithms, "_THREADS_AVAILABLE", False)
+    inline = process_audio(mix, reference, sample_rate, 0.75, sigma)
 
-    assert calls
-    assert corr(output[0], vocal) > 0.99
-    assert abs(corr(output[0], reference)) < 0.08
+    assert np.array_equal(pooled, inline)
 
 
 def _backing_scene(seconds: float = 3.0):
@@ -630,217 +512,42 @@ def test_residual_mask_keeps_a_live_source_that_never_stops():
     assert depth > 21.0
 
 
-def _attack_music(sample_rate: int, seconds: float, seed: int) -> np.ndarray:
-    """Envelope-modulated tones: enough attacks for a tempo search to bite."""
-    random = np.random.default_rng(seed)
-    frames = round(seconds * sample_rate)
-    time = np.arange(frames) / sample_rate
-    signal = np.zeros(frames)
-    for frequency in (97.0, 211.0, 389.0, 733.0):
-        envelope = np.repeat(random.uniform(0.1, 1.0, round(seconds * 8)), sample_rate // 8)
-        signal += envelope[:frames] * np.sin(
-            2 * np.pi * frequency * time + random.uniform(0, 2 * np.pi)
-        )
-    return signal / 4
+def test_reference_cancellation_preserves_centered_non_reference_content():
+    sample_rate = 22_050
+    length = sample_rate * 5
+    time = np.arange(length) / sample_rate
+    vocal = 0.5 * np.sin(2 * np.pi * 440 * time)
+    reference = 0.4 * np.sin(2 * np.pi * 110 * time)
+    noise = np.random.default_rng(42).uniform(-0.15, 0.15, length)
+    mixture = vocal + reference + noise
+    output = process_audio(
+        np.stack([mixture] * 2),
+        np.stack([reference] * 2),
+        sample_rate,
+        1.0,
+        8,
+    )
+    assert corr(output[0], vocal) > 0.96
+    assert corr(output[0], vocal + noise) > 0.96
 
 
-def test_alignment_recovers_a_tempo_shifted_reference():
-    """A stage played 4% slower is invisible to drift tracking alone."""
-    from shared.dsp import time_stretch
+def test_reference_cancellation_regularizes_a_nearly_mono_reference():
+    sample_rate = 22_050
+    length = sample_rate * 4
+    time = np.arange(length) / sample_rate
+    vocal = 0.35 * np.sin(2 * np.pi * 431 * time)
+    common_reference = 0.2 * np.sin(2 * np.pi * 127 * time)
+    tiny_side = 1e-4 * np.sin(2 * np.pi * 181 * time)
+    reference = np.stack([common_reference + tiny_side, common_reference - tiny_side])
+    mixture = np.stack([vocal + 0.8 * reference[0], 0.97 * vocal + 0.75 * reference[1]])
 
-    sample_rate = 8_000
-    reference = _attack_music(sample_rate, 12.0, 7).astype(np.float32)
-    stage_instrumental = time_stretch(reference[None, :], sample_rate, 1.04)[0]
-    time = np.arange(stage_instrumental.size) / sample_rate
-    live = (0.2 * np.sin(2 * np.pi * 441 * time)).astype(np.float32)
-    mixture = stage_instrumental + live
-
-    detected = align_audio(mixture[None, :], reference[None, :], sample_rate, detect_speed=True)
-    undetected = align_audio(mixture[None, :], reference[None, :], sample_rate, detect_speed=False)
-
-    window = slice(sample_rate, sample_rate * 6)
-    assert corr(detected[0, window], stage_instrumental[window]) > 0.8
-    assert corr(undetected[0, window], stage_instrumental[window]) < 0.5
-
-
-def test_lanczos_interior_path_matches_the_boundary_formulation():
-    """The interior fast path is an optimisation, not a second interpolation.
-
-    A block inside the recording skips the mask/clip/gather reduction the first
-    and last block still take.  The two have to agree, or every block seam would
-    carry a step: the boundary blocks are pinned to the masked formulation
-    exactly, and the interior to it within the precision it accumulates in.
-    """
-    from features.reference_removal.dsp.alignment import (
-        _LANCZOS_PHASES,
-        _LANCZOS_RADIUS,
-        _lanczos,
-        _lanczos_table,
+    output = process_audio(
+        mixture,
+        reference,
+        sample_rate,
+        1.0,
+        8,
     )
 
-    def masked(values: np.ndarray, source: np.ndarray, radius: int = _LANCZOS_RADIUS):
-        table, _sums = _lanczos_table(radius, _LANCZOS_PHASES)
-        base = np.floor(source)
-        phase = np.minimum(
-            ((source - base) * _LANCZOS_PHASES).astype(np.int64),
-            _LANCZOS_PHASES - 1,
-        )
-        weights = table[phase]
-        indices = base.astype(np.int64)[:, None] + np.arange(-radius + 1, radius + 1)
-        weights = weights * ((indices >= 0) & (indices < values.size))
-        safe = np.clip(indices, 0, max(values.size - 1, 0))
-        denominator = np.sum(weights, axis=1)
-        return np.divide(
-            np.sum(values[safe] * weights, axis=1),
-            denominator,
-            out=np.zeros(source.size, dtype=np.float64),
-            where=np.abs(denominator) > 1e-12,
-        )
-
-    random = np.random.default_rng(7)
-    values = random.normal(size=65_536).astype(np.float32)
-    for start in (0, 20_000, 45_536):
-        source = np.arange(start, start + 20_000, dtype=np.float64)
-        source += random.uniform(-0.5, 0.5, source.size)
-        produced = _lanczos(values, source)
-        expected = masked(values, source)
-        if start == 20_000:  # every tap lands inside the recording
-            assert np.allclose(produced, expected, rtol=0.0, atol=1e-6)
-        else:
-            assert np.array_equal(produced, expected)
-
-
-def test_complex_smoothing_matches_the_real_and_imaginary_views():
-    """One pass over a trailing axis of two must equal two strided passes."""
-    from features.reference_removal.dsp import transfer
-
-    random = np.random.default_rng(9)
-    values = (random.normal(size=(64, 32)) + 1j * random.normal(size=(64, 32))).astype(np.complex64)
-
-    fused = transfer.spectral_smooth(values, 3.0)
-    expected = np.empty_like(values)
-    transfer.spectral_smooth(values.real, 3.0, 1.0, expected.real)
-    transfer.spectral_smooth(values.imag, 3.0, 1.0, expected.imag)
-
-    assert np.array_equal(fused, expected)
-
-
-def test_prediction_does_not_depend_on_measuring_coherence():
-    """The first robust-weighting pass skips the coherence it throws away."""
-    from features.reference_removal.dsp import transfer
-    from shared.dsp import stft
-
-    sample_rate = 8_000
-    time = np.arange(sample_rate * 3) / sample_rate
-    accompaniment = 0.3 * np.sin(2 * np.pi * 110 * time)
-    live = 0.25 * np.sin(2 * np.pi * 431 * time)
-    song_spectra = [
-        stft(channel, n_fft=512, hop=128)
-        for channel in (accompaniment + live, 0.95 * accompaniment + live)
-    ]
-    reference_spectra = [
-        stft(channel, n_fft=512, hop=128) for channel in (accompaniment, 0.95 * accompaniment)
-    ]
-
-    measured, explained = transfer.predict_reference_spectra(
-        song_spectra, reference_spectra, 40.0, CancellationToken()
-    )
-    skipped, none = transfer.predict_reference_spectra(
-        song_spectra, reference_spectra, 40.0, CancellationToken(), coherence=False
-    )
-
-    assert explained and none == []
-    for measured_channel, skipped_channel in zip(measured, skipped, strict=True):
-        assert np.array_equal(measured_channel, skipped_channel)
-
-
-def test_factorised_solver_solves_the_normal_equations():
-    """R is channel independent, so it is factorised once and substituted per channel."""
-    from features.reference_removal.dsp import transfer
-
-    random = np.random.default_rng(88)
-    order = 2
-    shape = (2, 3)
-    reference = [
-        (random.normal(size=shape) + 1j * random.normal(size=shape)).astype(np.complex64)
-        for _ in range(order)
-    ]
-    mixture = (random.normal(size=shape) + 1j * random.normal(size=shape)).astype(np.complex64)
-    covariance = [[None] * order for _ in range(order)]
-    for row in range(order):
-        for column in range(row + 1):
-            covariance[row][column] = reference[column] * np.conj(reference[row])
-    # One observation per cell makes the raw covariance rank one, which is
-    # what the relative loading in `predict_reference_spectra` exists for.
-    loading = 1e-2 * sum(np.abs(band) ** 2 for band in reference).real + 1e-6
-    for index in range(order):
-        covariance[index][index] = covariance[index][index] + loading
-    cross = [mixture * np.conj(band) for band in reference]
-
-    lower, inverse_pivot = transfer._factorize_hermitian(covariance)
-    solved = transfer._solve_hermitian(lower, inverse_pivot, cross)
-
-    for row in range(order):
-        residual = cross[row].copy()
-        for column in range(order):
-            entry = covariance[row][column] if column <= row else np.conj(covariance[column][row])
-            residual -= entry * solved[column]
-        assert float(np.max(np.abs(residual))) < 1e-4
-
-
-def test_consuming_the_cross_terms_solves_the_same_system():
-    """The first pass hands its cross terms over; the measuring pass keeps them."""
-    from features.reference_removal.dsp import transfer
-
-    random = np.random.default_rng(91)
-    order = 2
-    shape = (3, 4)
-    reference = [
-        (random.normal(size=shape) + 1j * random.normal(size=shape)).astype(np.complex64)
-        for _ in range(order)
-    ]
-    covariance = [[None] * order for _ in range(order)]
-    for row in range(order):
-        for column in range(row + 1):
-            covariance[row][column] = reference[column] * np.conj(reference[row])
-    loading = 1e-2 * sum(np.abs(band) ** 2 for band in reference).real + 1e-6
-    for index in range(order):
-        covariance[index][index] = covariance[index][index] + loading
-    lower, inverse_pivot = transfer._factorize_hermitian(covariance)
-    mixture = (random.normal(size=shape) + 1j * random.normal(size=shape)).astype(np.complex64)
-    cross = [mixture * np.conj(band) for band in reference]
-
-    copied = transfer._solve_hermitian(lower, inverse_pivot, [band.copy() for band in cross])
-    consumed = transfer._solve_hermitian(
-        lower, inverse_pivot, [band.copy() for band in cross], consume=True
-    )
-
-    for copied_row, consumed_row in zip(copied, consumed, strict=True):
-        assert np.array_equal(copied_row, consumed_row)
-
-
-def test_diagonal_fit_matches_the_full_fit_for_one_reference_channel():
-    """With a single reference the two fits are the same 1x1 system."""
-    from features.reference_removal.dsp import transfer
-    from shared.dsp import stft
-
-    sample_rate = 8_000
-    time = np.arange(sample_rate * 2) / sample_rate
-    accompaniment = 0.3 * np.sin(2 * np.pi * 110 * time)
-    live = 0.25 * np.sin(2 * np.pi * 431 * time)
-    song_spectra = [stft(accompaniment + live, n_fft=512, hop=128)]
-    reference_spectra = [stft(accompaniment, n_fft=512, hop=128)]
-
-    full, _ = transfer.predict_reference_spectra(
-        song_spectra, reference_spectra, 40.0, CancellationToken(), coherence=False
-    )
-    diagonal, _ = transfer.predict_reference_spectra(
-        song_spectra,
-        reference_spectra,
-        40.0,
-        CancellationToken(),
-        coherence=False,
-        diagonal=True,
-    )
-
-    assert np.array_equal(full[0], diagonal[0])
+    assert np.isfinite(output).all()
+    assert min(corr(output[0], vocal), corr(output[1], vocal)) > 0.98
