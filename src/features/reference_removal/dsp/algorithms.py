@@ -17,6 +17,7 @@ from .transfer import (
     effective_observations,
     power_transfer,
     predict_reference_spectra,
+    reverberant_power_transfer,
     smoothstep,
     spectral_smooth,
 )
@@ -332,7 +333,9 @@ def _reference_cancel(
         np.square(power, out=power)
         residual_power += power
     del explained
-    leaked_power, leakage_confidence = power_transfer(residual_power, removable_power, sigma_frames)
+    leaked_power, leakage_confidence = reverberant_power_transfer(
+        residual_power, removable_power, sigma_frames, hop / sample_rate
+    )
     leaked_power *= smoothstep(_POWER_FIT_LOW, _POWER_FIT_HIGH, leakage_confidence)
     # Leakage cannot exceed the residual it was found in.
     np.minimum(leaked_power, residual_power, out=leaked_power)

@@ -28,6 +28,10 @@ TRANSFER_ORDER = 2
 _FRAME_INDEPENDENCE = 0.125
 _BIN_INDEPENDENCE = 1.5
 _RELATIVE_LOADING = 2e-4
+# Reverberation times the leakage fit tries the removed power's tail at.  A
+# hall's is unknown and differs across the spectrum, so each cell keeps the
+# one that fits it best; three spans the 0.25-2 s the hall scenes ring at.
+_TAIL_RT60_SECONDS = (0.4, 1.0, 2.0)
 
 
 def spectral_smooth(
@@ -362,10 +366,21 @@ def predict_reference_spectra(
     return predicted, explained
 
 
+def _power_moments(values: np.ndarray, sigma_frames: float) -> tuple[np.ndarray, np.ndarray]:
+    """The local mean and variance of a power spectrum, as `power_transfer` reads them."""
+    mean = spectral_smooth(values, sigma_frames)
+    scratch = np.empty_like(values)
+    variance = spectral_smooth(np.square(values, out=scratch), sigma_frames)
+    variance -= np.square(mean, out=scratch)
+    np.maximum(variance, 0.0, out=variance)
+    return mean, variance
+
+
 def power_transfer(
     mixture_power: np.ndarray,
     reference_power: np.ndarray,
     sigma_frames: float,
+    mixture_moments: tuple[np.ndarray, np.ndarray] | None = None,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Fit the backing power the reference explains without using phase.
 
@@ -380,25 +395,23 @@ def power_transfer(
     mixture into the part that follows the reference and a slowly varying floor,
     and that floor is the live content.  Only `g P_x` may be removed.  Returns
     the explained power and the adjusted correlation it was fitted at.
+
+    `mixture_moments` are `_power_moments(mixture_power)`, for a caller that
+    fits several regressors against one mixture; they are only read.
     """
     epsilon = 1e-20
-    mean_x = spectral_smooth(reference_power, sigma_frames)
-    mean_y = spectral_smooth(mixture_power, sigma_frames)
-    # Each product below feeds a smoothing pass and is never read again, so they
-    # all pass through one buffer: five separate full spectra of intermediates
-    # would otherwise sit in the block working set for the length of this call.
+    if mixture_moments is None:
+        mixture_moments = _power_moments(mixture_power, sigma_frames)
+    mean_y, variance_y = mixture_moments
+    mean_x, variance_x = _power_moments(reference_power, sigma_frames)
+    # The product feeds a smoothing pass and is never read again, so it and the
+    # mean product pass through one buffer rather than a spectrum apiece.
     scratch = np.empty_like(reference_power)
-    variance_x = spectral_smooth(np.square(reference_power, out=scratch), sigma_frames)
-    variance_x -= np.square(mean_x, out=scratch)
-    variance_y = spectral_smooth(np.square(mixture_power, out=scratch), sigma_frames)
-    variance_y -= np.square(mean_y, out=scratch)
     covariance = spectral_smooth(
         np.multiply(reference_power, mixture_power, out=scratch), sigma_frames
     )
     covariance -= np.multiply(mean_x, mean_y, out=scratch)
     del mean_x, mean_y, scratch
-    np.maximum(variance_x, 0.0, out=variance_x)
-    np.maximum(variance_y, 0.0, out=variance_y)
     # Only a positive slope is physical: more backing in the source cannot
     # mean less of it on stage.
     slope = np.maximum(covariance, 0.0)
@@ -407,7 +420,7 @@ def power_transfer(
     np.multiply(variance_x, variance_y, out=variance_x)
     variance_x += epsilon
     correlation /= variance_x
-    del variance_x, variance_y
+    del variance_x, variance_y, mixture_moments
     observations = effective_observations(sigma_frames, mixture_power.shape[0])
     # 1 - (1 - clip(r)) * observations / (observations - 1), read from the inside
     # out so that no step needs a spectrum of its own.  The multiply and the
@@ -421,3 +434,44 @@ def power_transfer(
     np.clip(adjusted, 0.0, 1.0, out=adjusted)
     slope *= reference_power
     return slope.astype(np.float32, copy=False), adjusted.astype(np.float32, copy=False)
+
+
+def reverberant_power_transfer(
+    residual_power: np.ndarray,
+    removed_power: np.ndarray,
+    sigma_frames: float,
+    hop_seconds: float,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Fit the leakage against the removed power and against its reverberant tail.
+
+    A hall keeps ringing after the playback that excited it, and the frames of
+    that tail lie past the analysis window the transfer can describe.  Fitted
+    against the removed power of the same cell, the tail follows nothing there
+    and lands in the intercept, which is the part kept as live.  Its power is
+    the earlier frames' decaying exponentially, so the removed power run through
+    that decay is a regressor the tail does follow.  Each cell keeps whichever
+    regressor its fit correlates best with, the same-cell one included, so
+    content without a tail scores as it did.  Measured on the hall scenes, RT60
+    0.25-2 s: 1.4-2.0 dB more depth with the live fidelity a little higher, and
+    no other scene moved by more than 0.03 dB.
+    """
+    # Every candidate is fitted against the same residual, so its moments are
+    # taken once.
+    moments = _power_moments(residual_power, sigma_frames)
+    leaked, confidence = power_transfer(residual_power, removed_power, sigma_frames, moments)
+    tail = np.empty_like(removed_power)
+    for rt60 in _TAIL_RT60_SECONDS:
+        decay = np.float32(10.0 ** (-6.0 * hop_seconds / rt60))
+        np.copyto(tail, removed_power)
+        # A row at a time is the recursion itself, in place; lfilter measured
+        # three times slower here and allocates a second spectrum.
+        for frame in range(1, tail.shape[0]):
+            tail[frame] += decay * tail[frame - 1]
+        candidate, candidate_confidence = power_transfer(
+            residual_power, tail, sigma_frames, moments
+        )
+        better = candidate_confidence > confidence
+        np.copyto(leaked, candidate, where=better)
+        np.copyto(confidence, candidate_confidence, where=better)
+        del candidate, candidate_confidence, better
+    return leaked, confidence

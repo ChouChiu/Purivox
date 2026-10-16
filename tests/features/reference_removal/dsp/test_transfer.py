@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 
 from features.reference_removal.dsp import transfer
 from shared.dsp import stft
@@ -132,3 +133,26 @@ def test_diagonal_fit_matches_the_full_fit_for_one_reference_channel():
     )
 
     assert np.array_equal(full[0], diagonal[0])
+
+
+def test_leakage_fit_follows_a_hall_tail_past_the_notes_that_excited_it():
+    """The tail of a 1 s hall rings on through the rests, where nothing is removed."""
+
+    hop_seconds = 512 / 44_100
+    frames, bins = 2000, 64
+    random = np.random.default_rng(23)
+    # Quarter-second notes with rests between them, independently per bin.
+    playing = np.repeat(random.random((frames // 20 + 1, bins)) < 0.7, 20, axis=0)[:frames]
+    removed = (playing * random.uniform(0.5, 1.5, (frames, bins))).astype(np.float32)
+    decay = 10.0 ** (-6.0 * hop_seconds / 1.0)
+    ringing = removed.copy()
+    for frame in range(1, frames):
+        ringing[frame] = decay * ringing[frame - 1] + removed[frame]
+    tail = 0.2 * (ringing - removed)
+    live_floor = 0.3
+    residual = (live_floor + tail).astype(np.float32)
+
+    leaked, _confidence = transfer.reverberant_power_transfer(residual, removed, 40.0, hop_seconds)
+
+    assert float(np.corrcoef(leaked.ravel(), tail.ravel())[0, 1]) > 0.95
+    assert float(np.mean(leaked)) == pytest.approx(float(np.mean(tail)), rel=0.1)

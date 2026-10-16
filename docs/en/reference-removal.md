@@ -149,6 +149,14 @@ $$
 
 Here, $\rho P_d$ captures residual playback fluctuations while $c$ accounts for steady-state live program material. The regression slope $\rho$ is thresholded and bounded by residual power to drive soft residual attenuation.
 
+A venue keeps ringing after the playback that excited it, and that tail lies past the analysis window the transfer can describe. Regressed only against the same cell's $P_d$, it follows nothing there and lands in the intercept $c$, the part kept as live. Its power is the earlier frames' decaying exponentially, so the regression also tries $P_d$ run through that decay:
+
+$$
+T_a(f, n) = P_d(f, n) + a\,T_a(f, n - 1),\qquad a = 10^{-6\,\mathrm{hop}/T_{60}}
+$$
+
+with $T_{60}$ at three candidates, $0.4$, $1$ and $2\text{ s}$. Each cell keeps whichever of the same-frame fit and the three tail fits has the highest adjusted correlation, so content without a tail is still explained by the same-frame fit. All four regressions share the residual side's local mean and variance.
+
 ### Incoherent Power Path
 
 When high-frequency phase coherence collapses (e.g., complex coherence drops below $0.1$ above $500\text{ Hz}$), a parallel log-magnitude power regression is evaluated:
