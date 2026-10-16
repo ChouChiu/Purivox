@@ -11,7 +11,8 @@ set -euo pipefail
 binary="${1:?usage: smoke.sh <standalone executable>}"
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
-export QT_QPA_PLATFORM=offscreen
+# A caller that needs a real window system says which one.
+export QT_QPA_PLATFORM="${QT_QPA_PLATFORM:-offscreen}"
 
 "$binary" --selftest
 

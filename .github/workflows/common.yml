@@ -542,9 +542,22 @@ jobs:
 
       - name: Smoke-test app bundle
         id: bundle-smoke
+        env:
+          # The frameless window hands winId() to AppKit as an NSView, which
+          # only the native platform gives it: offscreen crashes the window on
+          # construction, frozen or not.  The runner has a window server.
+          QT_QPA_PLATFORM: cocoa
         run: >-
           deployment/smoke.sh dist/Purivox.app/Contents/MacOS/Purivox
           2>&1 | tee logs/bundle-smoke.log
+
+      - name: Show crash reports
+        if: ${{ failure() && steps.bundle-smoke.outcome == 'failure' }}
+        run: |
+          # A native crash leaves no Python traceback; macOS keeps the report.
+          for report in ~/Library/Logs/DiagnosticReports/Purivox*; do
+            [[ -f "$report" ]] && head -c 60000 "$report"
+          done
 
       - name: Archive the bundle
         run: |
