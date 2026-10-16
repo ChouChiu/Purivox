@@ -6,7 +6,7 @@ from PySide6.QtCore import QCoreApplication, QEvent, QStandardPaths
 from qfluentwidgets import ConfigItem
 
 from resources import resource_path
-from shared.config import AppConfig, cfg, config_path
+from shared.config import AppConfig, cfg, config_path, load_config
 from shared.i18n import DEFAULT_LANGUAGE, install_language
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -37,8 +37,18 @@ def installed_translation(qapp):
     return qapp
 
 
+@pytest.fixture(scope="session", autouse=True)
+def settings_file(qapp):
+    """Bind Fluent's settings store to the test-mode file before anything saves.
+
+    Until `load_config` runs, `qconfig` saves to `config/config.json` relative
+    to the working directory - the repository, when a test file runs alone.
+    """
+    load_config()
+
+
 @pytest.fixture(autouse=True)
-def default_settings(qapp):
+def default_settings(qapp, settings_file):
     """Start every test from the default settings, in memory and on disk.
 
     `cfg.set` saves as it goes, and test mode only moves the file under
