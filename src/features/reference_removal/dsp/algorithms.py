@@ -123,6 +123,38 @@ def _processing_layout(sample_rate: int, sigma: float, length: int) -> tuple[int
     return block, workers
 
 
+def _source_level(mix: np.ndarray, reference: np.ndarray) -> float:
+    """The gain that brings the source up to the stage's level, never down.
+
+    The bounds on the transfer and on the backing gain are there for gains fitted
+    on weak evidence, not for how loud either file was mastered.  A stage that
+    carries the playback hotter than the source - a quiet master, a phone's
+    automatic gain, a PA run hot - otherwise sits above them everywhere: measured
+    12 dB hotter, the phase-correlated scene lost 10 dB of depth and its backing
+    came out 4.7 dB short.  Removing the bound instead cost the reference-only
+    word 2.5 dB, so it stays and is made relative.  Read over the whole call
+    rather than per block, because a block where the source falls silent would
+    loosen the bounds exactly where nothing backs them.
+    """
+    common = min(mix.shape[1], reference.shape[1])
+    channels = min(reference.shape[0], 2)
+    if common == 0 or channels == 0:
+        return 1.0
+    mix_energy = 0.0
+    reference_energy = 0.0
+    for start in range(0, common, BLOCK_FRAMES):
+        end = min(start + BLOCK_FRAMES, common)
+        mix_energy += float(np.sum(np.square(mix[:, start:end], dtype=np.float64)))
+        reference_energy += float(
+            np.sum(np.square(reference[:channels, start:end], dtype=np.float64))
+        )
+    mix_power = mix_energy / mix.shape[0]
+    reference_power = reference_energy / channels
+    if reference_power <= 0.0 or mix_power <= reference_power:
+        return 1.0
+    return math.sqrt(mix_power / reference_power)
+
+
 def _reference_cancel(
     mix: np.ndarray,
     reference: np.ndarray,
@@ -131,6 +163,7 @@ def _reference_cancel(
     sigma: float,
     token: CancellationToken,
     backing: bool = False,
+    source_level: float = 1.0,
 ) -> tuple[np.ndarray, np.ndarray | None]:
     """Cancel reference-correlated content coherently, then suppress what is left.
 
@@ -149,7 +182,9 @@ def _reference_cancel(
 
     With `backing=True` the same pass renders the second export track as well:
     the source as the playback carried it, from the estimate this canceller
-    built, rather than from the stage minus the vocal.
+    built, rather than from the stage minus the vocal.  `source_level` is the
+    gain `_source_level` found; the backing renders from the source at that
+    level, so it comes out at the stage's.
     """
     length = min(mix.shape[1], reference.shape[1])
     mix = np.asarray(mix[:, :length], dtype=np.float32)
@@ -161,6 +196,9 @@ def _reference_cancel(
     reference_spectra = [stft(channel, n_fft=n_fft, hop=hop) for channel in reference_audio[:2]]
     if not reference_spectra:
         return mix.copy(), None
+    if source_level != 1.0:
+        for reference_spectrum in reference_spectra:
+            reference_spectrum *= source_level
     if len(reference_spectra) == 1:
         reference_spectra.append(reference_spectra[0])
     sigma_frames = max(float(sigma) * sample_rate / hop / 6.0, 1.0)
@@ -463,6 +501,7 @@ def process_audio(
             # Nothing was cancelled, so there is no estimate to render.
             backing[:] = 0.0
         return result
+    source_level = _source_level(mix, reference_audio)
     # Long recordings scale across independent spectral workers.  The layout
     # divides the working-set budget; large contexts automatically use fewer.
     block, workers = _processing_layout(sample_rate, sigma, length)
@@ -496,6 +535,7 @@ def process_audio(
             sigma,
             cancel,
             backing is not None,
+            source_level,
         )
         return start, end, processed, processed_backing
 

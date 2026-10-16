@@ -112,7 +112,7 @@ Where:
 - $R_{jk} = \mathbb{E}[x_k \overline{x_j}]$ represents the regularized reference covariance matrix;
 - $c_j = \mathbb{E}[y \overline{x_j}]$ represents the cross-power spectrum.
 
-The system builds lower triangular systems solved via bin-vectorized $LDL^H$ decomposition, bounding total channel gain at $2.0$ ($+6\text{ dB}$).
+The system builds lower triangular systems solved via bin-vectorized $LDL^H$ decomposition, bounding total channel gain at $2.0$ ($+6\text{ dB}$). The bound is aimed at gains fitted on weak evidence, not at how loud either file was mastered: when the recording's overall level is above the source's (a quiet master, a phone's automatic gain, a PA run hot), the source is first brought up to the recording's level by the ratio of their RMS over the whole call, never down, and the backing track's gain bound follows the same level.
 
 ### Multiple Coherence and Shrinkage Estimation
 

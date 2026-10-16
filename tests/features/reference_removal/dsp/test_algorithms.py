@@ -268,6 +268,29 @@ def test_process_audio_renders_the_backing_from_the_source():
     assert abs(float(np.dot(backing[0, body], live[body]) / np.dot(live[body], live[body]))) < 0.01
 
 
+def test_a_playback_hotter_than_the_source_cancels_like_a_level_matched_one():
+    """A quiet master against a hot PA is a level difference, not weak evidence."""
+    sample_rate, reference, accompaniment, live, mixture = _backing_scene()
+    body = slice(sample_rate // 2, -sample_rate // 2)
+    stage_live = np.stack([live, 0.95 * live])
+
+    def run(source):
+        output = np.empty_like(mixture)
+        backing = np.empty_like(mixture)
+        process_audio(mixture, source, sample_rate, 1.0, 8, None, output, backing)
+        residual = output[:, body] - stage_live[:, body]
+        depth = 10 * np.log10(np.mean(accompaniment[:, body] ** 2) / np.mean(residual**2))
+        level = 10 * np.log10(np.mean(backing[:, body] ** 2) / np.mean(accompaniment[:, body] ** 2))
+        return depth, level
+
+    matched_depth, _matched_level = run(reference)
+    # The stage carries the source 12 dB hotter than the file holds it.
+    hot_depth, hot_level = run(reference / 4.0)
+
+    assert hot_depth > matched_depth - 1.0
+    assert abs(hot_level) < 1.0
+
+
 def test_process_audio_bypass_leaves_the_backing_silent():
     """Nothing was cancelled, so there is no estimate to render."""
     sample_rate, reference, _accompaniment, _live, mixture = _backing_scene()
@@ -355,11 +378,14 @@ def test_reference_mask_ignores_reference_polarity():
     assert corr(normal.ravel(), vocal.ravel()) > 0.95
 
 
-def test_reference_mask_leaves_an_unrelated_reference_nearly_bypassed():
+# A source far quieter than the stage is brought up to its level before the
+# fit, which must not turn an unrelated one into something to subtract.
+@pytest.mark.parametrize("source_level", [1.0, 0.01])
+def test_reference_mask_leaves_an_unrelated_reference_nearly_bypassed(source_level):
     sample_rate = 8_000
     rng = np.random.default_rng(131)
     mixture = rng.normal(0.0, 0.1, (2, sample_rate * 2))
-    unrelated = rng.normal(0.0, 0.1, mixture.shape)
+    unrelated = source_level * rng.normal(0.0, 0.1, mixture.shape)
 
     output = process_audio(mixture, unrelated, sample_rate, 1.0, 3)
 
