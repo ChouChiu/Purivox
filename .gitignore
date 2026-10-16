@@ -8,12 +8,6 @@ __pycache__/
 htmlcov/
 build/
 dist/
-*.build/
-*.dist/
-*.onefile-build/
-deployment/deployment/
-pysidedeploy-windows.spec
-pysidedeploy-macos.spec
 *.part
 *.tmp.wav
 web/public/__probe__

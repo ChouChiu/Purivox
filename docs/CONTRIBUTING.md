@@ -90,14 +90,11 @@ done
 
 4. **完整性约束**：测试套件会校验五种语言的键集合完全一致，且不存在过期 `.qm` 文件。
 
-## 构建清单配置（三处同步）
+## 构建清单配置
 
-新增源码文件或目录时，须检查以下三处打包配置，防止发布包遗漏组件：
-1. `pyproject.toml` 中的 `[tool.hatch.build.targets.wheel] packages`；
-2. `pyproject.toml` 中的 `[tool.pyside6-project].files`；
-3. `pysidedeploy.spec` 中的 `include-package` 清单。
+新增 `src/` 下的顶层包时，须把它加入 `pyproject.toml` 的 `[tool.hatch.build.targets.wheel] packages`，否则 wheel 会静默漏掉它；`tests/test_packaging.py` 会核对这份清单与源码目录。
 
-`tests/test_packaging.py` 会自动核对源码目录与配置清单的对应关系。
+独立可执行文件由 PyInstaller 按 `deployment/purivox.spec` 构建，它会自动收集 `src/` 下的全部顶层包，无需另行登记。只经 `importlib` 动态导入的模块仍须写进 spec 的 `hiddenimports`。这类遗漏要到冻结程序首次运行到那里才会暴露，因此 CI 会用 `deployment/smoke.sh` 把每个平台的构建产物实际运行一遍（启动 GUI，再跑一次 CLI 对消）。
 
 ## 本地验证流程
 

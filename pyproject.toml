@@ -26,7 +26,7 @@ dev = [
   "pytest-qt>=4.4,<5",
   "ruff>=0.12,<1",
 ]
-deploy = ["nuitka==4.1.3", "ordered-set", "zstandard", "patchelf; sys_platform == 'linux'"]
+deploy = ["pyinstaller==6.22.3"]
 
 [project.scripts]
 purivox = "entrypoints.cli:main"
@@ -60,7 +60,6 @@ include = [
   "README_EN.md",
   "LICENSE",
   "pyproject.toml",
-  "pysidedeploy.spec",
 ]
 
 [tool.ruff]
@@ -76,71 +75,3 @@ ignore = ["E501"]
 addopts = "-ra --import-mode=importlib"
 testpaths = ["tests"]
 markers = ["slow: resource-intensive acceptance tests"]
-
-[tool.pyside6-project]
-files = [
-  "deployment/main.py",
-  "src/app/__init__.py",
-  "src/app/crash_handler.py",
-  "src/app/job_presenter.py",
-  "src/app/main_window.py",
-  "src/app/version.py",
-  "src/entrypoints/__init__.py",
-  "src/entrypoints/cli.py",
-  "src/entrypoints/gui.py",
-  "src/features/__init__.py",
-  "src/features/home/__init__.py",
-  "src/features/home/page.py",
-  "src/features/reference_removal/__init__.py",
-  "src/features/reference_removal/dsp/__init__.py",
-  "src/features/reference_removal/dsp/algorithms.py",
-  "src/features/reference_removal/dsp/alignment.py",
-  "src/features/reference_removal/dsp/transfer.py",
-  "src/features/reference_removal/matching.py",
-  "src/features/reference_removal/models.py",
-  "src/features/reference_removal/outputs.py",
-  "src/features/reference_removal/page.py",
-  "src/features/reference_removal/preview.py",
-  "src/features/reference_removal/processing.py",
-  "src/features/reference_removal/rendering.py",
-  "src/features/reference_removal/timeline_model.py",
-  "src/features/settings/__init__.py",
-  "src/features/settings/dialog.py",
-  "src/features/settings/page.py",
-  "src/features/settings/updates.py",
-  "src/resources/__init__.py",
-  "src/resources/i18n/zh_cn.ts",
-  "src/resources/i18n/zh_tw.ts",
-  "src/resources/i18n/en_us.ts",
-  "src/resources/i18n/ja_jp.ts",
-  "src/resources/i18n/ko_kr.ts",
-  "src/shared/__init__.py",
-  "src/shared/audio/__init__.py",
-  "src/shared/audio/analysis.py",
-  "src/shared/audio/io.py",
-  "src/shared/branding.py",
-  "src/shared/config.py",
-  "src/shared/download/__init__.py",
-  "src/shared/download/cache.py",
-  "src/shared/download/media.py",
-  "src/shared/download/runner.py",
-  "src/shared/dsp/__init__.py",
-  "src/shared/dsp/rate.py",
-  "src/shared/dsp/spectral.py",
-  "src/shared/dsp/stretch.py",
-  "src/shared/i18n.py",
-  "src/shared/jobs.py",
-  "src/shared/logging.py",
-  "src/shared/processing.py",
-  "src/shared/progress.py",
-  "src/shared/tasks.py",
-  "src/shared/ui/__init__.py",
-  "src/shared/ui/cards.py",
-  "src/shared/ui/download_dialog.py",
-  "src/shared/ui/responsive.py",
-  "src/shared/ui/widgets.py",
-  "src/web/__init__.py",
-  "src/web/bridge.py",
-  "src/web/limits.py",
-  "src/web/timeline.py",
-]

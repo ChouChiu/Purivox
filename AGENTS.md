@@ -99,7 +99,7 @@ CLI — both need moves down into `shared`: `BLOCK_FRAMES`, `AUDIO_EXTENSIONS`,
 | `src/resources/` | `i18n/{zh_cn,zh_tw,en_us,ja_jp,ko_kr}.{ts,qm}`, `purivox.svg`, `resource_path` |
 | `web/scripts/` | `build-python-archive.mjs` (packs `src/` for Pyodide), `build-i18n.mjs`, `build-assets.mjs`, `check-architecture.mjs`. Never a second implementation of the DSP |
 | `tests/`, `docs/` | Tests mirror `src/` path-for-path, `benchmarks/` behind `--runslow`; Chinese docs with one translation per file in `docs/en/` |
-| `deployment/`, `tools/` | Nuitka entry shim + `.deb`/`.rpm` packaging; `eval_cancellation.py` (DSP A/B), `eval_isolation.py` (pipeline engine A/B), `bench_pipeline.py` (per-phase wall time and peak RSS) |
+| `deployment/`, `tools/` | PyInstaller spec, entry script, runtime hook and `smoke.sh` + `.deb`/`.rpm` packaging; `eval_cancellation.py` (DSP A/B), `eval_isolation.py` (pipeline engine A/B), `bench_pipeline.py` (per-phase wall time and peak RSS) |
 
 ## Pipelines
 
@@ -242,18 +242,21 @@ and cancels the token on SIGINT.
 
 ### Packaging
 
-A new source directory must be registered in three places or it silently ships nowhere:
-`[tool.hatch.build.targets.wheel] packages` and `[tool.pyside6-project] files` (both
-`pyproject.toml` — the latter is also where `pyside6-deploy` finds the Nuitka entry,
-`deployment/main.py`), and `include-package` in `pysidedeploy.spec`. `tests/test_packaging.py`
-checks the roster against the tree.
+A new top-level source directory must be listed in `[tool.hatch.build.targets.wheel] packages`
+(`pyproject.toml`), or the wheel silently leaves it out; `tests/test_packaging.py` checks the list
+against the tree. The standalone builds need no list: `deployment/purivox.spec` (PyInstaller)
+collects every top-level package under `src/` itself, because the GUI imports its pages, the
+download dialog and yt-dlp inside slots, where import analysis cannot follow. A module reached
+only through `importlib` still has to be named in the spec's `hiddenimports`, as scipy's array-API
+shim is. A missed one fails when the frozen program first reaches it, not when it is built, which
+is why CI runs every build through `deployment/smoke.sh` (the GUI, then one CLI job).
 
-CI's compiler cache must name Nuitka's own cache root — `~/.cache/Nuitka`,
-`~/Library/Caches/Nuitka`, `%LOCALAPPDATA%\Nuitka\Nuitka\Cache`. Nuitka points `CCACHE_DIR`
-inside it, so the system-wide `~/.cache/ccache` a Linux job would reach for stays empty and
-every build is a cold one. The cache key follows `uv.lock` and `pysidedeploy.spec` only: adding
-the source hash writes a fresh ~400 MB entry on every push, and the 10 GB quota then evicts the
-entry the next run needed.
+On Linux the build leaves the desktop's own stack to the desktop — X11, xcb and Wayland,
+fontconfig, GLib, DBus, GTK, PulseAudio — and ships the Python environment, Qt, and the OpenSSL
+that Qt's TLS backend loads by name. The bootloader points `LD_LIBRARY_PATH` into the bundle;
+`deployment/runtime_library_path.py` restores it for child processes, so the browser or file
+manager the app opens does not load this Qt in place of its own. `QT_DEBUG_PLUGINS=1` makes even
+a source run crash on exit, so it says nothing about a build.
 
 ## Commands
 
@@ -294,9 +297,10 @@ PURIVOX_BASE=/repo/ bun run build          # only for a Pages *project* site sub
 # translations: edit the .ts, recompile, commit both
 uv run --locked pyside6-lrelease src/resources/i18n/<locale>.ts -qm src/resources/i18n/<locale>.qm
 
-# onefile executable (dist/Purivox.bin; macOS builds dist/Purivox.app instead)
+# standalone build (dist/Purivox.bin, dist/Purivox.exe; macOS builds dist/Purivox.app instead)
 uv sync --locked --group deploy
-uv run --locked --group deploy pyside6-deploy -c pysidedeploy.spec
+uv run --locked --group deploy pyinstaller deployment/purivox.spec --noconfirm
+deployment/smoke.sh dist/Purivox.bin               # run it through the GUI and one CLI job
 ```
 
 Language keys: `zh_cn`, `zh_tw`, `en_us`, `ja_jp`, `ko_kr`.
@@ -316,7 +320,7 @@ Language keys: `zh_cn`, `zh_tw`, `en_us`, `ja_jp`, `ko_kr`.
   checking that a patched function was called is not a test; the raw-key check in
   `test_main_window.py` covers "every label is translated" for all five locales at once.
 - Three repository-wide gates: `test_architecture.py` (import boundaries), `test_packaging.py`
-  (the wheel, `pysidedeploy.spec` and the PySide roster against the tree, compiled catalogues),
+  (the wheel's package list against the tree, compiled catalogues),
   `test_documentation.py` (README index, doc translation pairing, internal links).
 - No test reaches a real host — the update tests repoint `updates.RELEASES_API` at a localhost
   server.
@@ -336,7 +340,7 @@ Language keys: `zh_cn`, `zh_tw`, `en_us`, `ja_jp`, `ko_kr`.
   delta.
 - A UI change was looked at in `PORTRAIT` and `ULTRAWIDE`, not only at the default window size.
 - A new or reworded string exists in all five `.ts` files, and both `.qm` files were recompiled.
-- A new source directory is registered in the three packaging lists.
+- A new top-level source directory is in the wheel's package list.
 
 ## Tooling
 
@@ -346,9 +350,9 @@ Python ≥3.11, pinned to 3.14 for development by `.python-version`; uv with `uv
 pillow and colorthief only feed an AcrylicLabel this app never builds; Qt is mandatory even for the
 CLI, which falls back to `QAudioDecoder` for decoding. numpy ≥2, scipy, soundfile, soxr, yt-dlp,
 all range-pinned; yt-dlp needs updating whenever a site changes under it. ruff only
-(`line-length = 100`, E/F/I/UP/B/SIM/RUF) plus `ruff format` — no black, no isort. Nuitka 4.1.3 via
-`pyside6-deploy`, onefile (`dist/Purivox.bin` / `Purivox.exe`) and macOS app bundles for arm64 and
-x86_64 (`dist/Purivox.app`, from a CI-derived spec).
+(`line-length = 100`, E/F/I/UP/B/SIM/RUF) plus `ruff format` — no black, no isort. PyInstaller
+6.22.3 from `deployment/purivox.spec`: onefile (`dist/Purivox.bin` / `Purivox.exe`) and macOS app
+bundles for arm64 and x86_64 (`dist/Purivox.app`).
 
 ## Commits & Releases
 
@@ -367,7 +371,7 @@ Rule 15 first: none of this happens until you are asked. When you are:
 - `CHANGELOG.md` gets one bilingual section per released version. The release workflow publishes the
   section whose heading matches the tag, and the in-app update dialog shows that same text.
 - A release tag is `v<version>` and must match `src/app/version.py`; CI checks that first and fails
-  the build in its opening minutes rather than after an hour of compiling.
+  the build in its opening minutes rather than after every build has run.
 - The AUR package (`deployment/aur/`) is published after a release by running
   `deployment/aur/publish.sh`, never by CI — it re-points `purivox-bin` at the release `.deb`,
   builds it once as a check, and pushes `PKGBUILD` and `.SRCINFO`.

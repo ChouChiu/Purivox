@@ -1,6 +1,6 @@
 # AUR package
 
-`purivox-bin` installs the Linux `.deb` this repository publishes with every tag: the Nuitka
+`purivox-bin` installs the Linux `.deb` this repository publishes with every tag: the PyInstaller
 onefile on `PATH` as `purivox`, plus the desktop entry, the icon and the licence. Nothing is
 compiled on the user's machine, and the executable is never stripped — its payload is appended to
 it, and stripping would remove the program.

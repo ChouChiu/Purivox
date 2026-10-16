@@ -1,15 +1,13 @@
-"""A source file ships only if every packaging roster names it.
+"""A source file ships only if the packaging finds it.
 
-The wheel lists top-level packages, `pyside6-deploy` reads the PySide project
-roster file by file, and Nuitka includes the packages its spec names.  None of
-them complains about a missing entry; the build simply leaves the code out.
+The wheel lists its top-level packages by hand and does not complain about a
+missing one; the build simply leaves the code out.  The PyInstaller spec finds
+every top-level package under src/ itself, so it has no roster to check.
 """
 
 from __future__ import annotations
 
-import configparser
 import json
-import re
 import tomllib
 from pathlib import Path
 
@@ -30,29 +28,6 @@ def _top_level_packages() -> set[str]:
 def test_the_wheel_ships_every_top_level_package():
     wheel = _project_config()["tool"]["hatch"]["build"]["targets"]["wheel"]["packages"]
     assert {Path(entry).name for entry in wheel} == _top_level_packages()
-
-
-def test_the_standalone_build_includes_every_top_level_package():
-    spec = configparser.ConfigParser()
-    spec.read(ROOT / "pysidedeploy.spec", encoding="utf-8")
-    included = set(re.findall(r"--include-package=(\w+)\b", spec["nuitka"]["extra_args"]))
-    missing = _top_level_packages() - included
-    assert not missing, f"pysidedeploy.spec does not include: {sorted(missing)}"
-
-
-def test_the_pyside_project_lists_every_source_and_the_entry_shim():
-    configured = {Path(path) for path in _project_config()["tool"]["pyside6-project"]["files"]}
-    expected = {
-        *(path.relative_to(ROOT) for path in SOURCE.rglob("*.py")),
-        *(path.relative_to(ROOT) for path in (SOURCE / "resources/i18n").glob("*.ts")),
-        # pyside6-deploy resolves the Nuitka entry from this roster, not from src/.
-        Path("deployment/main.py"),
-    }
-    assert not expected - configured, (
-        f"missing from pyside6-project: {sorted(expected - configured)}"
-    )
-    stale = {path for path in configured if not (ROOT / path).is_file()}
-    assert not stale, f"stale pyside6-project entries: {sorted(stale)}"
 
 
 def test_every_translation_source_is_compiled():

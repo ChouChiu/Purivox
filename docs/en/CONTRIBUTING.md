@@ -90,14 +90,11 @@ done
 
 4. **Catalog Parity**: Test suites verify that all five language catalogs maintain identical key sets and current `.qm` binaries.
 
-## Packaging Declarations (Three-Point Synchronization)
+## Packaging Declarations
 
-When introducing new source modules or directories, update all three packaging manifests:
-1. `pyproject.toml` wheel packages list (`[tool.hatch.build.targets.wheel]`);
-2. `pyproject.toml` pyside6 project files (`[tool.pyside6-project].files`);
-3. `pysidedeploy.spec` include package entries (`include-package`).
+A new top-level package under `src/` has to be added to `[tool.hatch.build.targets.wheel] packages` in `pyproject.toml`, or the wheel silently leaves it out; `tests/test_packaging.py` checks that list against the source tree.
 
-`tests/test_packaging.py` validates repository paths against these manifests.
+The standalone executables are built by PyInstaller from `deployment/purivox.spec`, which collects every top-level package under `src/` by itself, so they need no registration. A module reached only through `importlib` still has to be named in the spec's `hiddenimports`. Such a miss only shows when the frozen program first reaches it, which is why CI runs every platform's build through `deployment/smoke.sh` (the GUI, then one CLI cancellation).
 
 ## Local Verification Workflow
 

@@ -35,8 +35,8 @@ jobs:
           persist-credentials: false
 
       - name: Check the tag matches the packaged version
-        # A release build fails here, in the first minutes, rather than after an
-        # hour of compiling: the tag is what the update check compares against,
+        # A release build fails here, in the first minutes, rather than after
+        # every build has run: the tag is what the update check compares against,
         # so a tag that does not name the version it ships must never publish.
         if: ${{ github.ref_type == 'tag' }}
         run: |
@@ -240,7 +240,7 @@ jobs:
     name: Build Linux onefile
     needs: quality
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: 30
 
     steps:
       - name: Checkout code
@@ -269,7 +269,7 @@ jobs:
         with:
           path: ${{ runner.temp }}/apt-archives
           key: >-
-            apt-${{ runner.os }}-${{ runner.arch }}-ubuntu-24.04-libegl1-libpulse0-ccache-rpm-v1
+            apt-${{ runner.os }}-${{ runner.arch }}-ubuntu-24.04-libegl1-libpulse0-rpm-v1
           restore-keys: |
             apt-${{ runner.os }}-${{ runner.arch }}-ubuntu-24.04-libegl1-libpulse0-
 
@@ -282,34 +282,9 @@ jobs:
             sudo apt-get update
             sudo apt-get install --yes --no-install-recommends \
               -o Dir::Cache::archives="$apt_cache_dir" \
-              libegl1 libpulse0 ccache rpm
+              libegl1 libpulse0 rpm
             sudo chown -R "$(id -u):$(id -g)" "$apt_cache_dir"
           } 2>&1 | tee logs/system-deps.log
-
-      - name: Restore compiler cache
-        id: compiler-cache
-        uses: actions/cache@v6
-        with:
-          # Nuitka does not compile into the system-wide ~/.cache/ccache: its
-          # SconsCaching points CCACHE_DIR at getCacheDir("ccache"), under the
-          # Nuitka cache root.  Caching that root carries the module cache, the
-          # adapted headers and the onefile compression cache along with it,
-          # which is what the macOS and Windows jobs have been doing all along.
-          path: ~/.cache/Nuitka
-          key: >-
-            nuitka-v2-${{ runner.os }}-py3.14-${{ hashFiles('uv.lock', 'pysidedeploy.spec') }}
-          restore-keys: |
-            nuitka-v2-${{ runner.os }}-py3.14-
-
-      - name: Configure compiler cache
-        run: |
-          # The limit and the statistics have to name the directory Nuitka
-          # actually fills, or they describe an empty cache nobody writes to.
-          # On the first run of a new cache key there is nothing to name yet.
-          export CCACHE_DIR="$HOME/.cache/Nuitka/ccache"
-          mkdir -p "$CCACHE_DIR"
-          ccache --max-size=2G 2>&1 | tee logs/cache-config.log
-          ccache --zero-stats 2>&1 | tee -a logs/cache-config.log
 
       - name: Sync dependencies
         run: uv sync --locked --no-dev --group deploy 2>&1 | tee logs/sync.log
@@ -322,22 +297,12 @@ jobs:
         id: onefile-build
         run: >-
           uv run --locked --no-dev --group deploy
-          pyside6-deploy -c pysidedeploy.spec --force
+          pyinstaller deployment/purivox.spec --noconfirm
           2>&1 | tee logs/onefile-build.log
 
-      - name: Verify onefile was produced
-        run: |
-          if [[ ! -f dist/Purivox.bin ]]; then
-            echo "::error::dist/Purivox.bin was not produced by pyside6-deploy"
-            tail -n 40 logs/onefile-build.log || true
-            exit 1
-          fi
-
-      - name: Show cache stats
-        if: ${{ !cancelled() }}
-        run: >-
-          CCACHE_DIR="$HOME/.cache/Nuitka/ccache" ccache --show-stats
-          2>&1 | tee logs/cache-stats.log
+      - name: Smoke-test onefile
+        id: onefile-smoke
+        run: deployment/smoke.sh dist/Purivox.bin 2>&1 | tee logs/onefile-smoke.log
 
       - name: Archive onefile
         run: |
@@ -415,10 +380,10 @@ jobs:
           | Job | `${{ job.status }}` |
           | Distributions | `${{ steps.distributions.outcome }}` |
           | onefile build | `${{ steps.onefile-build.outcome }}` |
+          | onefile smoke test | `${{ steps.onefile-smoke.outcome }}` |
           | deb + rpm | `${{ steps.linux-packages.outcome }}` |
           | uv cache | `${{ steps.setup-uv.outputs.cache-hit }}` |
           | System cache | `${{ steps.system-cache.outputs.cache-hit }}` |
-          | Compiler cache | `${{ steps.compiler-cache.outputs.cache-hit }}` |
 
           ### Artifacts
 
@@ -431,7 +396,7 @@ jobs:
     name: Build Windows onefile
     needs: quality
     runs-on: windows-2025
-    timeout-minutes: 90
+    timeout-minutes: 30
 
     steps:
       - name: Checkout code
@@ -444,9 +409,6 @@ jobs:
         uses: astral-sh/setup-uv@v10.0.1
         with:
           version: "0.12.2"
-          # yt-dlp ships a py3-none-any wheel, so Python 3.14 is not the problem;
-          # the failure is Nuitka/MSVC heap pressure and is handled in the
-          # deploy-spec step below.
           python-version: "3.14"
           enable-cache: true
           cache-python: true
@@ -455,61 +417,21 @@ jobs:
             uv.lock
 
       - name: Prepare directories
-        run: |
-          # dist/ has to exist up front. In onefile mode pyside6-deploy places
-          # the result with shutil.copy, which does not create the parent, and
-          # this job has no `uv build` step to create it as a side effect.
-          mkdir -p logs dist
-
-      - name: Restore compiler cache
-        id: compiler-cache
-        uses: actions/cache@v6
-        with:
-          path: ~/AppData/Local/Nuitka/Nuitka/Cache
-          key: >-
-            nuitka-v2-${{ runner.os }}-py3.14-${{ hashFiles('uv.lock', 'pysidedeploy.spec') }}
-          restore-keys: |
-            nuitka-v2-${{ runner.os }}-py3.14-
+        run: mkdir -p logs
 
       - name: Sync dependencies
         run: uv sync --locked --no-dev --group deploy 2>&1 | tee logs/sync.log
-
-      - name: Prepare deploy spec
-        run: |
-          # pyside6-deploy carries a single icon key and hands it to Nuitka as
-          # --windows-icon-from-ico, which will not accept the SVG the Linux
-          # build uses. The yt-dlp and LTO flags live in the shared spec.
-          sed -e 's|^icon = .*|icon = deployment/purivox.ico|' \
-              pysidedeploy.spec > pysidedeploy-windows.spec
-          tee logs/deploy-spec.log < pysidedeploy-windows.spec
 
       - name: Build onefile
         id: onefile-build
         run: >-
           uv run --locked --no-dev --group deploy
-          pyside6-deploy -c pysidedeploy-windows.spec --force
+          pyinstaller deployment/purivox.spec --noconfirm
           2>&1 | tee logs/onefile-build.log
 
-      - name: Verify onefile was produced
-        run: |
-          # pyside6-deploy exits 0 even when Nuitka fails, because it catches
-          # the exception and only prints the traceback. Fail here so the real
-          # error is still visible in logs/onefile-build.log.
-          if [[ ! -f dist/Purivox.exe ]]; then
-            echo "::error::dist/Purivox.exe was not produced by pyside6-deploy"
-            tail -n 40 logs/onefile-build.log || true
-            exit 1
-          fi
-
-      - name: Show cache stats
-        if: ${{ !cancelled() }}
-        run: |
-          # MSVC is cached through Nuitka's inline clcache, which writes its
-          # statistics into the build directory pyside6-deploy then removes.
-          # What survives is the cache itself, so report its size: a clcache
-          # that stays this small from run to run is one that is not being hit.
-          du -sh ~/AppData/Local/Nuitka/Nuitka/Cache/* 2>/dev/null \
-            | tee logs/cache-stats.log || true
+      - name: Smoke-test onefile
+        id: onefile-smoke
+        run: deployment/smoke.sh dist/Purivox.exe 2>&1 | tee logs/onefile-smoke.log
 
       - name: Generate checksums
         run: |
@@ -550,8 +472,8 @@ jobs:
           |---|---|
           | Job | `${{ job.status }}` |
           | onefile build | `${{ steps.onefile-build.outcome }}` |
+          | onefile smoke test | `${{ steps.onefile-smoke.outcome }}` |
           | uv cache | `${{ steps.setup-uv.outputs.cache-hit }}` |
-          | Compiler cache | `${{ steps.compiler-cache.outputs.cache-hit }}` |
 
           ### Artifacts
 
@@ -563,7 +485,7 @@ jobs:
     name: Build macOS ${{ matrix.arch }} bundle
     needs: quality
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 90
+    timeout-minutes: 30
     strategy:
       # The two architectures are separate downloads on the release page, so
       # one runner failing must not cancel the other and cost the release the
@@ -574,9 +496,9 @@ jobs:
           - arch: arm64
             runner: macos-15
           - arch: x86_64
-            # Intel macOS is a native build, not a cross-compile: the Nuitka
-            # bundle pulls in numpy, scipy, soxr and soundfile, which ship one
-            # wheel per architecture rather than a universal2 one.
+            # Intel macOS is a native build, not a cross-compile: the bundle
+            # pulls in numpy, scipy, soxr and soundfile, which ship one wheel
+            # per architecture rather than a universal2 one.
             runner: macos-15-intel
 
     steps:
@@ -598,77 +520,31 @@ jobs:
             uv.lock
 
       - name: Prepare directories
-        run: mkdir -p logs dist
-
-      - name: Restore compiler cache
-        id: compiler-cache
-        uses: actions/cache@v6
-        with:
-          # macOS runners carry no ccache, so Nuitka downloads its own and
-          # keeps both the binary and the compilation cache in here.
-          path: ~/Library/Caches/Nuitka
-          key: >-
-            nuitka-v2-${{ runner.os }}-${{ matrix.arch }}-py3.14-${{ hashFiles('uv.lock',
-            'pysidedeploy.spec') }}
-          restore-keys: |
-            nuitka-v2-${{ runner.os }}-${{ matrix.arch }}-py3.14-
+        run: mkdir -p logs
 
       - name: Sync dependencies
         run: uv sync --locked --no-dev --group deploy 2>&1 | tee logs/sync.log
 
-      - name: Prepare deploy spec
-        run: |
-          # Two things have to be rewritten for macOS, so the job derives its
-          # own spec the way the Windows job does (the file is not in the tree):
-          #
-          # - the icon reaches Nuitka as --macos-app-icon, and anything that is
-          #   not already .icns goes through imageio, which is not installed and
-          #   reads no SVG either.
-          # - Nuitka names the bundle and fills its plist from the entry point,
-          #   which is deployment/main.py, so an untouched build produces
-          #   main.app announcing itself as "main" in the dock and the menu bar.
-          #   The identifier follows the project homepage, purivox.wwchun.top.
-          version="$(sed -n 's/^__version__ = "\(.*\)"$/\1/p' src/app/version.py)"
-          bundle_args="--output-folder-name=Purivox --output-filename=Purivox"
-          bundle_args="${bundle_args} --macos-app-name=Purivox"
-          bundle_args="${bundle_args} --macos-signed-app-name=top.wwchun.purivox"
-          bundle_args="${bundle_args} --macos-app-version=${version}"
-          sed -e 's|^icon = .*|icon = deployment/purivox.icns|' \
-              -e "s|^extra_args = .*|& ${bundle_args}|" \
-              pysidedeploy.spec > pysidedeploy-macos.spec
-          tee logs/deploy-spec.log < pysidedeploy-macos.spec
-
       - name: Build app bundle
         id: bundle-build
-        # macOS ignores `mode = onefile`: pyside6-deploy always passes
-        # --standalone --macos-create-app-bundle there, and the result is a
-        # bundle Nuitka signs ad-hoc at the end of the build.  Its own copy of
-        # that bundle into dist/ resolves symlinks, which both duplicates every
-        # Qt framework and invalidates the signature, so the build is pointed
-        # away from it: --output-folder-name leaves nothing under the name
-        # pyside6-deploy looks for (it logs that it found no executable and
-        # copies nothing), and --keep-deployment-files spares the bundle from
-        # the cleanup that follows.  The next step ships that bundle.
         run: >-
           uv run --locked --no-dev --group deploy
-          pyside6-deploy -c pysidedeploy-macos.spec --force --keep-deployment-files
+          pyinstaller deployment/purivox.spec --noconfirm
           2>&1 | tee logs/bundle-build.log
 
-      - name: Verify app bundle was produced
+      - name: Verify the bundle's signature
         run: |
-          if [[ ! -d deployment/deployment/Purivox.app ]]; then
-            echo "::error::deployment/deployment/Purivox.app was not produced by pyside6-deploy"
-            tail -n 40 logs/bundle-build.log || true
-            exit 1
-          fi
-
-      - name: Collect the app bundle
-        run: |
-          mv deployment/deployment/Purivox.app dist/Purivox.app
-          # The seal covers the symlinks Nuitka made for Contents/Frameworks,
-          # so this is what catches a bundle that was copied rather than moved.
+          # PyInstaller signs the bundle ad hoc.  A seal that does not verify
+          # is what makes macOS refuse to open it, so it fails here rather than
+          # on a user's machine.
           codesign --verify --strict --verbose=2 dist/Purivox.app 2>&1 \
             | tee logs/codesign.log
+
+      - name: Smoke-test app bundle
+        id: bundle-smoke
+        run: >-
+          deployment/smoke.sh dist/Purivox.app/Contents/MacOS/Purivox
+          2>&1 | tee logs/bundle-smoke.log
 
       - name: Archive the bundle
         run: |
@@ -718,8 +594,8 @@ jobs:
           |---|---|
           | Job | `${{ job.status }}` |
           | Bundle build | `${{ steps.bundle-build.outcome }}` |
+          | Bundle smoke test | `${{ steps.bundle-smoke.outcome }}` |
           | uv cache | `${{ steps.setup-uv.outputs.cache-hit }}` |
-          | Compiler cache | `${{ steps.compiler-cache.outputs.cache-hit }}` |
 
           ### Artifacts
 
