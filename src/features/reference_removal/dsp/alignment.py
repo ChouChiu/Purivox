@@ -7,7 +7,7 @@ from functools import lru_cache
 import numpy as np
 import soxr
 from scipy.fft import irfft, rfft
-from scipy.ndimage import median_filter
+from scipy.ndimage import correlate1d, median_filter
 from scipy.signal import correlate, correlation_lags, resample_poly
 
 from shared.audio import BLOCK_FRAMES
@@ -41,6 +41,13 @@ _LANCZOS_RADIUS = 3
 _LANCZOS_PHASES = 8192
 # Below this median band scale a channel carries no usable attacks at all.
 _MINIMUM_FLUX_SCALE = 1e-4
+# A window whose best normalised correlation is below this found nothing.
+_TRACK_MINIMUM_CORRELATION = 0.08
+# Gaussian width of the fit through the track's sub-sample peaks.  A device
+# clock moves the lag by microseconds per second, so a wide fit loses nothing;
+# measured on 0-150 ppm drift at 44.1 kHz, 3 s beat 1.5 s above 4 kHz.
+_TRACK_SMOOTHING_SECONDS = 3.0
+_TRACK_ROBUST_PASSES = 3
 
 
 def _mono(channels: np.ndarray) -> np.ndarray:
@@ -187,14 +194,83 @@ def _sliding_energy(values: np.ndarray, window: int) -> np.ndarray:
     return cumulative[window:] - cumulative[:-window]
 
 
+def _local_linear(
+    values: np.ndarray, weights: np.ndarray, width: float
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Weighted Gaussian local-linear fit on a uniform grid: level, slope, support.
+
+    The moments about every point are correlations with the kernel times a power
+    of the offset, so the fit is five filter passes instead of one regression
+    per point.
+    """
+    radius = max(round(4.0 * width), 1)
+    offsets = np.arange(-radius, radius + 1, dtype=np.float64)
+    kernel = np.exp(-0.5 * (offsets / width) ** 2)
+
+    def moment(signal: np.ndarray, power: int) -> np.ndarray:
+        return correlate1d(signal, kernel * offsets**power, mode="constant")
+
+    weighted = weights * values
+    s0, s1, s2 = (moment(weights, power) for power in range(3))
+    b0, b1 = moment(weighted, 0), moment(weighted, 1)
+    supported = s0 > 1e-3
+    determinant = s0 * s2 - s1 * s1
+    # One-sided or single-point support has no slope to fit: hold the level.
+    linear = supported & (determinant > 1e-6 * s0 * s2)
+    safe_determinant = np.where(linear, determinant, 1.0)
+    safe_s0 = np.where(supported, s0, 1.0)
+    level = np.where(linear, (s2 * b0 - s1 * b1) / safe_determinant, b0 / safe_s0)
+    slope = np.where(linear, (s0 * b1 - s1 * b0) / safe_determinant, 0.0)
+    return level, slope, supported
+
+
+def _fit_track(
+    peaks: np.ndarray, confidence: np.ndarray, width: float
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Fit a smooth lag curve through per-window peaks, ignoring the ones that jumped.
+
+    Bisquare passes, as in LOWESS: a window of tonal content can lock onto a
+    periodic peak a whole pitch period away, and the fit must not bend to it.
+    """
+    weights = confidence.copy()
+    trusted = confidence > 0.0
+    for _ in range(_TRACK_ROBUST_PASSES):
+        level, _slope, supported = _local_linear(peaks, weights, width)
+        residual = peaks - level
+        judged = trusted & supported
+        if not judged.any():
+            break
+        scale = max(6.0 * float(np.median(np.abs(residual[judged]))), 1.0)
+        bounded = np.clip(residual / scale, -1.0, 1.0)
+        weights = confidence * (1.0 - bounded * bounded) ** 2
+    return _local_linear(peaks, weights, width)
+
+
 def _local_track(mix: np.ndarray, reference: np.ndarray, rate: int, initial: float):
+    """Track the lag every 0.1 s, then fit a sub-sample curve through the peaks.
+
+    The search runs on the proxy grid and only has to find the peak.  The curve
+    the warp follows comes from those peaks' sub-sample positions instead: a
+    device clock moves the lag by a fraction of a proxy sample per second, which
+    the grid follows in whole-sample steps that the hysteresis below holds back
+    until the next sample is clearly better - measured at 8-14 samples of lag
+    error at 44.1 kHz.  One window's refinement is noise on its own, which is
+    why refining the grid in place measured worse than the grid; the fit
+    averages that noise away.  It also recovers the opening, where the slew
+    limit holds the grid back from a coarse lag that is one feature hop out
+    while the windows already see the right peak.
+    """
     step = max(rate // 10, 1)
     half_window = max(rate // 20, 1)
     search = max(rate // 16, 2)
+    centers = range(half_window, min(mix.size, reference.size), step)
+    peaks = np.zeros(len(centers))
+    confidence = np.zeros(len(centers))
+    tracked: list[int] = []
     positions = [0.0]
     lags = [initial]
     predicted = initial
-    for center in range(half_window, min(mix.size, reference.size), step):
+    for index, center in enumerate(centers):
         begin = max(center - half_window, 0)
         end = min(center + half_window, mix.size)
         segment = mix[begin:end]
@@ -210,25 +286,35 @@ def _local_track(mix: np.ndarray, reference: np.ndarray, rate: int, initial: flo
         ranked = similarities - 0.25 * np.abs(candidate_lags - predicted) / max(search, 1)
         best = int(np.argmax(ranked))
         best_corr = float(similarities[best])
-        # The lag deliberately stays on the proxy grid.  Refining it to
-        # sub-sample resolution was measured to *reduce* cancellation depth: a
-        # constant fractional delay is already absorbed by the per-bin complex
-        # transfer as a phase ramp, so the refinement adds per-window noise to
-        # the lag curve without removing any error the mask cares about.
         lag = float(candidate_lags[best])
+        # Candidate lags fall as the index rises, hence the minus.
+        peaks[index] = lag - _parabolic_offset(similarities, best)
+        if best_corr >= _TRACK_MINIMUM_CORRELATION:
+            confidence[index] = best_corr * best_corr
         predicted_index = int(np.argmin(np.abs(candidate_lags - predicted)))
         predicted_corr = float(similarities[predicted_index])
-        if best_corr < 0.08 or best_corr < predicted_corr + 0.02:
+        if best_corr < _TRACK_MINIMUM_CORRELATION or best_corr < predicted_corr + 0.02:
             lag = predicted
         max_change = max(2.0, 0.02 * (center - positions[-1]))
         lag = float(np.clip(lag, predicted - max_change, predicted + max_change))
         positions.append(float(center))
         lags.append(lag)
+        tracked.append(index)
         predicted = lag
     if len(lags) >= 3:
         lags = median_filter(np.asarray(lags), size=3, mode="nearest").tolist()
     positions.append(float(mix.size - 1))
     lags.append(lags[-1])
+    if len(tracked) >= 4:
+        width = _TRACK_SMOOTHING_SECONDS * rate / step
+        level, slope, supported = _fit_track(peaks, confidence, width)
+        # The two ends lie off the grid and take the fit's local slope out to them.
+        at = np.asarray([0, *tracked, tracked[-1]])
+        offset = np.zeros(at.size)
+        offset[0] = -half_window / step
+        offset[-1] = (positions[-1] - centers[tracked[-1]]) / step
+        fitted = level[at] + slope[at] * offset
+        lags = np.where(supported[at], fitted, lags).tolist()
     return np.asarray(positions), np.asarray(lags)
 
 

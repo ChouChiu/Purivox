@@ -90,7 +90,9 @@ The initial search operates within a narrow window and expands up to $20\text{ s
 
 Oscillator inaccuracies across recording hardware introduce time-accumulated drift. The tracker uses a $16\text{ kHz}$ proxy to estimate local time delays every $0.1\text{ s}$, bounding frame-to-frame delta transitions. Low-coherence frames extrapolate prior trajectory predictions, smoothed with a 3-point median filter to suppress spurious jumps.
 
-The delay trajectory $d(t)$ resamples the reference signal:
+That search stays on the $16\text{ kHz}$ grid and only has to find the correlation peak; the delay trajectory $d(t)$ the warp follows is fitted to the peaks' sub-sample positions instead. Each window records its peak by parabolic interpolation, weighted by the square of its correlation, and a Gaussian local-linear regression $3\text{ s}$ wide runs through them with three bisquare reweighting passes, as in LOWESS, which drop windows of tonal content that locked onto a neighbouring periodic peak. Two device clocks apart by tens of ppm move the delay by a fraction of a proxy sample per second, which the grid can only follow in whole steps, while above $4\text{ kHz}$ one proxy sample of delay error is already most of a cycle; a single window's sub-sample refinement is noisy on its own, and the fit averages that noise away. The coarse estimate is up to one feature hop out, and the slew limit makes the grid catch up over about the first second while the windows already see the right peak, so the fitted trajectory covers the opening as well. Its two ends extend along the local slope, and a stretch with no trusted window keeps the grid track.
+
+The delay trajectory resamples the reference signal:
 
 $$
 x_{\mathrm{aligned}}(t) = x\bigl(t - d(t)\bigr)

@@ -1,5 +1,7 @@
 import numpy as np
 import pytest
+import soxr
+from scipy.signal import butter, sosfilt
 
 from features.reference_removal.dsp import align_audio, alignment, process_audio
 from features.reference_removal.dsp.alignment import _spectral_flux_lag
@@ -128,6 +130,33 @@ def test_reference_cancellation_tracks_tempo_drift(rate):
     output = process_audio(np.stack([mixture] * 2), aligned, sample_rate, 1.0, 8)
     assert corr(output[0], vocal) > 0.98
     assert abs(corr(output[0], reference)) < 0.05
+
+
+def test_alignment_follows_a_device_clock_drift_to_a_fraction_of_a_sample():
+    """Two clocks 60 ppm apart move the lag by a fraction of a sample per second.
+
+    Above 4 kHz a lag error of one proxy sample is already most of a cycle, so
+    the warped source matches the playback up there only if the track holds the
+    lag well inside a sample.
+    """
+    sample_rate = 44_100
+    frames = sample_rate * 8
+    rng = np.random.default_rng(61)
+    envelope = np.repeat(rng.uniform(0.2, 1.0, (2, 33)), sample_rate // 4, axis=1)[:, :frames]
+    reference = (0.1 * rng.normal(0.0, 1.0, (2, frames)) * envelope).astype(np.float32)
+    played = soxr.resample(reference.T, sample_rate, sample_rate * (1.0 + 60e-6), quality="VHQ").T[
+        :, :frames
+    ]
+    live = 0.05 * np.sin(2 * np.pi * 431 * np.arange(frames) / sample_rate)
+    stage = (played + live).astype(np.float32)
+
+    aligned = align_audio(stage, reference, sample_rate, detect_speed=False)
+
+    high = butter(6, 4000.0, "high", fs=sample_rate, output="sos")
+    body = slice(sample_rate, frames - sample_rate)
+    produced = sosfilt(high, aligned[:, body], axis=1)
+    expected = sosfilt(high, played[:, body], axis=1)
+    assert corr(produced.ravel(), expected.ravel()) > 0.9
 
 
 def test_alignment_and_reference_cancellation_handle_segment_jitter():
