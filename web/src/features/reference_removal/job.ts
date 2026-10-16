@@ -1,6 +1,6 @@
 import { sampleRate, seconds, totalBytes } from "../../shared/audio/prepare";
 import type { OutputTracks } from "../../shared/jobs";
-import { SHELL_SIGMA } from "../../shared/jobs";
+import { BACKING_MARKER, SHELL_SIGMA, VOCAL_MARKER } from "../../shared/jobs";
 import type { PurivoxClient } from "../../shared/runtime/PurivoxClient";
 import { WORK_DIR } from "../../shared/runtime/protocol";
 import type {
@@ -58,4 +58,21 @@ export function analyze(
 	payload: unknown,
 ): Promise<AnalysisResult | null> {
 	return start<AnalysisResult>("analyze_stage", payload);
+}
+
+/** The desktop names the output after the recording, so the browser does too. */
+export function defaultOutputName(
+	stage: PreparedFile,
+	tracks: OutputTracks,
+): string {
+	const marker = tracks === "backing" ? BACKING_MARKER : VOCAL_MARKER;
+	const dot = stage.label.lastIndexOf(".");
+	const stem = dot > 0 ? stage.label.slice(0, dot) : stage.label;
+	return `${stem}${marker}.wav`;
+}
+
+/** The desktop's `normalized_wav_path` makes every output a `.wav`. */
+export function normalizedOutputName(text: string): string {
+	const trimmed = text.trim();
+	return trimmed.toLowerCase().endsWith(".wav") ? trimmed : `${trimmed}.wav`;
 }
