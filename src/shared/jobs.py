@@ -4,9 +4,11 @@ from enum import StrEnum
 from pathlib import Path
 
 SIGMA_CHOICES: tuple[int, ...] = (1, 3, 8, 16)
+DEFAULT_SIGMA = 3
 STRENGTH_MINIMUM = 0
 STRENGTH_MAXIMUM = 100
 STRENGTH_RANGE = range(STRENGTH_MINIMUM, STRENGTH_MAXIMUM + 1)
+DEFAULT_STRENGTH = 75
 
 
 def validate_reference_settings(strength: int, sigma: int) -> None:
@@ -59,14 +61,33 @@ def planned_outputs(output: Path, tracks: OutputTracks) -> tuple[Path, ...]:
     return (output, backing_path(output))
 
 
-def validate_job_paths(
+class PathConflict(StrEnum):
+    """Why a job's files cannot be used together; the value is the error message."""
+
+    STAGE_IS_SOURCE = "stage audio must not also be a source"
+    OUTPUT_OVERWRITES_INPUT = "output path must not overwrite an input file"
+
+
+def path_conflict(
     stage: Path, sources: tuple[Path, ...], output: Path, tracks: OutputTracks
-) -> None:
-    """Refuse a job that reads the recording as a source or writes over an input."""
+) -> PathConflict | None:
+    """Name what is wrong with a job that reads the recording as a source or writes over an input.
+
+    The job dataclasses raise on it, and the GUI asks first so it can say which
+    of the two it is rather than show the exception text.
+    """
     resolved_stage = stage.expanduser().resolve()
     resolved_sources = {source.expanduser().resolve() for source in sources}
     if resolved_stage in resolved_sources:
-        raise ValueError("stage audio must not also be a source")
+        return PathConflict.STAGE_IS_SOURCE
     inputs = {resolved_stage, *resolved_sources}
     if any(path.expanduser().resolve() in inputs for path in planned_outputs(output, tracks)):
-        raise ValueError("output path must not overwrite an input file")
+        return PathConflict.OUTPUT_OVERWRITES_INPUT
+    return None
+
+
+def validate_job_paths(
+    stage: Path, sources: tuple[Path, ...], output: Path, tracks: OutputTracks
+) -> None:
+    if (conflict := path_conflict(stage, sources, output, tracks)) is not None:
+        raise ValueError(conflict.value)

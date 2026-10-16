@@ -15,6 +15,8 @@ from features.reference_removal import IsolationJob, run_isolation_job
 from shared.branding import APPLICATION_NAME, ORGANIZATION_NAME
 from shared.i18n import SUPPORTED_LANGUAGES, install_language
 from shared.jobs import (
+    DEFAULT_SIGMA,
+    DEFAULT_STRENGTH,
     SIGMA_CHOICES,
     STRENGTH_MAXIMUM,
     STRENGTH_MINIMUM,
@@ -51,10 +53,10 @@ def build_parser() -> argparse.ArgumentParser:
         "--strength",
         type=int,
         choices=STRENGTH_RANGE,
-        default=75,
+        default=DEFAULT_STRENGTH,
         metavar=f"{STRENGTH_MINIMUM}..{STRENGTH_MAXIMUM}",
     )
-    reference.add_argument("--sigma", type=int, choices=SIGMA_CHOICES, default=3)
+    reference.add_argument("--sigma", type=int, choices=SIGMA_CHOICES, default=DEFAULT_SIGMA)
     reference.add_argument("--align", action=argparse.BooleanOptionalAction, default=True)
     reference.add_argument(
         "--tracks",

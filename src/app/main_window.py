@@ -38,11 +38,14 @@ from features.settings.updates import Release, UpdateChecker, installed_version
 from shared.branding import application_icon
 from shared.config import cfg
 from shared.i18n import install_language, tr
-from shared.jobs import planned_outputs
+from shared.jobs import PathConflict, path_conflict
 from shared.logging import set_log_level
 from shared.tasks import Operation
 
-_GUI_REFERENCE_SIGMA_SECONDS = 3
+_CONFLICT_WARNINGS = {
+    PathConflict.STAGE_IS_SOURCE: "warn_same_inputs",
+    PathConflict.OUTPUT_OVERWRITES_INPUT: "warn_output_conflict",
+}
 
 
 class MainWindow(FluentWindow):
@@ -304,13 +307,9 @@ class MainWindow(FluentWindow):
             self._warning("warn_no_out")
             return None
         stage = Path(self.mr.stage_edit.text()).expanduser().resolve()
-        if stage in sources:
-            self._warning("warn_same_inputs")
-            return None
         tracks = self.mr.selected_tracks()
-        inputs = {stage, *sources}
-        if any(path in inputs for path in planned_outputs(output, tracks)):
-            self._warning("warn_output_conflict")
+        if (conflict := path_conflict(stage, sources, output, tracks)) is not None:
+            self._warning(_CONFLICT_WARNINGS[conflict])
             return None
         try:
             return IsolationJob(
@@ -318,8 +317,6 @@ class MainWindow(FluentWindow):
                 sources=sources,
                 output=output,
                 strength=self.mr.strength.value(),
-                sigma=_GUI_REFERENCE_SIGMA_SECONDS,
-                auto_align=True,
                 tracks=tracks,
             )
         except ValueError:

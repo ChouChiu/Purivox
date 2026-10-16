@@ -5,7 +5,13 @@ from enum import StrEnum
 from pathlib import Path
 
 from shared.audio import AudioStats
-from shared.jobs import OutputTracks, validate_job_paths, validate_reference_settings
+from shared.jobs import (
+    DEFAULT_SIGMA,
+    DEFAULT_STRENGTH,
+    OutputTracks,
+    validate_job_paths,
+    validate_reference_settings,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -20,8 +26,8 @@ class ReferenceJob:
     stage: Path
     source: Path
     output: Path
-    strength: int = 75
-    sigma: int = 3
+    strength: int = DEFAULT_STRENGTH
+    sigma: int = DEFAULT_SIGMA
     auto_align: bool = True
     tracks: OutputTracks = OutputTracks.VOCAL
 
@@ -101,8 +107,8 @@ class IsolationJob:
     stage: Path
     sources: tuple[Path, ...]
     output: Path
-    strength: int = 75
-    sigma: int = 3
+    strength: int = DEFAULT_STRENGTH
+    sigma: int = DEFAULT_SIGMA
     auto_align: bool = True
     tracks: OutputTracks = OutputTracks.VOCAL
 

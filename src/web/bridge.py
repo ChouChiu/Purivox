@@ -16,7 +16,7 @@ from features.reference_removal import (
     run_isolation_job,
 )
 from shared.audio import AudioStats
-from shared.jobs import OutputTracks
+from shared.jobs import DEFAULT_SIGMA, DEFAULT_STRENGTH, OutputTracks
 from shared.processing import CancellationToken, ProgressEvent
 from web.limits import MemoryEstimate, isolation_peak_bytes
 from web.timeline import add_clip, analysis_from_dict, analysis_to_dict, edit_clip, remove_clip
@@ -125,8 +125,8 @@ def _isolation_job(data: dict[str, Any]) -> IsolationJob:
         stage=Path(data["stage"]),
         sources=tuple(Path(source) for source in data["sources"]),
         output=Path(data["output"]),
-        strength=int(data.get("strength", 75)),
-        sigma=int(data.get("sigma", 3)),
+        strength=int(data.get("strength", DEFAULT_STRENGTH)),
+        sigma=int(data.get("sigma", DEFAULT_SIGMA)),
         auto_align=bool(data.get("auto_align", True)),
         tracks=OutputTracks(data.get("tracks", OutputTracks.VOCAL)),
     )
