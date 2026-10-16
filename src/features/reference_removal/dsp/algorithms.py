@@ -68,6 +68,8 @@ _MAX_PROCESSING_WORKERS = min(5, os.cpu_count() or 1)
 # the block size, so a browser run schedules exactly the same blocks.
 _THREADS_AVAILABLE = sys.platform != "emscripten"
 _MAX_PARALLEL_SPECTRAL_CELLS = 9_000_000
+# Blocks the level pass reads between handing mapped pages back, ~48 s at 44.1 kHz.
+_LEVEL_RELEASE_BLOCKS = 8
 
 
 def _analysis_fft_size(sample_rate: int) -> int:
@@ -134,7 +136,9 @@ def _source_level(mix: np.ndarray, reference: np.ndarray) -> float:
     came out 4.7 dB short.  Removing the bound instead cost the reference-only
     word 2.5 dB, so it stays and is made relative.  Read over the whole call
     rather than per block, because a block where the source falls silent would
-    loosen the bounds exactly where nothing backs them.
+    loosen the bounds exactly where nothing backs them.  The pass reads both
+    mappings end to end, so it hands their pages back as it goes: left resident,
+    the two files lifted the 15-minute benchmark's peak from 1.6 to 2.1 GiB.
     """
     common = min(mix.shape[1], reference.shape[1])
     channels = min(reference.shape[0], 2)
@@ -148,6 +152,11 @@ def _source_level(mix: np.ndarray, reference: np.ndarray) -> float:
         reference_energy += float(
             np.sum(np.square(reference[:channels, start:end], dtype=np.float64))
         )
+        if (start // BLOCK_FRAMES) % _LEVEL_RELEASE_BLOCKS == _LEVEL_RELEASE_BLOCKS - 1:
+            release_mapped_pages(mix)
+            release_mapped_pages(reference)
+    release_mapped_pages(mix)
+    release_mapped_pages(reference)
     mix_power = mix_energy / mix.shape[0]
     reference_power = reference_energy / channels
     if reference_power <= 0.0 or mix_power <= reference_power:
