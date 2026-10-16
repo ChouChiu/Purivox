@@ -29,7 +29,7 @@ const IDLE: JobState = {
  *
  * Cancelling tears the worker down, so the promise a run is waiting on rejects
  * with a `cancelled` error rather than resolving - the same shape the desktop's
- * `ProcessingCancelled` takes through `JobRunner`.
+ * `ProcessingCancelled` takes through `TaskRunner`.
  */
 export function useJob(client: PurivoxClient) {
 	const [state, setState] = useState<JobState>(IDLE);

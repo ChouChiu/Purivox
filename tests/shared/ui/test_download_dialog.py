@@ -1,4 +1,4 @@
-"""The dialog both reference pages fetch their inputs through.
+"""The dialog the page fetches either of its inputs through.
 
 Nothing here reaches the network: the runner is never started, and the cache is
 pointed at a temporary directory.

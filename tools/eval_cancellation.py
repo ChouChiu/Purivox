@@ -212,14 +212,10 @@ def _phase_decorrelated_stage() -> Scene:
     reference *= envelope[None, :]
 
     def decorrelate(channel: np.ndarray) -> np.ndarray:
-        _frequencies, _frames, spectrum = stft(
-            channel, fs=SAMPLE_RATE, nperseg=1024, noverlap=768
-        )
+        _frequencies, _frames, spectrum = stft(channel, fs=SAMPLE_RATE, nperseg=1024, noverlap=768)
         phases = np.cumsum(rng.normal(0.0, 0.18, spectrum.shape), axis=1)
         transformed = np.abs(spectrum) * np.exp(1j * phases)
-        _time, reconstructed = istft(
-            transformed, fs=SAMPLE_RATE, nperseg=1024, noverlap=768
-        )
+        _time, reconstructed = istft(transformed, fs=SAMPLE_RATE, nperseg=1024, noverlap=768)
         return reconstructed[:length]
 
     accompaniment = np.stack([decorrelate(reference[0]), decorrelate(reference[1])])

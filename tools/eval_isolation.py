@@ -98,9 +98,7 @@ def _song(seconds: float, offset: float = 0.0, rate: float = 0.0, tail: float = 
     length = int(SR * seconds)
     lead = int(SR * offset)
     trailing = int(SR * tail)
-    reference = np.stack(
-        [_music(rng, length, (110.0, 220.0)), _music(rng, length, (110.0, 330.0))]
-    )
+    reference = np.stack([_music(rng, length, (110.0, 220.0)), _music(rng, length, (110.0, 330.0))])
     reference *= 0.25 / np.max(np.abs(reference))
     index = np.arange(length) / (1.0 + rate)
     accompaniment = np.stack(
@@ -218,9 +216,7 @@ def measure(scene: Scene, token: CancellationToken) -> dict[str, float]:
     )
     merged_seconds = time.perf_counter() - started
 
-    whole, _ = sf.read(
-        str(WORK / f"{scene.name}-whole.vocal.wav"), dtype="float32", always_2d=True
-    )
+    whole, _ = sf.read(str(WORK / f"{scene.name}-whole.vocal.wav"), dtype="float32", always_2d=True)
     merged, _ = sf.read(
         str(WORK / f"{scene.name}-merged.vocal.wav"), dtype="float32", always_2d=True
     )

@@ -22,11 +22,10 @@ WAV_FILE_FILTER = "WAV (*.wav)"
 def normalized_wav_path(text: str, source: str, default_suffix: str) -> Path | None:
     """Resolve what an output field holds into an absolute `.wav` path.
 
-    Both reference pages offer the same field with the same rules — an empty one
-    is named after the input, a bare filename lands beside it, and any other
-    extension becomes `.wav` — so the rules live here rather than once per page.
-    Returns `None` when the field is empty and there is no input to name it
-    after.
+    An empty field is named after the input, a bare filename lands beside it,
+    and any other extension becomes `.wav`; the browser build follows the same
+    rules in its own output field.  Returns `None` when the field is empty and
+    there is no input to name it after.
     """
     text, source = text.strip(), source.strip()
     if text:

@@ -95,13 +95,12 @@ class PageScrollArea(ScrollArea):
         self.metrics = layout_metrics(self.viewport().size())
 
     def add_status_card(self) -> None:
-        """Add the status line, its clock and the progress bar every page ends with.
+        """Add the status line, its clock and the progress bar a job reports through.
 
-        All three pages report the same way — one elided line of text over one
-        bar, in the secondary lane — and they read the widgets back by name, so
-        the card is built here rather than three times over.  The clock shares
-        the status line, at its right edge, and is held to the width of an hour
-        so a running job never re-elides the text beside it.
+        `JobPresenter` reads these widgets back by name from any page that runs
+        jobs, so the card that holds them is built here, in the secondary lane.
+        The clock shares the status line, at its right edge, and is held to the
+        width of an hour so a running job never re-elides the text beside it.
         """
         self.status_card = FormCard()
         self.status = ElidedLabel()
