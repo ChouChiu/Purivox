@@ -311,6 +311,13 @@ class ResponsiveColumns(HeightForWidth, QWidget):
 
     def _rebuild(self) -> None:
         for lane in self._lanes:
+            # removeWidget, not takeAt: a widget answers to one layout item, the
+            # first made for it, and only that item's cached height is cleared
+            # when the widget's contents change.  A taken item outlives the
+            # take and keeps that role, so the card's new item would go on
+            # reporting the height it had when the lanes were last rebuilt.
+            for widget, _lane in self._entries:
+                lane.removeWidget(widget)
             while lane.count():
                 lane.takeAt(0)
         for widget, lane in self._entries:

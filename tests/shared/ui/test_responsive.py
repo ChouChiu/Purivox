@@ -194,6 +194,41 @@ def test_a_card_grows_for_the_wrapped_text_it_is_given(qtbot, size: QSize):
     assert card.height() >= progress.y() + progress.height()
 
 
+@pytest.mark.parametrize("size", [QSize(1600, 900), QSize(420, 700)])
+def test_a_card_grows_for_a_pane_shown_after_the_lanes_were_built(qtbot, size: QSize):
+    """A table that appears once there is something to show sits above its buttons.
+
+    The lanes are rebuilt whenever a card is added or the window changes shape,
+    and the card has to keep answering for its height after every rebuild.
+    """
+    page = PageScrollArea()
+    qtbot.addWidget(page)
+    for lane in (Lane.PRIMARY, Lane.SECONDARY):
+        page.add_card(FormCard("其他"), lane)
+    card = FormCard("识别结果")
+    hint = _wrapping_label()
+    hint.setText(LONG_STATUS)
+    card.layout.addWidget(hint)
+    pane = QWidget()
+    pane.setMinimumHeight(260)
+    pane.hide()
+    card.layout.addWidget(pane)
+    button = PushButton("添加片段")
+    card.layout.addWidget(button)
+    page.add_card(card, Lane.SECONDARY)
+    page.resize(size)
+    page.show()
+    qtbot.waitExposed(page)
+    _flush()
+
+    pane.show()
+    _flush()
+
+    assert pane.height() >= 260
+    assert button.y() >= pane.y() + pane.height()
+    assert card.height() >= button.y() + button.height()
+
+
 def test_a_card_without_wrapping_content_keeps_its_own_height(qtbot):
     """Only a card that can answer for its height claims to depend on width."""
     page = PageScrollArea()
