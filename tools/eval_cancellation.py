@@ -280,6 +280,53 @@ def _clock_drift_scene(ppm: float) -> Scene:
     )
 
 
+def _two_path_pa_scene() -> Scene:
+    """A fancam that hears the playback over two PA arrays, under a loud crowd.
+
+    Modelled on an encore fancam where the playback arrived twice, 8 ms apart
+    and inverted, with a crowd and the members singing along louder than it:
+    the short correlation windows of the lag track hop between the two arrivals
+    or lose both, and only a lag that holds still between them lets the per-bin
+    transfer describe the pair.
+    """
+    rng = np.random.default_rng(808)
+    length = FULL_BAND_RATE * 40
+    reference = np.stack([_full_band_music(rng, length), _full_band_music(rng, length)])
+    reference *= 0.25 / np.max(np.abs(reference))
+    played = soxr.resample(
+        reference.T, FULL_BAND_RATE, FULL_BAND_RATE * (1.0 + 7e-6), quality="VHQ"
+    ).T[:, :length]
+    # Two arrivals, then the hall: a diffuse tail as loud as both together is
+    # what leaves a 0.1 s correlation window too little to lock onto.
+    paths = np.zeros(FULL_BAND_RATE)
+    paths[round(0.004 * FULL_BAND_RATE)] = -0.7
+    paths[round(0.012 * FULL_BAND_RATE)] = -0.6
+    onset = round(0.015 * FULL_BAND_RATE)
+    tail = rng.normal(0.0, 1.0, paths.size - onset)
+    tail *= np.exp(-6.9078 * np.arange(tail.size) / (0.9 * FULL_BAND_RATE))
+    paths[onset:] = tail * np.sqrt(0.85 / np.sum(tail**2))
+    mono = 0.5 * (played[0] + played[1])
+    accompaniment = np.stack([fftconvolve(mono, paths)[:length]] * 2)
+    swell = np.repeat(rng.uniform(0.4, 1.0, length // FULL_BAND_RATE + 1), FULL_BAND_RATE)
+    crowd = rng.normal(0.0, 1.0, (2, length)) * swell[:length]
+    crowd = sosfilt(butter(2, (300.0, 6000.0), "bandpass", fs=FULL_BAND_RATE, output="sos"), crowd)
+    # The playback is about a fifth of the capture's power, as it measured on
+    # the fancam this scene is modelled on.
+    crowd *= np.std(accompaniment) / np.std(crowd)
+    voice = _vibrato_voice(length, FULL_BAND_RATE, 1.0)
+    voice *= 1.5 * np.std(accompaniment) / np.std(voice)
+    live = crowd + np.stack([voice, 0.9 * voice])
+    return Scene(
+        name="two_path_pa",
+        mixture=live + accompaniment,
+        reference=reference,
+        live=live,
+        accompaniment=accompaniment,
+        align=True,
+        sample_rate=FULL_BAND_RATE,
+    )
+
+
 def _unrelated_reference() -> Scene:
     # Broadband noise on both sides, not tones: a tonal pair occupies too few
     # bins for a spurious fit to show up, and spurious fitting is the whole
@@ -422,6 +469,7 @@ SCENES: tuple[Callable[[], Scene], ...] = (
     lambda: _drift_scene(0.01),
     lambda: _clock_drift_scene(0.0),
     lambda: _clock_drift_scene(60.0),
+    _two_path_pa_scene,
     _unrelated_reference,
     _quiet_unrelated_reference,
     _reference_only_word,

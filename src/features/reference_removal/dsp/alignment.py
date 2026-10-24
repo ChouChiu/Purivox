@@ -11,7 +11,7 @@ from scipy.ndimage import correlate1d, median_filter
 from scipy.signal import correlate, correlation_lags, resample_poly
 
 from shared.audio import BLOCK_FRAMES
-from shared.dsp import log_flux_bands
+from shared.dsp import log_flux_bands, stft
 from shared.dsp.rate import estimate_rate
 from shared.dsp.stretch import time_stretch
 from shared.processing import CancellationToken
@@ -48,6 +48,29 @@ _TRACK_MINIMUM_CORRELATION = 0.08
 # measured on 0-150 ppm drift at 44.1 kHz, 3 s beat 1.5 s above 4 kHz.
 _TRACK_SMOOTHING_SECONDS = 3.0
 _TRACK_ROBUST_PASSES = 3
+# The narrowband score's excerpts: long enough for a per-bin fit to average
+# over phrases, few enough that scoring a candidate stays a few milliseconds.
+_SCORE_EXCERPT_SECONDS = 6.0
+_SCORE_EXCERPTS = 8
+# Shorter than the canceller's ~46 ms window, so the score also prefers the
+# lag that centres two arrivals in it.  Measured on a two-path fancam: at 64 ms
+# the line settled on the stronger path and left 1-2.7 dB more backing above
+# 2 kHz than at 32 ms, where it sat between them; 16 ms bought nothing more.
+_SCORE_FFT_SECONDS = 0.032
+# The line candidate searches each excerpt this far either side of the track.
+# Its step is half the score's hop, ~4 ms: the score falls off over tens of
+# milliseconds, so the step only has to land on the slope of its peak for the
+# parabola to find it.
+_LINE_SEARCH_SECONDS = 0.048
+_LINE_EXCERPT_SPACING_SECONDS = 10.0
+# A line is two numbers; past a dozen points a longer take only costs time.
+_LINE_MAXIMUM_EXCERPTS = 12
+_LINE_MINIMUM_EXCERPTS = 3
+# The track stays unless the line explains clearly more: on a clean broadcast
+# the two score within a few percent of each other, and the track is what
+# follows a clock that wanders.
+_LINE_RELATIVE_MARGIN = 1.02
+_LINE_ABSOLUTE_MARGIN = 0.002
 
 
 def _mono(channels: np.ndarray) -> np.ndarray:
@@ -318,6 +341,190 @@ def _local_track(mix: np.ndarray, reference: np.ndarray, rate: int, initial: flo
     return np.asarray(positions), np.asarray(lags)
 
 
+def _explained_share(
+    mix: np.ndarray,
+    reference: np.ndarray,
+    rate: int,
+    track: tuple[np.ndarray, np.ndarray] | None = None,
+) -> float:
+    """Share of a mono proxy that one complex gain per bin explains, per excerpt.
+
+    This is what the canceller can take: it fits a transfer per bin over a
+    window of frames, so a constant lag error well inside the analysis window
+    only costs it a phase ramp, while a lag that moves inside the window costs
+    it the coherence itself.  A broadband time-domain fit cannot tell the two
+    apart - on a fancam whose playback arrived over two PA paths it scored the
+    wandering track and the matcher's position at 0.0007 and 0.0011 - and
+    neither can a short correlation window, which is what wandered.
+    """
+    length = min(mix.size, reference.size)
+    n_fft = 1 << max(round(math.log2(_SCORE_FFT_SECONDS * rate)), 6)
+    excerpt = min(round(_SCORE_EXCERPT_SECONDS * rate), length)
+    if excerpt < 2 * n_fft:
+        return 0.0
+    count = min(_SCORE_EXCERPTS, max(length // excerpt, 1))
+    scores = []
+    for start in np.linspace(0, length - excerpt, count, dtype=np.int64):
+        if track is None:
+            placed = reference[start : start + excerpt]
+        else:
+            # Only the excerpts are scored, so only they are warped: the whole
+            # proxy twice over measured 0.23 s of a 180 s take.
+            destination = np.arange(start, start + excerpt, dtype=np.float64)
+            placed = _lanczos(reference, destination - np.interp(destination, *track))
+        scores.append(_excerpt_share(mix[start : start + excerpt], placed, n_fft))
+    return float(np.median(scores))
+
+
+def _excerpt_share(mix: np.ndarray, reference: np.ndarray, n_fft: int) -> float:
+    hop = n_fft // 4
+    return _spectral_share(
+        stft(np.asarray(mix, dtype=np.float64), n_fft=n_fft, hop=hop),
+        stft(np.asarray(reference, dtype=np.float64), n_fft=n_fft, hop=hop),
+    )
+
+
+def _spectral_share(mix_spectrum: np.ndarray, reference_spectrum: np.ndarray) -> float:
+    return _share(
+        np.einsum("fb,fb->b", np.conj(mix_spectrum), reference_spectrum),
+        np.sum(reference_spectrum.real**2 + reference_spectrum.imag**2, axis=0),
+        float(np.vdot(mix_spectrum, mix_spectrum).real),
+    )
+
+
+def _share(cross: np.ndarray, reference_power: np.ndarray, mix_energy: float) -> float:
+    """Explained power over mixture power, from one excerpt's per-bin sums."""
+    if mix_energy <= 1e-20:
+        return 0.0
+    # The same relative loading the transfer solve uses, so a bin where the
+    # reference is silent cannot claim the mixture through a huge gain.
+    loading = 2e-4 * float(np.mean(reference_power)) + 1e-20
+    return float(np.sum(np.abs(cross) ** 2 / (reference_power + loading)) / mix_energy)
+
+
+def alignment_score(mix: np.ndarray, reference: np.ndarray, sample_rate: int) -> float:
+    """How much of the stage an aligned stereo reference explains, bin by bin."""
+    length = min(mix.shape[1], reference.shape[1])
+    rate = min(_PROXY_RATE, sample_rate)
+    if length < 64:
+        return 0.0
+    return _explained_share(
+        _proxy(mix, length, sample_rate, rate), _proxy(reference, length, sample_rate, rate), rate
+    )
+
+
+def _line_track(
+    mix: np.ndarray, reference: np.ndarray, rate: int, positions: np.ndarray, lags: np.ndarray
+) -> tuple[np.ndarray, np.ndarray] | None:
+    """An offset and a clock drift, fitted through the lag each excerpt scores best at.
+
+    A capture can hear the playback over more than one path - a fancam two PA
+    arrays apart received it twice, 8 ms apart and inverted - and the 0.1 s
+    track then hops between the two peaks, or wanders off both where the live
+    content buries them.  Every hop is a phase jump the per-bin transfer has
+    to re-learn.  One complex gain per bin describes both paths at once as long
+    as they share its window, so a lag that holds still between them is what
+    the canceller wants, and the narrowband score finds it directly.  Each
+    excerpt searches around the track and the line goes through the peaks,
+    robustly, because a clock moves the lag by microseconds per second.
+    """
+    length = min(mix.size, reference.size)
+    excerpt = round(_SCORE_EXCERPT_SECONDS * rate)
+    n_fft = 1 << max(round(math.log2(_SCORE_FFT_SECONDS * rate)), 6)
+    hop = n_fft // 4
+    # Shifting the reference by half a hop moves it by exactly one frame of an
+    # STFT taken at that half hop, so each excerpt transforms its reference
+    # span once and every candidate lag is a strided slice of it: measured
+    # 0.21 s on a 180 s take against 1.06 s for transforming each candidate.
+    step = hop // 2
+    reach = round(_LINE_SEARCH_SECONDS * rate / step) * step
+    count = min(
+        round(length / (_LINE_EXCERPT_SPACING_SECONDS * rate)),
+        (length - 2 * reach) // excerpt,
+        _LINE_MAXIMUM_EXCERPTS,
+    )
+    if count < _LINE_MINIMUM_EXCERPTS:
+        return None
+    offsets = np.arange(-reach, reach + 1, step)
+    centers: list[float] = []
+    peaks: list[float] = []
+    weights: list[float] = []
+    for start in np.linspace(reach, length - excerpt - reach, count, dtype=np.int64):
+        center = round(float(np.interp(start + excerpt / 2, positions, lags)))
+        # The lowest source position belongs to the largest offset.
+        base = int(start) - center - reach
+        if base < 0 or base + excerpt + 2 * reach > reference.size:
+            continue
+        mix_spectrum = stft(np.asarray(mix[start : start + excerpt], dtype=np.float64), n_fft, hop)
+        span = stft(
+            np.asarray(reference[base : base + excerpt + 2 * reach], dtype=np.float64), n_fft, step
+        )
+        frames = min(mix_spectrum.shape[0], (span.shape[0] - 1 - 2 * reach // step) // 2 + 1)
+        # sum(y conj(x)) is the conjugate of sum(conj(y) x), and only its
+        # magnitude is read, so conjugating the mixture once spares every
+        # candidate a conjugated copy of its slice.
+        mix_conjugate = np.conj(mix_spectrum[:frames])
+        mix_energy = float(np.vdot(mix_conjugate, mix_conjugate).real)
+        span_power = span.real**2 + span.imag**2
+        scores = np.zeros(offsets.size)
+        for index, offset in enumerate(offsets):
+            rows = slice((reach - offset) // step, None)
+            cross = np.einsum("fb,fb->b", mix_conjugate, span[rows][: 2 * frames : 2])
+            power = np.sum(span_power[rows][: 2 * frames : 2], axis=0)
+            scores[index] = _share(cross, power, mix_energy)
+        best = int(np.argmax(scores))
+        if scores[best] <= 0.0:
+            continue
+        centers.append(float(start + excerpt / 2))
+        peaks.append(center + float(offsets[best]) + step * _parabolic_offset(scores, best))
+        weights.append(float(scores[best]))
+    if len(centers) < _LINE_MINIMUM_EXCERPTS:
+        return None
+    times = np.asarray(centers) / rate
+    values = np.asarray(peaks)
+    confidence = np.asarray(weights)
+    design = np.stack([np.ones_like(times), times], axis=1)
+    weight = confidence
+    for _ in range(_TRACK_ROBUST_PASSES + 1):
+        root = np.sqrt(weight)
+        coefficients = np.linalg.lstsq(design * root[:, None], values * root, rcond=None)[0]
+        residual = values - design @ coefficients
+        scale = max(6.0 * float(np.median(np.abs(residual))), 1.0)
+        bounded = np.clip(residual / scale, -1.0, 1.0)
+        weight = confidence * (1.0 - bounded * bounded) ** 2
+        if not np.any(weight > 0.0):
+            return None
+    ends = np.asarray([0.0, float(mix.size - 1)])
+    return ends, coefficients[0] + coefficients[1] * ends / rate
+
+
+def _chosen_track(
+    mix: np.ndarray,
+    reference: np.ndarray,
+    rate: int,
+    positions: np.ndarray,
+    lags: np.ndarray,
+    token: CancellationToken,
+) -> tuple[np.ndarray, np.ndarray]:
+    """The track, or the line through it where the line explains clearly more."""
+    line = _line_track(mix, reference, rate, positions, lags)
+    if line is None:
+        return positions, lags
+    token.raise_if_cancelled()
+    track_score = _explained_share(mix, reference, rate, (positions, lags))
+    line_score = _explained_share(mix, reference, rate, line)
+    chosen = line_score > _LINE_RELATIVE_MARGIN * track_score + _LINE_ABSOLUTE_MARGIN
+    logger.info(
+        "alignment %s: line %.3f to %.3f s scores %.4f, track scores %.4f",
+        "follows the line" if chosen else "keeps the track",
+        float(line[1][0] / rate),
+        float(line[1][-1] / rate),
+        line_score,
+        track_score,
+    )
+    return line if chosen else (positions, lags)
+
+
 @lru_cache(maxsize=4)
 def _lanczos_table(radius: int, phases: int) -> tuple[np.ndarray, np.ndarray]:
     """Precompute Lanczos taps for every fractional phase, and what they sum to.
@@ -499,6 +706,7 @@ def align_audio(
         return reference_audio
     scale = sample_rate / proxy_rate
     positions, lags = _local_track(mix_norm, ref_norm, proxy_rate, lag_samples / scale)
+    positions, lags = _chosen_track(mix_norm, ref_norm, proxy_rate, positions, lags, cancel)
     logger.info(
         "local alignment tracked %.3f to %.3f s (median %.3f s)",
         float(lags[0] / proxy_rate),

@@ -5,7 +5,7 @@ from contextlib import ExitStack
 
 import numpy as np
 
-from features.reference_removal.dsp import align_audio, process_audio
+from features.reference_removal.dsp import align_audio, alignment_score, process_audio
 from features.reference_removal.models import (
     IsolationJob,
     IsolationResult,
@@ -20,39 +20,6 @@ from shared.processing import CancellationToken, ProgressCallback
 from shared.progress import report_progress
 
 logger = logging.getLogger(__name__)
-
-
-def _alignment_quality(mix: np.ndarray, reference: np.ndarray, sample_rate: int) -> float:
-    """Estimate how much of the stage a time-aligned stereo reference explains.
-
-    Matching already supplies a close source position.  A second drift
-    alignment is useful for some broadcasts, but an uncertain local lag track can
-    make an already-correct match worse.  Compare both candidates with small direct
-    2x2 fits and keep the robust median.
-    """
-    length = min(mix.shape[1], reference.shape[1])
-    window = min(max(4 * sample_rate, 4096), length)
-    if window < 64:
-        return 0.0
-    count = min(10, max(length // window, 1))
-    starts = np.linspace(0, max(length - window, 0), count, dtype=np.int64)
-    stride = max(window // 65_536, 1)
-    scores: list[float] = []
-    epsilon = 1e-12
-    for start in starts:
-        end = int(start) + window
-        mix_window = np.asarray(mix[:, int(start) : end : stride], dtype=np.float64)
-        reference_window = np.asarray(reference[:, int(start) : end : stride], dtype=np.float64)
-        mix_window -= np.mean(mix_window, axis=1, keepdims=True)
-        reference_window -= np.mean(reference_window, axis=1, keepdims=True)
-        covariance = reference_window @ reference_window.T
-        regularizer = 2e-4 * float(np.trace(covariance)) / max(reference_window.shape[0], 1)
-        loaded = covariance + (regularizer + epsilon) * np.eye(reference_window.shape[0])
-        transfer = np.linalg.solve(loaded.T, (mix_window @ reference_window.T).T).T
-        residual = mix_window - transfer @ reference_window
-        energy = float(np.sum(mix_window * mix_window))
-        scores.append(1.0 - float(np.sum(residual * residual)) / max(energy, epsilon))
-    return float(np.median(scores))
 
 
 def _blend_segment(destination: np.ndarray, processed: np.ndarray, sample_rate: int) -> None:
@@ -76,10 +43,16 @@ def _placed_source(
     token: CancellationToken,
     output: np.ndarray,
 ) -> np.ndarray:
-    """Drift-align a matched slice, unless that fits the stage worse than the match did."""
+    """Drift-align a matched slice, unless that fits the stage worse than the match did.
+
+    Matching already supplies a close position, and an uncertain lag track can
+    make an already-correct match worse.  Both are judged by how much of the
+    stage a per-bin transfer explains, which is the quantity the canceller
+    depends on.
+    """
     aligned = align_audio(stage, source, sample_rate, token, output, detect_speed=False)
-    raw_quality = _alignment_quality(stage, source, sample_rate)
-    aligned_quality = _alignment_quality(stage, aligned, sample_rate)
+    raw_quality = alignment_score(stage, source, sample_rate)
+    aligned_quality = alignment_score(stage, aligned, sample_rate)
     if raw_quality > aligned_quality:
         logger.info(
             "keeping matched timeline position for %s (quality %.4f > aligned %.4f)",

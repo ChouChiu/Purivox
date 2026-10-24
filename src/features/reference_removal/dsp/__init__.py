@@ -1,4 +1,4 @@
 from .algorithms import process_audio
-from .alignment import align_audio
+from .alignment import align_audio, alignment_score
 
-__all__ = ["align_audio", "process_audio"]
+__all__ = ["align_audio", "alignment_score", "process_audio"]

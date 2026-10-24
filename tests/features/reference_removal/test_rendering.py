@@ -6,7 +6,7 @@ import numpy as np
 import soundfile as sf
 
 from features.reference_removal import ClipKind, IsolationJob, StageAnalysis, TimelineClip
-from features.reference_removal.rendering import _alignment_quality, render_stage_job
+from features.reference_removal.rendering import render_stage_job
 from shared.audio import AudioData
 from shared.jobs import OutputTracks
 from shared.processing import CancellationToken
@@ -94,17 +94,6 @@ def test_render_keeps_unmatched_audio_and_processes_the_matched_span(tmp_path: P
     assert result.audio_stats[0].bit_depth == 16
     assert result.audio_stats[0].duration_seconds == 8
     assert result.analysis is analysis
-
-
-def test_alignment_quality_rejects_a_shift_that_damages_an_existing_match():
-    sample_rate = 8_000
-    reference = _source(sample_rate, 8, 11).T
-    stage = reference + np.random.default_rng(12).normal(0, 0.01, reference.shape)
-    shifted = np.roll(reference, sample_rate // 20, axis=1)
-
-    assert _alignment_quality(stage, reference, sample_rate) > _alignment_quality(
-        stage, shifted, sample_rate
-    )
 
 
 def test_backing_export_is_silent_where_nothing_was_cancelled(tmp_path: Path):

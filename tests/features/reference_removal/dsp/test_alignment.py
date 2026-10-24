@@ -4,8 +4,13 @@ import soxr
 from scipy.signal import butter, sosfilt
 
 from features.reference_removal.dsp import align_audio, alignment, process_audio
-from features.reference_removal.dsp.alignment import _spectral_flux_lag
+from features.reference_removal.dsp.alignment import (
+    _chosen_track,
+    _spectral_flux_lag,
+    alignment_score,
+)
 from shared.dsp import time_stretch
+from shared.processing import CancellationToken
 
 
 def corr(first, second):
@@ -256,3 +261,57 @@ def test_lanczos_interior_path_matches_the_boundary_formulation():
             assert np.allclose(produced, expected, rtol=0.0, atol=1e-6)
         else:
             assert np.array_equal(produced, expected)
+
+
+def _two_path_capture(sample_rate: int, seconds: int, seed: int, second_gain: float = 0.6):
+    """A playback heard over two inverted arrivals 8 ms apart, under louder noise."""
+    rng = np.random.default_rng(seed)
+    frames = sample_rate * seconds
+    envelope = np.repeat(rng.uniform(0.2, 1.0, seconds * 4 + 1), sample_rate // 4)[:frames]
+    reference = (rng.normal(0.0, 0.1, frames) * envelope).astype(np.float32)
+    first, second = round(0.004 * sample_rate), round(0.012 * sample_rate)
+    played = np.zeros(frames, dtype=np.float32)
+    played[first:] -= 0.7 * reference[: frames - first]
+    played[second:] -= second_gain * reference[: frames - second]
+    stage = played + rng.normal(0.0, 0.12, frames).astype(np.float32)
+    return stage, reference, (first + second) / 2
+
+
+def test_a_hopping_track_gives_way_to_a_lag_that_holds_between_two_arrivals():
+    sample_rate = 8_000
+    stage, reference, middle = _two_path_capture(sample_rate, 40, 5)
+    positions = np.arange(0, stage.size, sample_rate, dtype=np.float64)
+    # The 0.1 s track on such a capture hops between and past the two peaks.
+    lags = middle + np.where(np.arange(positions.size) % 2, 0.02, -0.02) * sample_rate
+
+    _chosen_positions, chosen = _chosen_track(
+        stage, reference, sample_rate, positions, lags, CancellationToken()
+    )
+
+    assert np.max(np.abs(chosen - middle)) < 0.003 * sample_rate
+
+
+def test_a_track_that_already_fits_is_kept():
+    sample_rate = 8_000
+    stage, reference, _middle = _two_path_capture(sample_rate, 40, 6, second_gain=0.0)
+    positions = np.arange(0, stage.size, sample_rate, dtype=np.float64)
+    lags = np.full(positions.size, round(0.004 * sample_rate), dtype=np.float64)
+
+    chosen_positions, chosen = _chosen_track(
+        stage, reference, sample_rate, positions, lags, CancellationToken()
+    )
+
+    assert np.array_equal(chosen_positions, positions)
+    assert np.array_equal(chosen, lags)
+
+
+def test_alignment_score_rejects_a_shift_that_damages_an_existing_match():
+    sample_rate = 8_000
+    rng = np.random.default_rng(11)
+    reference = rng.normal(0.0, 0.1, (2, sample_rate * 8)).astype(np.float32)
+    stage = reference + rng.normal(0.0, 0.01, reference.shape).astype(np.float32)
+    shifted = np.roll(reference, sample_rate // 20, axis=1)
+
+    assert alignment_score(stage, reference, sample_rate) > alignment_score(
+        stage, shifted, sample_rate
+    )

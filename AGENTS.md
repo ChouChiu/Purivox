@@ -121,8 +121,9 @@ crossfade) → peak/RMS stats → atomic WAV at the stage recording's own rate a
 
 **Segmented** (`render_stage_job`): the recording is read once into the output buffer, then each
 enabled clip reads and resamples its source, stretches it by the clip's tempo ratio, aligns the
-slice (drift tracking, gated by a direct 2x2 fit that keeps the matcher's position when alignment
-would make it worse), cancels with `process_audio` and blends the result in over a 50 ms crossfade.
+slice (drift tracking, or a line through it where a fancam's multipath makes the track hop, both
+gated by the narrowband `alignment_score` that keeps the matcher's position when alignment would
+make it worse), cancels with `process_audio` and blends the result in over a 50 ms crossfade.
 Ranges no clip covers are copied through untouched, so the backing track is silent exactly where
 nothing was cancelled.
 
