@@ -171,6 +171,40 @@ def test_process_audio_writes_supplied_disk_buffer(scene):
         target.cleanup()
 
 
+def _capture(response: np.ndarray, seconds: float = 24.0):
+    sample_rate = 16_000
+    rng = np.random.default_rng(31)
+    reference = rng.normal(0.0, 0.1, (2, int(sample_rate * seconds))).astype(np.float32)
+    live = rng.normal(0.0, 0.05, reference.shape[1]).astype(np.float32)
+    played = np.stack(
+        [fftconvolve(channel, response)[: reference.shape[1]] for channel in reference]
+    )
+    return sample_rate, (played + live).astype(np.float32), reference
+
+
+def test_a_reverberant_capture_is_analysed_over_the_longer_window():
+    """Early reflections past the default window are backing it cannot describe."""
+    rng = np.random.default_rng(7)
+    taps = np.arange(int(16_000 * 0.25))
+    response = rng.normal(0.0, 1.0, taps.size) * np.exp(-6.9 * taps / taps.size)
+    response[0] += 4.0
+    sample_rate, mix, reference = _capture(response / np.linalg.norm(response))
+    default = algorithms._analysis_fft_size(sample_rate)
+
+    chosen = algorithms._capture_fft_size(mix, reference, sample_rate, 3, CancellationToken())
+
+    assert chosen == 2 * default
+
+
+def test_a_dry_capture_keeps_the_default_window():
+    sample_rate, mix, reference = _capture(np.array([0.9]))
+    default = algorithms._analysis_fft_size(sample_rate)
+
+    chosen = algorithms._capture_fft_size(mix, reference, sample_rate, 3, CancellationToken())
+
+    assert chosen == default
+
+
 def test_processing_block_uses_two_gib_working_set_budget():
     block_44k = algorithms._processing_block_frames(44_100, 8)
     block_96k = algorithms._processing_block_frames(96_000, 8)

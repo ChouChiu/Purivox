@@ -114,7 +114,8 @@ geometry.
 
 **Whole-file** (`run_reference_job`): `read_audio` (SoundFile, Qt Multimedia fallback) → upmix to
 stereo → resample the song source to the stage recording's rate (soxr) → optional `align_audio` →
-`process_audio` (blocks from the spectral-cell budget, ~45 s at 44.1 kHz, ≥2 s overlap, cos²/sin²
+`process_audio` (a 46 ms window, or 93 ms where the source explains clearly more of the
+recording at it; blocks from the spectral-cell budget, ~45 s at 44.1 kHz, ≥2 s overlap, cos²/sin²
 crossfade) → peak/RMS stats → atomic WAV at the stage recording's own rate and bit depth.
 `process_audio` has a pooled and an inline schedule because Pyodide has no pthreads;
 `dsp/test_algorithms.py` holds them to the same output.

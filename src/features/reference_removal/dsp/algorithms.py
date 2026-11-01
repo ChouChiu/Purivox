@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import math
 import os
 import sys
@@ -21,6 +22,8 @@ from .transfer import (
     smoothstep,
     spectral_smooth,
 )
+
+logger = logging.getLogger(__name__)
 
 _MASK_FLOOR = 0.05
 # The synthesised backing may be louder than the source file, because the
@@ -71,12 +74,98 @@ _THREADS_AVAILABLE = sys.platform != "emscripten"
 _MAX_PARALLEL_SPECTRAL_CELLS = 9_000_000
 # Blocks the level pass reads between handing mapped pages back, ~48 s at 44.1 kHz.
 _LEVEL_RELEASE_BLOCKS = 8
+# How much more of the stage the long window has to explain before it replaces
+# the default; see `_capture_fft_size`.  Below it sit two synthetic scenes the
+# long window explains 0.001-0.002 more of and still cancels worse.
+_LONG_WINDOW_MARGIN = 0.003
+_WINDOW_PROBES = 3
+_WINDOW_PROBE_SECONDS = 8.0
 
 
 def _analysis_fft_size(sample_rate: int) -> int:
     target = max(0.046 * sample_rate, 1.0)
     exponent = round(math.log2(target))
     return int(np.clip(2**exponent, 512, 4096))
+
+
+def _explained_share(
+    mix: np.ndarray, reference: np.ndarray, sample_rate: int, sigma: float, n_fft: int
+) -> tuple[float, float]:
+    """The mixture power the reference explains at one window, and the total."""
+    hop = n_fft // 4
+    mix_spectra = [stft(channel, n_fft=n_fft, hop=hop) for channel in mix]
+    reference_spectra = [stft(channel, n_fft=n_fft, hop=hop) for channel in reference[:2]]
+    if len(reference_spectra) == 1:
+        reference_spectra.append(reference_spectra[0])
+    sigma_frames = max(float(sigma) * sample_rate / hop / 6.0, 1.0)
+    _predicted, explained = predict_reference_spectra(
+        mix_spectra, reference_spectra, sigma_frames, CancellationToken()
+    )
+    explained_power = 0.0
+    total_power = 0.0
+    for spectrum, share in zip(mix_spectra, explained, strict=True):
+        power = np.square(np.abs(spectrum))
+        explained_power += float(np.sum(share * power))
+        total_power += float(np.sum(power))
+    return explained_power, total_power
+
+
+def _capture_fft_size(
+    mix: np.ndarray,
+    reference: np.ndarray,
+    sample_rate: int,
+    sigma: float,
+    token: CancellationToken,
+) -> int:
+    """The analysis window for this capture: the default one, or twice as long.
+
+    A capture far from the PA hears the playback through a room whose early
+    reflections run past the ~46 ms default, and every one that falls outside
+    the window is backing the per-bin transfer cannot describe.  A fancam at an
+    open-air festival had the reference explain 0.256 of it at 43 ms and 0.329
+    at 85 ms.  A capture close to the playback is the opposite case: the longer
+    window buys no reach and halves the frames the transfer is fitted over.
+    Which one a capture is shows in the same adjusted coherence the canceller
+    trusts, so it is measured over a few excerpts at both windows and the long
+    one is taken only when it explains clearly more.  On the synthetic scenes
+    that rule picks the better window wherever the two differ by more than a
+    few tenths of a decibel.  One window serves the whole call, because blocks
+    blended across a seam must come from the same analysis.
+    """
+    n_fft = _analysis_fft_size(sample_rate)
+    length = min(mix.shape[1], reference.shape[1])
+    excerpt = min(round(_WINDOW_PROBE_SECONDS * sample_rate), length)
+    if excerpt < 4 * n_fft:
+        return n_fft
+    count = min(_WINDOW_PROBES, max(length // excerpt, 1))
+    starts = np.linspace(0, length - excerpt, count).astype(np.int64)
+    shares = []
+    for candidate in (n_fft, 2 * n_fft):
+        explained_power = 0.0
+        total_power = 0.0
+        for start in starts:
+            token.raise_if_cancelled()
+            stop = int(start) + excerpt
+            explained, total = _explained_share(
+                np.asarray(mix[:, start:stop], dtype=np.float32),
+                np.asarray(reference[:, start:stop], dtype=np.float32),
+                sample_rate,
+                sigma,
+                candidate,
+            )
+            explained_power += explained
+            total_power += total
+        shares.append(explained_power / total_power if total_power > 0.0 else 0.0)
+    chosen = 2 * n_fft if shares[1] > shares[0] + _LONG_WINDOW_MARGIN else n_fft
+    logger.info(
+        "analysis window %.0f ms: the source explains %.3f of the stage at %.0f ms, %.3f at %.0f ms",
+        1000.0 * chosen / sample_rate,
+        shares[0],
+        1000.0 * n_fft / sample_rate,
+        shares[1],
+        2000.0 * n_fft / sample_rate,
+    )
+    return chosen
 
 
 def _context_frames(sample_rate: int, sigma: float) -> int:
@@ -91,10 +180,11 @@ def _processing_block_frames(
     sample_rate: int,
     sigma: float,
     spectral_cell_budget: int = _SPECTRAL_CELL_BUDGET,
+    n_fft: int | None = None,
 ) -> int:
     """Use the 2 GiB working-set budget to reduce repeated overlap analysis."""
     context_frames = _context_frames(sample_rate, sigma)
-    n_fft = _analysis_fft_size(sample_rate)
+    n_fft = n_fft or _analysis_fft_size(sample_rate)
     hop = n_fft // 4
     bins = n_fft // 2 + 1
     # A spectral cell expands into several complex and real work arrays.  Four
@@ -109,9 +199,11 @@ def _processing_block_frames(
     return max(context_frames, throughput_frames)
 
 
-def _processing_workers(sample_rate: int, sigma: float, length: int) -> int:
+def _processing_workers(
+    sample_rate: int, sigma: float, length: int, n_fft: int | None = None
+) -> int:
     context_frames = _context_frames(sample_rate, sigma)
-    n_fft = _analysis_fft_size(sample_rate)
+    n_fft = n_fft or _analysis_fft_size(sample_rate)
     context_stft_frames = math.ceil(context_frames / (n_fft // 4)) + 2
     context_cells = context_stft_frames * (n_fft // 2 + 1)
     if length < 2 * context_frames:
@@ -120,9 +212,11 @@ def _processing_workers(sample_rate: int, sigma: float, length: int) -> int:
     return max(1, min(_MAX_PROCESSING_WORKERS, memory_limited_workers))
 
 
-def _processing_layout(sample_rate: int, sigma: float, length: int) -> tuple[int, int]:
-    workers = _processing_workers(sample_rate, sigma, length)
-    block = _processing_block_frames(sample_rate, sigma, _SPECTRAL_CELL_BUDGET // workers)
+def _processing_layout(
+    sample_rate: int, sigma: float, length: int, n_fft: int | None = None
+) -> tuple[int, int]:
+    workers = _processing_workers(sample_rate, sigma, length, n_fft)
+    block = _processing_block_frames(sample_rate, sigma, _SPECTRAL_CELL_BUDGET // workers, n_fft)
     return block, workers
 
 
@@ -174,6 +268,7 @@ def _reference_cancel(
     token: CancellationToken,
     backing: bool = False,
     source_level: float = 1.0,
+    n_fft: int | None = None,
 ) -> tuple[np.ndarray, np.ndarray | None]:
     """Cancel reference-correlated content coherently, then suppress what is left.
 
@@ -199,7 +294,7 @@ def _reference_cancel(
     length = min(mix.shape[1], reference.shape[1])
     mix = np.asarray(mix[:, :length], dtype=np.float32)
     reference_audio = np.asarray(reference[:, :length], dtype=np.float32)
-    n_fft = _analysis_fft_size(sample_rate)
+    n_fft = n_fft or _analysis_fft_size(sample_rate)
     hop = n_fft // 4
     mix_spectra = [stft(channel, n_fft=n_fft, hop=hop) for channel in mix]
     token.raise_if_cancelled()
@@ -514,9 +609,10 @@ def process_audio(
             backing[:] = 0.0
         return result
     source_level = _source_level(mix, reference_audio)
+    n_fft = _capture_fft_size(mix, reference_audio, sample_rate, sigma, cancel)
     # Long recordings scale across independent spectral workers.  The layout
     # divides the working-set budget; large contexts automatically use fewer.
-    block, workers = _processing_layout(sample_rate, sigma, length)
+    block, workers = _processing_layout(sample_rate, sigma, length, n_fft)
     overlap = min(
         max(round(0.5 * float(sigma) * sample_rate), 2 * sample_rate),
         block // 3,
@@ -548,6 +644,7 @@ def process_audio(
             cancel,
             backing is not None,
             source_level,
+            n_fft,
         )
         return start, end, processed, processed_backing
 
