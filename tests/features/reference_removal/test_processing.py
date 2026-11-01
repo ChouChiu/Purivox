@@ -95,7 +95,10 @@ def _cancellation_inputs(
     source = tmp_path / "instrumental.wav"
     sf.write(
         stage,
-        np.stack([vocal + np.pad(backing, (0, vocal.size - backing.size))] * 2, axis=1),
+        np.stack(
+            [vocal + np.pad(backing[: vocal.size], (0, max(vocal.size - backing.size, 0)))] * 2,
+            axis=1,
+        ),
         sample_rate,
         subtype="PCM_24",
     )
@@ -235,6 +238,21 @@ def test_a_lone_source_as_long_as_the_recording_is_cancelled_as_one_take(tmp_pat
     assert result.outputs == (output.resolve(),)
     assert output.is_file()
     assert next(event.key for event in events) == "stage_whole_recording"
+
+
+def test_a_lone_source_longer_than_the_recording_renders_its_clip(tmp_path: Path):
+    """A broadcast stage with an intro a fancam starts after is not the fancam itself."""
+    stage, source = _cancellation_inputs(tmp_path, seconds=1.0, source_seconds=4.0)
+    output = tmp_path / "excerpt.wav"
+    events: list[ProgressEvent] = []
+    run_isolation_job(
+        IsolationJob(stage, (source,), output, 100, 8, auto_align=False),
+        _matched(source, 1.0),
+        CancellationToken(),
+        events.append,
+    )
+    assert output.is_file()
+    assert next(event.key for event in events) == "stage_render_loading"
 
 
 def test_an_edited_timeline_decides_the_engine_itself(tmp_path: Path):

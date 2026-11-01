@@ -146,14 +146,17 @@ def _is_the_recordings_own_content(job: IsolationJob, analysis: StageAnalysis) -
     capture running at a different tempo is exactly what stops it placing the
     source, so it would hand the renderer a clip a few seconds out and lose
     depth the whole-file path keeps.  A source much shorter than the recording
-    is a song located inside a longer take, which only the matched clips handle.
+    is a song located inside a longer take, which only the matched clips handle;
+    one much longer carries content the recording does not, such as the intro
+    of a broadcast stage a fancam starts after, and the whole-file path's local
+    lag search cannot reach where the recording sits in it.
     """
     if len(job.sources) != 1:
         return False
     seconds = _source_seconds(job.sources[0])
     if seconds is None:
         return False
-    return seconds >= analysis.duration_seconds - _WHOLE_RECORDING_TOLERANCE_SECONDS
+    return abs(seconds - analysis.duration_seconds) <= _WHOLE_RECORDING_TOLERANCE_SECONDS
 
 
 def _timeline_was_edited(analysis: StageAnalysis) -> bool:

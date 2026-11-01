@@ -87,22 +87,37 @@ def _talk(rng: np.random.Generator, length: int) -> np.ndarray:
     )
 
 
-def _song(seconds: float, offset: float = 0.0, rate: float = 0.0, tail: float = 0.0) -> Scene:
+def _song(
+    seconds: float,
+    offset: float = 0.0,
+    rate: float = 0.0,
+    tail: float = 0.0,
+    intro: float = 0.0,
+) -> Scene:
     """A song at `offset` seconds into a recording, optionally followed by talk.
 
     `rate` is the capture's clock error: the stage plays the source 1+rate times
     faster, which is what makes a matcher misplace it and what the whole-file
-    path's own tempo search exists for.
+    path's own tempo search exists for.  `intro` is source the stage never
+    carried, the opening of a broadcast stage that a fancam starts after.
     """
-    rng = np.random.default_rng(int(seconds) + int(offset * 10) + int(rate * 1000))
+    rng = np.random.default_rng(
+        int(seconds) + int(offset * 10) + int(rate * 1000) + int(intro * 100)
+    )
     length = int(SR * seconds)
     lead = int(SR * offset)
     trailing = int(SR * tail)
-    reference = np.stack([_music(rng, length, (110.0, 220.0)), _music(rng, length, (110.0, 330.0))])
+    skipped = int(SR * intro)
+    reference = np.stack(
+        [
+            _music(rng, skipped + length, (110.0, 220.0)),
+            _music(rng, skipped + length, (110.0, 330.0)),
+        ]
+    )
     reference *= 0.25 / np.max(np.abs(reference))
-    index = np.arange(length) / (1.0 + rate)
+    index = skipped + np.arange(length) / (1.0 + rate)
     accompaniment = np.stack(
-        [0.9 * np.interp(index, np.arange(length), channel) for channel in reference]
+        [0.9 * np.interp(index, np.arange(reference.shape[1]), channel) for channel in reference]
     )
     center = _music(rng, length, (431.0, 862.0))
     live = np.stack([0.30 * center, 0.28 * center])
@@ -130,6 +145,8 @@ def _song(seconds: float, offset: float = 0.0, rate: float = 0.0, tail: float = 
         name += f"_drift_{rate * 100:g}pct"
     if tail:
         name += f"_tail_{tail:g}s"
+    if intro:
+        name += f"_after_{intro:g}s_intro"
     return Scene(
         name,
         np.concatenate(parts, axis=1),
@@ -148,6 +165,7 @@ SCENES: tuple[Callable[[], Scene], ...] = (
     lambda: _song(60.0, tail=60.0),
     lambda: _song(60.0, rate=0.004),
     lambda: _song(60.0, rate=0.01),
+    lambda: _song(60.0, intro=60.0),
 )
 
 
