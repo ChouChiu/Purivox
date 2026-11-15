@@ -354,3 +354,44 @@ def test_estimate_charges_for_the_synthesised_backing(reference_scene):
     )
     # The backing is rendered from the source, so it needs a buffer of its own.
     assert backing["peak_bytes"] > vocal["peak_bytes"]
+
+
+def _layered_tone(sample_rate: int, seconds: int, seed: int) -> np.ndarray:
+    """Three modulated tones, the shape the matcher's onset features can place."""
+    random = np.random.default_rng(seed)
+    frames = sample_rate * seconds
+    time = np.arange(frames) / sample_rate
+    signal = np.zeros(frames)
+    for frequency in (103 + seed * 7, 211 + seed * 11, 367 + seed * 13):
+        envelope = np.repeat(random.uniform(0.1, 1.0, seconds * 8), sample_rate // 8)
+        signal += envelope[:frames] * np.sin(
+            2 * np.pi * frequency * time + random.uniform(0, 2 * np.pi)
+        )
+    return np.stack([signal / 8] * 2, axis=1).astype(np.float32)
+
+
+def test_stacking_travels_in_the_request(tmp_path: Path):
+    """The page asks for stacked cancellation with a flag, not a second call."""
+    sample_rate = 8_000
+    first = _layered_tone(sample_rate, 6, 1)
+    second = _layered_tone(sample_rate, 6, 2)
+    stage = np.random.default_rng(9).normal(0, 0.01, (8 * sample_rate, 2)).astype(np.float32)
+    stage[sample_rate : 7 * sample_rate] += first + second
+    stage_path = _write(tmp_path / "stage.wav", stage, sample_rate)
+    first_path = _write(tmp_path / "first.wav", first, sample_rate)
+    second_path = _write(tmp_path / "second.wav", second, sample_rate)
+    request = {
+        "stage": str(stage_path),
+        "sources": [str(first_path), str(second_path)],
+        "output": str(tmp_path / "out.wav"),
+        "auto_align": False,
+    }
+
+    def songs(stack: bool) -> int:
+        timeline = bridge.analyze_stage(json.dumps(request | {"stack": stack}))
+        return sum(
+            1 for clip in json.loads(timeline)["analysis"]["clips"] if clip["kind"] == "song"
+        )
+
+    assert songs(stack=False) == 1
+    assert songs(stack=True) == 2

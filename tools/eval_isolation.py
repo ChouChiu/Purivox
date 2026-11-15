@@ -158,6 +158,32 @@ def _song(
     )
 
 
+def _spliced_song(gap: float, skipped: float) -> Scene:
+    scene = _song(60.0)
+    pivot = 24 * SR
+    resume = pivot + round(skipped * SR)
+    accompaniment = np.concatenate(
+        (
+            scene.accompaniment[:, :pivot],
+            np.zeros((2, round(gap * SR))),
+            scene.accompaniment[:, resume:],
+        ),
+        axis=1,
+    )
+    rng = np.random.default_rng(901)
+    center = _music(rng, accompaniment.shape[1], (431.0, 862.0))
+    live = np.stack([0.30 * center, 0.28 * center])
+    return Scene(
+        f"splice_gap_{gap:g}s_skip_{skipped:g}s",
+        live + accompaniment,
+        scene.reference,
+        live,
+        accompaniment,
+        slice(0, accompaniment.shape[1]),
+        accompaniment.shape[1] / SR,
+    )
+
+
 SCENES: tuple[Callable[[], Scene], ...] = (
     lambda: _song(60.0),
     lambda: _song(60.0, offset=3.0),
@@ -166,6 +192,10 @@ SCENES: tuple[Callable[[], Scene], ...] = (
     lambda: _song(60.0, rate=0.004),
     lambda: _song(60.0, rate=0.01),
     lambda: _song(60.0, intro=60.0),
+    lambda: _spliced_song(6.0, 0.0),
+    lambda: _spliced_song(0.0, 4.0),
+    lambda: _spliced_song(0.4, 0.0),
+    lambda: _spliced_song(6.0, 6.0),
 )
 
 

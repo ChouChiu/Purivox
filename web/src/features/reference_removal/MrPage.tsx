@@ -25,7 +25,7 @@ import type {
 } from "../../shared/runtime/types";
 import { useJob } from "../../shared/runtime/useJob";
 import { AudioSummary } from "../../shared/ui/AudioSummary";
-import { FilePicker } from "../../shared/ui/FilePicker";
+import { FilePicker, isAudioFile } from "../../shared/ui/FilePicker";
 import type { ResultTrack } from "../../shared/ui/ResultPanel";
 import { ResultPanel } from "../../shared/ui/ResultPanel";
 import { analyze, estimate, request } from "./job";
@@ -69,6 +69,7 @@ export function MrPage({ client, ready, active, onBind }: Props) {
 	const output = useOutputName();
 	const outputName = output.name;
 	const [strength, setStrength] = useState(DEFAULT_STRENGTH);
+	const [stack, setStack] = useState(false);
 	const [budget, setBudget] = useState<Estimate | null>(null);
 	const [preparing, setPreparing] = useState<string | null>(null);
 	const [notice, setNotice] = useState<string | null>(null);
@@ -117,6 +118,13 @@ export function MrPage({ client, ready, active, onBind }: Props) {
 	const addSources = useCallback(
 		async (files: File[]) => {
 			setProblem(null);
+			// A folder pick hands over everything in it, and `accept` does not
+			// filter a directory in every browser.
+			const usable = files.filter((file) => isAudioFile(file.name));
+			if (usable.length === 0) {
+				if (files.length > 0) setNotice(t("stage_folder_empty"));
+				return;
+			}
 			// A browser file has no path to compare, so name and size are the
 			// identity a repeated pick can be recognised by.
 			const seen = new Set(
@@ -125,7 +133,7 @@ export function MrPage({ client, ready, active, onBind }: Props) {
 			const added: PreparedFile[] = [];
 			let failed = false;
 			try {
-				for (const file of files) {
+				for (const file of usable) {
 					const key = `${file.name}:${file.size}`;
 					if (seen.has(key)) continue;
 					seen.add(key);
@@ -142,7 +150,7 @@ export function MrPage({ client, ready, active, onBind }: Props) {
 				setAnalysis(null);
 				setResult([]);
 				setNotice(null);
-			} else if (files.length > 0 && !failed) {
+			} else if (!failed) {
 				setNotice(t("source_already_added"));
 			}
 		},
@@ -182,8 +190,8 @@ export function MrPage({ client, ready, active, onBind }: Props) {
 	}, [client, sources, stage, tracks]);
 
 	const jobRequest = useCallback(
-		() => request(stage, sources, outputName, strength, tracks),
-		[outputName, sources, stage, strength, tracks],
+		() => request(stage, sources, outputName, strength, tracks, stack),
+		[outputName, sources, stack, stage, strength, tracks],
 	);
 
 	const run = useCallback(async () => {
@@ -372,6 +380,7 @@ export function MrPage({ client, ready, active, onBind }: Props) {
 			<ParametersCard
 				tracks={tracks}
 				strength={strength}
+				stack={stack}
 				budget={budget}
 				disabled={busy}
 				onTracks={(next) => {
@@ -380,6 +389,13 @@ export function MrPage({ client, ready, active, onBind }: Props) {
 					if (stage !== null && !output.typed) output.rename(stage, next);
 				}}
 				onStrength={setStrength}
+				onStack={(next) => {
+					setStack(next);
+					// Stacking decides which clips the matcher places, so the
+					// timeline on screen no longer describes this job.
+					setAnalysis(null);
+					setResult([]);
+				}}
 			/>
 
 			<StatusCard

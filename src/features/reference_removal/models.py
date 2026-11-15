@@ -111,6 +111,14 @@ class IsolationJob:
     sigma: int = DEFAULT_SIGMA
     auto_align: bool = True
     tracks: OutputTracks = OutputTracks.VOCAL
+    stack: bool = False
+    """Cancel every placement of every source, not only the best one per stretch.
+
+    A stage that played several backing tracks at once carries all of them over
+    the same stretch, and the matcher's one-source-per-stretch rule keeps only
+    the best-scoring one of them.  With this on, each placement is cancelled out
+    of what the previous ones left, which is the only way the rest comes out.
+    """
 
     def __post_init__(self) -> None:
         if not self.sources:

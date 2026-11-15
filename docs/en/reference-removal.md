@@ -167,13 +167,69 @@ with $T_{60}$ at three candidates, $0.4$, $1$ and $2\text{ s}$. Each cell keeps 
 
 ### Incoherent Power Path
 
-When high-frequency phase coherence collapses (e.g., complex coherence drops below $0.1$ above $500\text{ Hz}$), a parallel log-magnitude power regression is evaluated:
+Where phase correlation is weak, parallel regressions estimate source power and amplitude envelopes:
 
 $$
 P_y \approx g(f, n)\,P_x + c(f, n)
 $$
 
+The amplitude path fits $\sqrt{P_y} \approx a\sqrt{P_x}+b$ over the same statistical context, then squares the predicted amplitude $a\sqrt{P_x}$ to estimate power. This reduces the influence of loud transients and describes amplitude relationships retained when electronic sounds, modulation effects, or the capture chain decorrelate phase. Both regressions retain an intercept and remove only the part that follows the source. Each estimate is gated by its adjusted correlation before taking the larger credible power. Similar amplitude does not establish identical content; effects absent from the source and independent live vocals remain a limitation.
+
 With gain constrained to $g \ge 0$. Incoherent attenuation is capped by `_INCOHERENT_MAX_SHARE` and filtered across time (`_MASK_POWER_SMOOTH`) to prevent musical noise artifacts.
+
+### Difference (L-R) Masking
+
+A live vocal is usually one centre image on stage, while the playback arrives over a wide stereo
+PA carrying difference content the voice does not have. The residual's mid and side can therefore
+be masked separately: the mid keeps the shared mask described above, and the difference channel
+gets one supported only by its own evidence:
+
+$$
+M_\text{side} = \sqrt{\frac{\max(P_{e,\text{side}} - \rho_\text{side}P_{d,\text{side}},\ 0.05^2P_{e,\text{side}})}{P_{e,\text{side}} + \varepsilon}}
+$$
+
+where the residual side power is $P_{e,\text{side}} = |E_L - E_R|^2$ and the source side power is
+the same difference over the reference. The slope and its confidence come from the same
+intercept-carrying power regression and adjusted-correlation gate as every other power fit. The
+side mask only ever acts where it is stricter than the shared one, so a channel it has no evidence
+about comes out bit for bit as it did before. Each mask acts in its own basis before the two are
+rotated back: applying one side gain to both L and R is a mid gain, and it takes the live vocal
+with it.
+
+This is the Hafler matrix ($M = (L+R)/2$, $S = (L-R)/2$) used for vocal isolation, and the same
+mid/side reasoning behind centre/side processors such as Phamtom Center. Here it acts at the
+residual soft-mask stage, after the coherent subtraction: measured, it buys 0.1-1.0 dB of extra
+cancellation depth on the clock drift and hall scenes for about 1.7% more processing time.
+
+### Centre Extraction After Cancellation
+
+Once the cancellation is finished, a centre-extraction stage runs on the output, which is what
+phantom-centre plugins do. The criterion is the inter-channel coherence and balance of each
+time-frequency cell:
+
+$$
+M_\text{centre} = \left(\frac{\min(|L|,|R|)}{\max(|L|,|R|)}\right)^{-w/100} \cdot \frac{|L+R| - |L-R|}{|L+R|}
+$$
+
+The first term is the balance and the second expands to exactly $1 - \sqrt{(1-\rho)/(1+\rho)}$,
+where $\rho$ is the inter-channel coherence. $w$ is the width control (`_CENTRE_WIDTH`, $-50$); a
+negative value makes the balance term stricter and keeps more of a centre cell. The mask is
+smoothed over the same two passes the main mask gets, then scales the side while the mid is left
+alone.
+
+The stage only runs when the removal was the wide part of the capture: the removed content must be
+at least `_CENTRE_MIN_WIDTH_RATIO` times as wide as the output, and at least
+`_CENTRE_MIN_REMOVED_SHARE` of the output energy, so a removal that took almost nothing cannot
+produce a ratio out of noise. That gate is physical. Only when the content taken out is the wide
+one is the remainder worth purifying towards the centre; where the capture heard a mono PA the
+playback is the perfect phantom centre and the crowd is not, and extracting the centre there
+deletes the live voice. Measured, the ratio is 9.8-198x on the captures the stage helps and
+0.02-2.3x on the captures it does not.
+
+Measured against the coherent cancellation alone: rooms and halls gain 1.7-2.5 dB of extra depth,
+clock drift 1.4-1.5 dB (2.1-2.6 dB above 4 kHz), with live fidelity rising by the same small
+margin. The two-path PA, unrelated reference, reference-only word and phase-decorrelated scenes
+come out bit for bit unchanged.
 
 ### Literature and Industry Comparisons
 

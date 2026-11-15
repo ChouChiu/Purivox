@@ -140,8 +140,8 @@ def _source_seconds(path: Path) -> float | None:
 def _is_the_recordings_own_content(job: IsolationJob, analysis: StageAnalysis) -> bool:
     """Whether a lone source is the recording itself rather than a song inside it.
 
-    A source about as long as the recording is the single-song case this project
-    shipped first: the whole-file path aligns the two directly and corrects a
+    A single continuous match about as long as the recording is the single-song
+    case this project shipped first: the whole-file path aligns the two directly and corrects a
     clock difference between them.  Matching cannot stand in for that - a
     capture running at a different tempo is exactly what stops it placing the
     source, so it would hand the renderer a clip a few seconds out and lose
@@ -151,7 +151,7 @@ def _is_the_recordings_own_content(job: IsolationJob, analysis: StageAnalysis) -
     of a broadcast stage a fancam starts after, and the whole-file path's local
     lag search cannot reach where the recording sits in it.
     """
-    if len(job.sources) != 1:
+    if len(job.sources) != 1 or len(analysis.matched_clips) != 1:
         return False
     seconds = _source_seconds(job.sources[0])
     if seconds is None:
@@ -216,6 +216,10 @@ def run_isolation_job(
     `analysis` is the timeline the user checked.  It is rendered as it stands,
     because a timeline they edited is a decision: only an untouched one leaves
     the choice of engine to the geometry above.
+
+    A stacked job carries the timeline's overlapping clips through to the
+    renderer instead of stopping at the first conflict: a stage that played
+    several backing tracks at once carries all of them over the same stretch.
     """
     if analysis is None:
         analysis = analyze_stage(job, token, _scaled_progress(progress, 0, 25))
@@ -224,6 +228,11 @@ def run_isolation_job(
         if not edited and _is_the_recordings_own_content(job, analysis):
             logger.info("%s is the whole recording; cancelling it as one take", job.sources[0])
             return _cancel_as_a_whole(job, analysis, token, progress, "stage_whole_recording")
+        return render_stage_job(job, analysis, token, progress)
+    if job.stack:
+        # A stacked job cancels what was placed and leaves a source it could not
+        # place alone, which the timeline already lists as unmatched.  With
+        # nothing placed there is nothing to render, and the renderer says so.
         return render_stage_job(job, analysis, token, progress)
     if len(job.sources) > 1 or edited:
         # Several songs against one recording, or a timeline the user emptied,

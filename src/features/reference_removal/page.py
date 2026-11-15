@@ -20,6 +20,7 @@ from qfluentwidgets import (
     PrimaryPushButton,
     PushButton,
     Slider,
+    SwitchButton,
     TableView,
     TitleLabel,
 )
@@ -32,7 +33,7 @@ from features.reference_removal.models import (
 )
 from features.reference_removal.preview import AudioDataCard, PreviewCard
 from features.reference_removal.timeline_model import SOURCE, TimelineModel
-from shared.audio import AudioStats
+from shared.audio import AudioStats, audio_files_in
 from shared.config import cfg
 from shared.i18n import tr
 from shared.jobs import BACKING_MARKER, DEFAULT_STRENGTH, VOCAL_MARKER, OutputTracks
@@ -119,14 +120,22 @@ class MrPage(PageScrollArea):
         self.sources_card.layout.addWidget(self.sources)
         self.sources_empty = CaptionLabel()
         self.sources_card.layout.addWidget(self.sources_empty)
+        # Two rows: the two ways of adding a file do not fit one row at
+        # PORTRAIT width beside the actions that edit the list.
         source_actions = QHBoxLayout()
         self.add_sources = PushButton(FluentIcon.ADD, "")
-        self.download_sources = PushButton(FluentIcon.CLOUD_DOWNLOAD, "")
-        self.remove_source = PushButton(FluentIcon.DELETE, "")
-        for button in (self.add_sources, self.download_sources, self.remove_source):
+        self.add_folder = PushButton(FluentIcon.FOLDER_ADD, "")
+        for button in (self.add_sources, self.add_folder):
             source_actions.addWidget(button)
         source_actions.addStretch()
         self.sources_card.layout.addLayout(source_actions)
+        list_actions = QHBoxLayout()
+        self.download_sources = PushButton(FluentIcon.CLOUD_DOWNLOAD, "")
+        self.remove_source = PushButton(FluentIcon.DELETE, "")
+        for button in (self.download_sources, self.remove_source):
+            list_actions.addWidget(button)
+        list_actions.addStretch()
+        self.sources_card.layout.addLayout(list_actions)
         self.add_card(self.sources_card)
 
     def _build_parameters(self) -> None:
@@ -139,6 +148,11 @@ class MrPage(PageScrollArea):
         self.strength.setRange(0, 100)
         self.strength.setValue(DEFAULT_STRENGTH)
         self.parameters.add_row(self.strength_label, self.strength, self.strength_value)
+        self.stack_label, self.stack = BodyLabel(), SwitchButton()
+        self.parameters.add_row(self.stack_label, self.stack)
+        self.stack_hint = CaptionLabel()
+        self.stack_hint.setWordWrap(True)
+        self.parameters.layout.addWidget(self.stack_hint)
         self.add_card(self.parameters)
 
     def _build_status(self) -> None:
@@ -196,6 +210,7 @@ class MrPage(PageScrollArea):
         self.output_edit.textEdited.connect(self._output_edited)
         self.output_edit.editingFinished.connect(self.normalized_output_path)
         self.add_sources.clicked.connect(self._add_sources)
+        self.add_folder.clicked.connect(self._add_folder)
         self.download_sources.clicked.connect(lambda: self.download_requested.emit("sources"))
         self.remove_source.clicked.connect(self._remove_source)
         self.sources.currentRowChanged.connect(lambda _row: self._sync_sources())
@@ -204,6 +219,7 @@ class MrPage(PageScrollArea):
         self.cancel_button.clicked.connect(self.cancel_requested)
         self.strength.valueChanged.connect(lambda value: self.strength_value.setText(f"{value}%"))
         self.tracks.currentIndexChanged.connect(self._tracks_changed)
+        self.stack.checkedChanged.connect(self._stack_changed)
         self.timeline.selectionModel().currentChanged.connect(
             lambda _current, _previous: self._sync_timeline()
         )
@@ -242,11 +258,16 @@ class MrPage(PageScrollArea):
         self.sources_hint.setText(tr("stage_sources_hint"))
         self.sources_empty.setText(tr("warn_no_source"))
         self.add_sources.setText(tr("stage_add_sources"))
+        self.add_folder.setText(tr("stage_add_folder"))
         self.remove_source.setText(tr("stage_remove_source"))
         self.parameters.title_label.setText(tr("params"))
         self.tracks_label.setText(tr("output_tracks"))
         self._retranslate_tracks()
         self.strength_label.setText(tr("strength"))
+        self.stack_label.setText(tr("stage_stack"))
+        self.stack.setOnText(tr("switch_on"))
+        self.stack.setOffText(tr("switch_off"))
+        self.stack_hint.setText(tr("stage_stack_hint"))
         self.retranslate_status_card()
         self.cancel_button.setText(tr("cancel"))
         self.analyze_button.setText(tr("stage_analyze"))
@@ -273,10 +294,12 @@ class MrPage(PageScrollArea):
             self.output_button,
             self.output_edit,
             self.add_sources,
+            self.add_folder,
             self.download_sources,
             self.sources,
             self.tracks,
             self.strength,
+            self.stack,
             self.timeline,
         ):
             control.setEnabled(not running)
@@ -340,6 +363,27 @@ class MrPage(PageScrollArea):
         )
         self.add_source_paths(paths)
 
+    def _add_folder(self) -> None:
+        """Take every audio file under one folder, as one source set.
+
+        A folder is what a downloaded collection looks like, and adding it one
+        file at a time is the same list assembled by hand: the matcher places
+        each source by itself, so nothing depends on how they arrived.
+        """
+        directory = QFileDialog.getExistingDirectory(self, tr("stage_add_folder"))
+        if not directory:
+            return
+        found = audio_files_in(Path(directory))
+        if not found:
+            self.status.setText(tr("stage_folder_empty"))
+            return
+        before = self.sources.count()
+        self.add_source_paths([str(path) for path in found])
+        added = self.sources.count() - before
+        self.status.setText(
+            tr("stage_folder_added", count=added) if added else tr("source_already_added")
+        )
+
     def _remove_source(self) -> None:
         row = self.sources.currentRow()
         if row < 0:
@@ -358,6 +402,10 @@ class MrPage(PageScrollArea):
 
     def selected_tracks(self) -> OutputTracks:
         return OutputTracks(str(self.tracks.currentData() or OutputTracks.VOCAL.value))
+
+    def stacked(self) -> bool:
+        """Whether every placement is cancelled instead of one per stretch."""
+        return self.stack.isChecked()
 
     def _default_output_suffix(self) -> str:
         marker = BACKING_MARKER if self.selected_tracks() is OutputTracks.BACKING else VOCAL_MARKER
@@ -386,6 +434,12 @@ class MrPage(PageScrollArea):
         self.clear_result()
         if not self._output_user_edited:
             self._apply_default_output()
+
+    def _stack_changed(self, _checked: bool) -> None:
+        # Stacking changes which clips the matcher places, so the timeline on
+        # screen describes a job that is no longer the one about to start.
+        self.clear_result()
+        self.invalidate_analysis()
 
     def _select_output(self) -> None:
         path, _ = QFileDialog.getSaveFileName(

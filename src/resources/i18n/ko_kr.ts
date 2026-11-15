@@ -56,6 +56,14 @@
         <translation>보컬 추출 강도:</translation>
     </message>
     <message>
+        <source>stage_stack</source>
+        <translation>겹침 제거:</translation>
+    </message>
+    <message>
+        <source>stage_stack_hint</source>
+        <translation>같은 구간에 있는 모든 음원을 제거합니다. 가장 잘 맞는 하나만 제거하지 않으며, 여러 음원이 동시에 재생된 현장에 적합합니다.</translation>
+    </message>
+    <message>
         <source>status_group</source>
         <translation>처리 상태</translation>
     </message>
@@ -278,6 +286,18 @@
     <message>
         <source>stage_add_sources</source>
         <translation>곡 음원 추가</translation>
+    </message>
+    <message>
+        <source>stage_add_folder</source>
+        <translation>폴더 추가</translation>
+    </message>
+    <message>
+        <source>stage_folder_added</source>
+        <translation>폴더에서 음원 {count}개를 추가했습니다.</translation>
+    </message>
+    <message>
+        <source>stage_folder_empty</source>
+        <translation>이 폴더에는 사용할 수 있는 오디오 파일이 없습니다.</translation>
     </message>
     <message>
         <source>stage_remove_source</source>

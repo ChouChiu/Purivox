@@ -10,7 +10,26 @@ import { useCallback, useEffect, useRef } from "react";
 import { useLanguage } from "../i18n/context";
 
 /** Every container libsndfile reads, plus what the browser decoder covers. */
-export const AUDIO_ACCEPT = ".wav,.flac,.mp3,.m4a,.ogg,.opus,audio/*";
+export const AUDIO_EXTENSIONS = [
+	".wav",
+	".flac",
+	".mp3",
+	".m4a",
+	".ogg",
+	".opus",
+];
+export const AUDIO_ACCEPT = [...AUDIO_EXTENSIONS, "audio/*"].join(",");
+
+/**
+ * Whether a picked file is one the pipeline can open.
+ *
+ * A folder pick hands over everything in it - cover art, playlists, `.part`
+ * files - and `accept` does not filter a directory in every browser.
+ */
+export function isAudioFile(name: string): boolean {
+	const lower = name.toLowerCase();
+	return AUDIO_EXTENSIONS.some((suffix) => lower.endsWith(suffix));
+}
 
 const useStyles = makeStyles({
 	row: {
@@ -42,6 +61,10 @@ interface Props {
 	hint?: string;
 	value: string | null;
 	multiple?: boolean;
+	/** Pick a folder instead of files: every file in it arrives at once. */
+	directory?: boolean;
+	/** What the row reads when nothing has been picked yet. */
+	placeholder?: string;
 	disabled?: boolean;
 	onPick(files: File[]): void;
 	/** Hand the caller a way to open this picker, for the Ctrl+O shortcut. */
@@ -55,6 +78,8 @@ export function FilePicker({
 	hint,
 	value,
 	multiple,
+	directory,
+	placeholder,
 	disabled,
 	onPick,
 	registerOpen,
@@ -66,6 +91,13 @@ export function FilePicker({
 	const open = useCallback(() => input.current?.click(), []);
 
 	useEffect(() => registerOpen?.(open), [open, registerOpen]);
+	useEffect(() => {
+		if (!directory) return;
+		// React has no typed property for these, and prefixing the attribute is
+		// what makes a file input hand over a whole folder.
+		input.current?.setAttribute("webkitdirectory", "");
+		input.current?.setAttribute("directory", "");
+	}, [directory]);
 
 	return (
 		<Field label={label} hint={hint}>
@@ -75,7 +107,7 @@ export function FilePicker({
 				</Button>
 				<div className={styles.chosen}>
 					<Text className={styles.name} title={value ?? undefined}>
-						{value ?? t("file_select")}
+						{value ?? placeholder ?? t("file_select")}
 					</Text>
 					{detail}
 				</div>

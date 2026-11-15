@@ -28,6 +28,26 @@ DEFAULT_BIT_DEPTH = 24
 BLOCK_FRAMES = 262_144
 # Container suffixes the file dialogs offer and the decoders accept.
 AUDIO_EXTENSIONS = (".wav", ".flac", ".mp3", ".m4a", ".ogg", ".opus", ".webm")
+
+
+def audio_files_in(directory: Path) -> tuple[Path, ...]:
+    """Every audio file under one folder, sorted, for adding a library at once.
+
+    The scan is recursive because a collection is seldom flat, and it keeps the
+    suffixes the file dialogs offer: a folder of songs also holds cover art,
+    playlists and half-written downloads, and none of those is a source.  An
+    unreadable subfolder is skipped rather than failing the whole add - a
+    library under a home directory often has one.
+    """
+    found: list[Path] = []
+    for root, _directories, names in os.walk(directory, onerror=lambda _error: None):
+        for name in names:
+            path = Path(root, name)
+            if path.suffix.lower() in AUDIO_EXTENSIONS:
+                found.append(path.resolve())
+    return tuple(sorted(found))
+
+
 # A temporary mapping is how a long recording stays off the heap - where there
 # is a disk under it.  Emscripten's filesystem holds a file's bytes in the same
 # tab's memory, in an array its `mmap` cannot alias into the wasm heap, so a

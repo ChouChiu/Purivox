@@ -56,6 +56,14 @@
         <translation>垫音消除强度:</translation>
     </message>
     <message>
+        <source>stage_stack</source>
+        <translation>多音源叠消:</translation>
+    </message>
+    <message>
+        <source>stage_stack_hint</source>
+        <translation>开启后，同一段时间里的所有音源都会被消除，而不只留下匹配度最高的那一路；用于现场同时播放多轨垫音的情况。</translation>
+    </message>
+    <message>
         <source>status_group</source>
         <translation>处理状态</translation>
     </message>
@@ -278,6 +286,18 @@
     <message>
         <source>stage_add_sources</source>
         <translation>添加歌曲音源</translation>
+    </message>
+    <message>
+        <source>stage_add_folder</source>
+        <translation>添加文件夹</translation>
+    </message>
+    <message>
+        <source>stage_folder_added</source>
+        <translation>已从文件夹加入 {count} 个音源。</translation>
+    </message>
+    <message>
+        <source>stage_folder_empty</source>
+        <translation>该文件夹里没有可用的音频文件。</translation>
     </message>
     <message>
         <source>stage_remove_source</source>

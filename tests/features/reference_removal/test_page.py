@@ -5,11 +5,12 @@ from pathlib import Path
 import numpy as np
 import soundfile as sf
 from PySide6.QtCore import QItemSelectionModel, QSize
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QFileDialog
 
 from features.reference_removal import ClipKind, StageAnalysis, TimelineClip
 from features.reference_removal.page import MrPage
 from shared.audio import AudioStats
+from shared.i18n import tr
 from shared.jobs import OutputTracks
 from shared.ui import layout_metrics
 
@@ -219,25 +220,40 @@ def test_a_result_enables_the_preview_and_fills_the_audio_data(qtbot, tmp_path: 
     assert not page.audio_data.isVisible()
 
 
-def test_a_long_output_path_does_not_widen_the_page(qtbot, tmp_path: Path):
+def _page_width(qtbot, output: str, status: str, preview: str) -> int:
+    """The width a page asks for after it has been shown with this text.
+
+    A page is measured from a fresh one every time: the lanes keep the sum they
+    were first asked for, and an edit made after a page has been laid out hands
+    the lanes a second question they answer against that first sum, which says
+    nothing about the text.  Two pages built the same way differ only in what
+    they hold.
+    """
     page = MrPage()
     qtbot.addWidget(page)
     page.resize(800, 700)
     page.show()
     qtbot.waitExposed(page)
     page.retranslate()
+    page.output_edit.setText(output)
+    page.status.setText(status)
+    page.preview.status.setText(preview)
     QApplication.processEvents()
-    baseline = page.content.sizeHint().width()
+    return page.content.sizeHint().width()
+
+
+def test_a_long_output_path_does_not_widen_the_page(qtbot, tmp_path: Path):
     long_path = tmp_path.joinpath(*(["very-long-directory-name"] * 40), "result.wav")
 
-    page.output_edit.setText(str(long_path))
-    page.status.setText(f"处理完成! 文件已保存到: {long_path}")
-    page.preview.status.setText("very-long-output-name-" * 80 + ".wav")
-    page.content.layout().invalidate()
-    page.content.layout().activate()
-    QApplication.processEvents()
+    short = _page_width(qtbot, "/tmp/result.wav", tr("ready"), tr("preview_empty"))
+    long = _page_width(
+        qtbot,
+        str(long_path),
+        tr("done_status", path=long_path),
+        f"{'very-long-output-name-' * 80}.wav",
+    )
 
-    assert page.content.sizeHint().width() <= baseline
+    assert long <= short
 
 
 def test_the_audio_data_tiles_reflow_with_the_window(qtbot):
@@ -267,3 +283,55 @@ def test_a_short_window_gives_the_stage_panes_less_height(qtbot):
     page.apply_layout(layout_metrics(QSize(1280, 500)))
 
     assert (page.sources.minimumHeight(), page.timeline.minimumHeight()) < tall
+
+
+def test_stacking_discards_a_timeline_matched_the_other_way(qtbot, tmp_path: Path):
+    """Stacking changes which clips the matcher places, so the table goes."""
+    page = _page(qtbot)
+    source = (tmp_path / "song.wav").resolve()
+    page.add_source_paths([str(source)])
+    page.set_analysis(StageAnalysis(30.0, (_song(source, 0.0, 20.0),)))
+
+    assert not page.stacked()
+    page.stack.setChecked(True)
+
+    assert page.stacked()
+    assert page.analysis is None
+
+
+def _folder(monkeypatch, directory: Path) -> None:
+    monkeypatch.setattr(QFileDialog, "getExistingDirectory", lambda *_args: str(directory))
+
+
+def test_a_folder_of_sources_arrives_as_one_list(qtbot, tmp_path: Path, monkeypatch):
+    """A downloaded collection is added the way a file dialog would add it."""
+    folder = tmp_path / "library"
+    (folder / "disc 2").mkdir(parents=True)
+    for name in ("b.wav", "a.flac", "cover.jpg"):
+        (folder / name).write_bytes(b"")
+    (folder / "disc 2" / "live c.mp3").write_bytes(b"")
+    _folder(monkeypatch, folder)
+    page = _page(qtbot)
+
+    page._add_folder()
+
+    # Sorted by path, so the folder's own files come before its subfolder's.
+    assert [path.name for path in page.source_paths()] == ["a.flac", "b.wav", "live c.mp3"]
+    assert page.status.text() == tr("stage_folder_added", count=3)
+
+    page._add_folder()
+    assert len(page.source_paths()) == 3
+    assert page.status.text() == tr("source_already_added")
+
+
+def test_a_folder_without_audio_says_so(qtbot, tmp_path: Path, monkeypatch):
+    folder = tmp_path / "pictures"
+    folder.mkdir()
+    (folder / "cover.jpg").write_bytes(b"")
+    _folder(monkeypatch, folder)
+    page = _page(qtbot)
+
+    page._add_folder()
+
+    assert page.source_paths() == ()
+    assert page.status.text() == tr("stage_folder_empty")

@@ -326,6 +326,7 @@ class MainWindow(FluentWindow):
                 output=output,
                 strength=self.mr.strength.value(),
                 tracks=tracks,
+                stack=self.mr.stacked(),
             )
         except ValueError:
             self._warning("warn_invalid_parameters")

@@ -190,3 +190,66 @@ def test_edit_clip_changes_one_clip_and_keeps_the_rest():
 def test_edit_clip_refuses_what_the_timeline_cannot_hold(index, change, error):
     with pytest.raises(error):
         edit_clip(_edited_timeline(Path("/work/song.wav")), index, **change)
+
+
+@pytest.mark.parametrize("gap,skipped", [(6.0, 0.0), (0.0, 4.0), (0.4, 0.0), (4.0, 4.0)])
+def test_spliced_source_is_matched_again_after_a_discontinuity(tmp_path: Path, gap, skipped):
+    sample_rate = 8_000
+    source = _source(sample_rate, 48, 17)
+    pivot = 20 * sample_rate
+    resume = pivot + round(skipped * sample_rate)
+    pause = np.random.default_rng(51).normal(0, 0.03, (round(gap * sample_rate), 2))
+    stage = np.concatenate((source[:pivot], pause, source[resume:]))
+    stage_path, source_path = tmp_path / "stage.wav", tmp_path / "source.wav"
+    sf.write(stage_path, stage, sample_rate)
+    sf.write(source_path, source, sample_rate)
+    analysis = analyze_stage(
+        IsolationJob(stage_path, (source_path,), tmp_path / "output.wav"), CancellationToken()
+    )
+    for stage_time, source_time in [(8.0, 8.0), (32.0 + gap - skipped, 32.0)]:
+        clips = [c for c in analysis.matched_clips if c.stage_start <= stage_time < c.stage_end]
+        assert len(clips) == 1
+        clip = clips[0]
+        assert clip.source_start + (stage_time - clip.stage_start) / clip.speed == pytest.approx(
+            source_time, abs=0.2
+        )
+    if gap >= 4.0:
+        assert any(
+            c.kind is ClipKind.UNMATCHED and c.stage_start <= 22.0 < c.stage_end
+            for c in analysis.clips
+        )
+
+
+def _layered_stage(tmp_path: Path) -> tuple[Path, Path, Path]:
+    """One stage stretch carrying two different sources at the same time."""
+    sample_rate = 8_000
+    first = _source(sample_rate, 10, 1)
+    second = _source(sample_rate, 10, 2)
+    stage = np.random.default_rng(21).normal(0, 0.01, (14 * sample_rate, 2)).astype(np.float32)
+    stage[2 * sample_rate : 12 * sample_rate] += first + second
+    stage_path = tmp_path / "stage.wav"
+    first_path = tmp_path / "first.wav"
+    second_path = tmp_path / "second.wav"
+    sf.write(stage_path, stage, sample_rate)
+    sf.write(first_path, first, sample_rate)
+    sf.write(second_path, second, sample_rate)
+    return stage_path, first_path, second_path
+
+
+def test_stacking_keeps_the_second_source_that_covers_the_same_stretch(tmp_path: Path):
+    """A stage that layered two sources has both, not only the better-scoring one."""
+    stage, first, second = _layered_stage(tmp_path)
+    output = tmp_path / "output.wav"
+
+    plain = analyze_stage(IsolationJob(stage, (first, second), output), CancellationToken())
+    assert len(plain.song_clips) == 1
+    assert plain.missing_sources
+
+    stacked = analyze_stage(
+        IsolationJob(stage, (first, second), output, stack=True), CancellationToken()
+    )
+    assert {clip.source for clip in stacked.song_clips} == {first.resolve(), second.resolve()}
+    assert not stacked.missing_sources
+    for clip in stacked.song_clips:
+        assert clip.stage_start == pytest.approx(2.0, abs=0.3)
+        assert clip.stage_end == pytest.approx(12.0, abs=0.5)

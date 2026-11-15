@@ -333,3 +333,64 @@ def test_each_pipeline_reports_into_its_own_band_of_the_bar():
     report(ProgressEvent(100, "done"))
     assert [event.value for event in seen] == [25, 63, 100]
     assert [event.message for event in seen] == ["start", "half", "done"]
+
+
+def test_equal_duration_sources_still_render_a_split_timeline(tmp_path: Path):
+    stage, source = _cancellation_inputs(tmp_path, seconds=12)
+    analysis = StageAnalysis(
+        12.0,
+        (
+            TimelineClip(ClipKind.SONG, 0, 4, source, 0, 0, 4, 0.9),
+            TimelineClip(ClipKind.UNMATCHED, 4, 8),
+            TimelineClip(ClipKind.SONG, 8, 12, source, 0, 8, 12, 0.9),
+        ),
+    )
+    output = tmp_path / "split.wav"
+    result = run_isolation_job(
+        IsolationJob(stage, (source,), output, 100, 8, auto_align=False),
+        analysis,
+        CancellationToken(),
+    )
+    original, rate = sf.read(stage)
+    rendered, _ = sf.read(result.outputs[0])
+    np.testing.assert_array_equal(rendered[4 * rate : 8 * rate], original[4 * rate : 8 * rate])
+    assert np.mean(rendered[rate : 3 * rate] ** 2) < np.mean(original[rate : 3 * rate] ** 2)
+
+
+def test_a_stacked_job_cancels_what_matched_and_lists_the_rest(tmp_path: Path):
+    """A source the matcher could not place must not take the job down with it."""
+    stage, source = _cancellation_inputs(tmp_path, seconds=4.0)
+    unrelated = tmp_path / "unrelated.wav"
+    sf.write(unrelated, np.random.default_rng(3).normal(0, 0.05, (2 * 8_000, 2)), 8_000)
+    analysis = StageAnalysis(
+        4.0,
+        (
+            TimelineClip(ClipKind.SONG, 0.0, 1.0, source.resolve(), 0, 0.0, 1.0, 0.9),
+            TimelineClip(ClipKind.UNMATCHED, 1.0, 4.0),
+        ),
+        missing_sources=(unrelated.resolve(),),
+    )
+    output = tmp_path / "stacked.wav"
+
+    result = run_isolation_job(
+        IsolationJob(stage, (source, unrelated), output, 100, 8, auto_align=False, stack=True),
+        analysis,
+        CancellationToken(),
+    )
+
+    assert result.outputs == (output.resolve(),)
+    assert output.is_file()
+
+
+def test_a_stacked_job_with_nothing_placed_still_says_so(tmp_path: Path):
+    stage, source = _cancellation_inputs(tmp_path)
+    other = tmp_path / "other.wav"
+    other.write_bytes(source.read_bytes())
+    with pytest.raises(ValueError, match="no source could be matched"):
+        run_isolation_job(
+            IsolationJob(
+                stage, (source, other), tmp_path / "out.wav", 100, 8, auto_align=False, stack=True
+            ),
+            _unmatched(1.0),
+            CancellationToken(),
+        )

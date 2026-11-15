@@ -56,6 +56,14 @@
         <translation>墊音消除強度:</translation>
     </message>
     <message>
+        <source>stage_stack</source>
+        <translation>多音源疊消:</translation>
+    </message>
+    <message>
+        <source>stage_stack_hint</source>
+        <translation>開啟後，同一段時間裡的所有音源都會被消除，而不只留下匹配度最高的那一路；用於現場同時播放多軌墊音的情況。</translation>
+    </message>
+    <message>
         <source>status_group</source>
         <translation>處理狀態</translation>
     </message>
@@ -278,6 +286,18 @@
     <message>
         <source>stage_add_sources</source>
         <translation>加入歌曲音源</translation>
+    </message>
+    <message>
+        <source>stage_add_folder</source>
+        <translation>加入資料夾</translation>
+    </message>
+    <message>
+        <source>stage_folder_added</source>
+        <translation>已從資料夾加入 {count} 個音源。</translation>
+    </message>
+    <message>
+        <source>stage_folder_empty</source>
+        <translation>該資料夾裡沒有可用的音訊檔案。</translation>
     </message>
     <message>
         <source>stage_remove_source</source>

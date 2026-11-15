@@ -5,6 +5,8 @@ import {
 	makeStyles,
 	Select,
 	Slider,
+	Switch,
+	Text,
 	Title3,
 	tokens,
 } from "@fluentui/react-components";
@@ -25,25 +27,39 @@ const useStyles = makeStyles({
 		flexDirection: "column",
 		gap: tokens.spacingVerticalM,
 	},
+	// The hint sits under the switch it explains, not beside it: a Fluent
+	// switch lays its own label out inline, so the column is stated here.
+	stack: {
+		display: "flex",
+		flexDirection: "column",
+		alignItems: "flex-start",
+		gap: tokens.spacingVerticalXS,
+	},
+	hint: { color: tokens.colorNeutralForeground3 },
 });
 
 interface Props {
 	tracks: OutputTracks;
 	strength: number;
+	/** Cancel every placement, not only the best-scoring one per stretch. */
+	stack: boolean;
 	/** What the job would cost against the tab's memory, once there are inputs. */
 	budget: Estimate | null;
 	disabled: boolean;
 	onTracks(tracks: OutputTracks): void;
 	onStrength(strength: number): void;
+	onStack(stack: boolean): void;
 }
 
 export function ParametersCard({
 	tracks,
 	strength,
+	stack,
 	budget,
 	disabled,
 	onTracks,
 	onStrength,
+	onStack,
 }: Props) {
 	const styles = useStyles();
 	const { t } = useLanguage();
@@ -73,6 +89,17 @@ export function ParametersCard({
 					onChange={(_event, data) => onStrength(data.value)}
 				/>
 			</Field>
+			<div className={styles.stack}>
+				<Switch
+					checked={stack}
+					label={t("stage_stack")}
+					disabled={disabled}
+					onChange={(_event, data) => onStack(data.checked)}
+				/>
+				<Text size={200} className={styles.hint}>
+					{t("stage_stack_hint")}
+				</Text>
+			</div>
 			<MemoryNotice estimate={budget} />
 		</Card>
 	);

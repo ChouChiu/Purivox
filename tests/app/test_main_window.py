@@ -103,6 +103,7 @@ def test_start_hands_the_page_settings_to_the_pipeline(
 ):
     _fill(window, tmp_path, "live.wav", ["a.wav", "b.wav"], "out.wav")
     window.mr.strength.setValue(60)
+    window.mr.stack.setChecked(True)
     started = []
     monkeypatch.setattr(window.jobs, "start", lambda page, operation: started.append(operation))
 
@@ -112,8 +113,9 @@ def test_start_hands_the_page_settings_to_the_pipeline(
     job, analysis = operation.args
     assert job.sources == ((tmp_path / "a.wav").resolve(), (tmp_path / "b.wav").resolve())
     assert job.output == (tmp_path / "out.wav").resolve()
-    assert (job.strength, job.sigma, job.auto_align) == (60, 3, True)
+    assert (job.strength, job.sigma, job.auto_align) == (60, 1, True)
     assert job.tracks is OutputTracks.VOCAL
+    assert job.stack, "the switch the page shows is the mode the job runs"
     assert analysis is None, "a job with no analysis matches before it renders"
 
 

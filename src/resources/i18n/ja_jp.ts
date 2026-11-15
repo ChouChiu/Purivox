@@ -56,6 +56,14 @@
         <translation>ボーカル抽出強度:</translation>
     </message>
     <message>
+        <source>stage_stack</source>
+        <translation>重ね消し:</translation>
+    </message>
+    <message>
+        <source>stage_stack_hint</source>
+        <translation>同じ区間にある音源をすべて消去します（最も一致する 1 つだけではありません）。複数の音源が同時に流れた現場向けです。</translation>
+    </message>
+    <message>
         <source>status_group</source>
         <translation>処理状態</translation>
     </message>
@@ -278,6 +286,18 @@
     <message>
         <source>stage_add_sources</source>
         <translation>楽曲音源を追加</translation>
+    </message>
+    <message>
+        <source>stage_add_folder</source>
+        <translation>フォルダーを追加</translation>
+    </message>
+    <message>
+        <source>stage_folder_added</source>
+        <translation>フォルダーから音源 {count} 件を追加しました。</translation>
+    </message>
+    <message>
+        <source>stage_folder_empty</source>
+        <translation>このフォルダーには使える音声ファイルがありません。</translation>
     </message>
     <message>
         <source>stage_remove_source</source>

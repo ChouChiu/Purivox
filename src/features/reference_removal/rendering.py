@@ -22,17 +22,32 @@ from shared.progress import report_progress
 logger = logging.getLogger(__name__)
 
 
-def _blend_segment(destination: np.ndarray, processed: np.ndarray, sample_rate: int) -> None:
-    length = destination.shape[1]
+def _edge_window(length: int, sample_rate: int) -> np.ndarray:
+    """A 50 ms ramp at both ends of a segment, so a seam is not a click."""
+    weight = np.ones(length, dtype=np.float32)
     fade = min(max(round(0.05 * sample_rate), 1), length // 2)
     if fade <= 0:
-        destination[:] = processed
-        return
-    weight = np.ones(length, dtype=np.float32)
+        return weight
     weight[:fade] = np.linspace(0.0, 1.0, fade, endpoint=False, dtype=np.float32)
     weight[-fade:] = np.linspace(1.0, 0.0, fade, endpoint=False, dtype=np.float32)
+    return weight
+
+
+def _blend_segment(destination: np.ndarray, processed: np.ndarray, sample_rate: int) -> None:
+    weight = _edge_window(destination.shape[1], sample_rate)
     destination *= 1.0 - weight
     destination += processed * weight
+
+
+def _accumulate_segment(destination: np.ndarray, processed: np.ndarray, sample_rate: int) -> None:
+    """Add a rendered segment to what is already there, under the same ramp.
+
+    The backing track of a stacked job holds every source the playback carried,
+    so where two clips cover one stretch their renderings are summed rather than
+    the later one replacing the earlier.  On a silent range this is what a blend
+    does anyway, which is why a job that does not stack keeps the blend.
+    """
+    destination += processed * _edge_window(destination.shape[1], sample_rate)
 
 
 def _placed_source(
@@ -78,12 +93,17 @@ def _render_clip(
     backing: AudioData | None,
     token: CancellationToken,
 ) -> None:
-    """Cancel one clip's source out of its stretch of the stage, in place."""
+    """Cancel one clip's source out of its stretch of the stage, in place.
+
+    A stacked job cancels each placement out of what the previous clips left, so
+    its mix is the render's own buffer; without stacking the clips do not
+    overlap and that buffer still holds the untouched recording.
+    """
     rate = stage.sample_rate
     stage_start = round(clip.stage_start * rate)
     stage_end = min(stage.frames, round(clip.stage_end * rate))
     length = stage_end - stage_start
-    stage_slice = stage.samples[:, stage_start:stage_end]
+    mix = (output if job.stack else stage).samples[:, stage_start:stage_end]
     with ExitStack() as owned:
         reference = conform_rate(read_audio(clip.source, token).stereo(), rate, token)
         owned.callback(reference.cleanup)
@@ -103,7 +123,7 @@ def _render_clip(
         aligned = source_values
         if job.auto_align:
             aligned = _placed_source(
-                stage_slice, source_values, rate, clip.source.name, token, aligned_audio.samples
+                mix, source_values, rate, clip.source.name, token, aligned_audio.samples
             )
         if aligned is not aligned_audio.samples:
             aligned_audio.samples.fill(0.0)
@@ -116,7 +136,7 @@ def _render_clip(
             else None
         )
         process_audio(
-            stage_slice,
+            mix,
             aligned_audio.samples,
             rate,
             job.strength / 100.0,
@@ -127,9 +147,8 @@ def _render_clip(
         )
         _blend_segment(output.samples[:, stage_start:stage_end], processed.samples, rate)
         if processed_backing is not None:
-            _blend_segment(
-                backing.samples[:, stage_start:stage_end], processed_backing.samples, rate
-            )
+            write = _accumulate_segment if job.stack else _blend_segment
+            write(backing.samples[:, stage_start:stage_end], processed_backing.samples, rate)
 
 
 def render_stage_job(
@@ -139,10 +158,11 @@ def render_stage_job(
     progress: ProgressCallback = lambda _event: None,
 ) -> IsolationResult:
     logger.info(
-        "stage render settings: strength=%d sigma=%d auto_align=%s",
+        "stage render settings: strength=%d sigma=%d auto_align=%s stack=%s",
         job.strength,
         job.sigma,
         job.auto_align,
+        job.stack,
     )
     matched = analysis.matched_clips
     if not matched:

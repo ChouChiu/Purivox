@@ -4,7 +4,7 @@ from enum import StrEnum
 from pathlib import Path
 
 SIGMA_CHOICES: tuple[int, ...] = (1, 3, 8, 16)
-DEFAULT_SIGMA = 3
+DEFAULT_SIGMA = 1
 STRENGTH_MINIMUM = 0
 STRENGTH_MAXIMUM = 100
 STRENGTH_RANGE = range(STRENGTH_MINIMUM, STRENGTH_MAXIMUM + 1)

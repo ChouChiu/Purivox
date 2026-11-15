@@ -9,7 +9,9 @@
 Purivox is a reference-guided vocal isolation and backing cancellation tool designed for stage and live recordings. It is available as both a desktop application and a client-side WebAssembly web application, built with Python, PySide6, and PySide6-Fluent-Widgets. The core reference cancellation workflow takes a stage or live recording along with one or more reference song audio tracks:
 
 - **Single Reference**: Automatically aligns and cancels the reference track. When the reference track and recording have comparable durations, global tempo and clock-drift corrections are applied over the full file; when the reference covers only a section, cancellation is performed within the matched segment.
+- **Cuts and Insertions**: Matches each continuous section of a source separately, recovering its position after stalls, cuts, or dancebreaks. Intervals without a credible match retain the original live audio.
 - **Multiple References**: Automatically identifies and locates candidate songs within the recording, rendering cancellation separately for each matched segment. Input file order does not affect matching.
+- **Stacked Cancellation**: With *Cancel every source* on, every source over the same stretch is cancelled layer by layer instead of only the best-scoring one, which is what a stage that played several backing tracks at once needs. A source that could not be matched is listed as unidentified and does not stop the rest.
 
 Reference cancellation subtracts only the playback components that can be explained by the reference audio. It preserves live vocals, stage speech, audience reactions, and room acoustics that are absent from the studio reference. Performance depends on reference quality: severe clipping, heavy venue reverberation, differing musical arrangements, or mismatched song versions will degrade cancellation depth.
 
@@ -64,11 +66,12 @@ uv run --locked purivox
 ### Vocal Isolation
 
 1. Open the **Vocal Isolation** page and select the stage or live recording.
-2. Add reference song tracks. A single track can be processed directly; multiple tracks are automatically matched across the recording.
+2. Add reference song tracks. A single track can be processed directly; multiple tracks are automatically matched across the recording. Pick several files at once, or use **Add folder** to bring in a whole directory (subfolders included) - cover art and playlists in it are skipped.
 3. For multiple tracks, click **Find songs** to inspect detected full songs, short segments, unassigned regions, and confidence scores.
 4. Verify the timeline. Double-click entries to adjust timestamps or source ranges, or uncheck clips to skip them.
 5. In **Export Options**, choose which stems to output: isolated live vocal, backing track, or both. The backing track is rendered from the reference track through the estimated transfer function, preserving studio reference quality while reflecting stage frequency response and levels.
-6. Adjust the removal strength and start processing. If live vocals sound thin or show audible pumping, reduce the strength setting or verify the reference track match.
+6. If the stage played several backing tracks at once (an instrumental under extra harmony or guide-vocal tracks), turn on **Cancel every source**: every source over one stretch is cancelled in turn instead of only the best-scoring one. Switching it discards the timeline, so run **Find songs** again.
+7. Adjust the removal strength and start processing. If live vocals sound thin or show audible pumping, reduce the strength setting or verify the reference track match.
 
 > **Note**: Use reference tracks that match the live arrangement as closely as possible. Pitch shifts, tempo variations, or modified edits reduce cancellation performance. Unmatched intervals retain the original live audio without truncation.
 
@@ -113,8 +116,9 @@ Options:
 | Option | Values | Description |
 |---|---:|---|
 | `--strength` | `0`–`100` | Cancellation strength (default: `75`) |
-| `--sigma` | `1`, `3`, `8`, `16` | Smoothing window in seconds (default: `3`) |
+| `--sigma` | `1`, `3`, `8`, `16` | Smoothing window in seconds (default: `1`) |
 | `--align` / `--no-align` | Flag | Automatic alignment and drift correction (default: enabled) |
+| `--stack` / `--no-stack` | Flag | Cancel every source over a stretch, not only the best-scoring one (default: off) |
 | `--tracks` | `vocal`, `backing`, `both` | Tracks to export (default: `vocal`) |
 | `--lang` | `zh_cn`, `zh_tw`, `en_us`, `ja_jp`, `ko_kr` | Output progress language |
 

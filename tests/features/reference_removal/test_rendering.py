@@ -140,3 +140,67 @@ def test_backing_export_is_silent_where_nothing_was_cancelled(tmp_path: Path):
     source_song = slice(sample_rate, 3 * sample_rate)
     assert np.max(np.abs(backing[song])) > 0.01
     assert np.corrcoef(backing[song].ravel(), reference[source_song].ravel())[0, 1] > 0.99
+
+
+def _layered_clips(tmp_path: Path) -> tuple[Path, Path, Path, StageAnalysis]:
+    """Four seconds of stage carrying two sources over the same stretch."""
+    sample_rate = 8_000
+    first = _source(sample_rate, 4, 7)
+    second = _source(sample_rate, 4, 11)
+    stage_path = tmp_path / "stage.wav"
+    first_path = tmp_path / "first.wav"
+    second_path = tmp_path / "second.wav"
+    sf.write(stage_path, first + second, sample_rate, subtype="PCM_24")
+    sf.write(first_path, first, sample_rate, subtype="PCM_24")
+    sf.write(second_path, second, sample_rate, subtype="PCM_24")
+    analysis = StageAnalysis(
+        4.0,
+        (
+            TimelineClip(ClipKind.SONG, 0.0, 4.0, first_path.resolve(), 0, 0.0, 4.0, 0.9),
+            TimelineClip(ClipKind.SONG, 0.0, 4.0, second_path.resolve(), 1, 0.0, 4.0, 0.8),
+        ),
+    )
+    return stage_path, first_path, second_path, analysis
+
+
+def test_stacked_clips_are_cancelled_out_of_what_the_others_left(tmp_path: Path):
+    """Two layers over one stretch: the second cancels the first's residual."""
+    stage_path, first_path, second_path, analysis = _layered_clips(tmp_path)
+    rendered: dict[bool, np.ndarray] = {}
+    for stack in (False, True):
+        output = tmp_path / f"stacked-{stack}.wav"
+        render_stage_job(
+            IsolationJob(stage_path, (first_path, second_path), output, 100, 1, stack=stack),
+            analysis,
+            CancellationToken(),
+        )
+        rendered[stack], _ = sf.read(output, always_2d=True, dtype="float32")
+    body = slice(1_000, -1_000)
+    plain = float(np.mean(rendered[False][body] ** 2))
+    stacked = float(np.mean(rendered[True][body] ** 2))
+    assert stacked < 0.35 * plain, f"stacking left {stacked / plain:.2f} of the one-source residual"
+
+
+def test_a_stacked_backing_carries_every_source_it_cancelled(tmp_path: Path):
+    """The playback carried both layers, so both belong in the backing stem."""
+    stage_path, first_path, second_path, analysis = _layered_clips(tmp_path)
+    output = tmp_path / "stage_vocals.wav"
+    result = render_stage_job(
+        IsolationJob(
+            stage_path,
+            (first_path, second_path),
+            output,
+            100,
+            1,
+            tracks=OutputTracks.BOTH,
+            stack=True,
+        ),
+        analysis,
+        CancellationToken(),
+    )
+    backing, _ = sf.read(result.outputs[1], always_2d=True, dtype="float32")
+    body = slice(1_000, -1_000)
+    for path in (first_path, second_path):
+        source, _ = sf.read(path, always_2d=True, dtype="float32")
+        correlation = np.corrcoef(backing[body].ravel(), source[body].ravel())[0, 1]
+        assert correlation > 0.5, f"{path.name} is missing from the backing: {correlation:.2f}"

@@ -40,6 +40,7 @@ export function request(
 	outputName: string,
 	strength: number,
 	tracks: OutputTracks,
+	stack: boolean,
 ) {
 	return {
 		stage: stage?.path ?? "",
@@ -49,6 +50,7 @@ export function request(
 		sigma: SHELL_SIGMA,
 		auto_align: true,
 		tracks,
+		stack,
 	};
 }
 

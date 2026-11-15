@@ -75,6 +75,15 @@ export function SourcesCard({
 				disabled={disabled}
 				onPick={onAdd}
 			/>
+			<FilePicker
+				label={t("stage_add_folder")}
+				value={null}
+				placeholder=""
+				multiple
+				directory
+				disabled={disabled}
+				onPick={onAdd}
+			/>
 			{sources.length === 0 ? (
 				<Text className={styles.hint}>{t("warn_no_source")}</Text>
 			) : (

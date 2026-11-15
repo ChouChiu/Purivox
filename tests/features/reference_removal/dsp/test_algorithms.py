@@ -611,3 +611,177 @@ def test_reference_cancellation_regularizes_a_nearly_mono_reference():
 
     assert np.isfinite(output).all()
     assert min(corr(output[0], vocal), corr(output[1], vocal)) > 0.98
+
+
+def test_amplitude_fit_suppresses_phase_effects_and_keeps_independent_live_content():
+    from scipy.signal import istft as scipy_istft
+    from scipy.signal import stft as scipy_stft
+
+    rate = 16_000
+    random = np.random.default_rng(4242)
+    length = rate * 10
+    time = np.arange(length) / rate
+    reference = []
+    for tones in ((110, 220, 330, 660), (98, 196, 294, 588)):
+        channel = sum(
+            0.15 * np.sin(2 * np.pi * frequency * time + random.uniform(0, 2 * np.pi))
+            for frequency in tones
+        )
+        noise = np.convolve(random.normal(0, 1, length), np.ones(4) / 4, mode="same")
+        reference.append(0.7 * channel + 0.25 * noise)
+    reference = np.asarray(reference)
+    reference *= 0.25 / np.max(np.abs(reference))
+    beat = 0.5 + 0.5 * np.sin(2 * np.pi * 2.5 * time) * np.sin(2 * np.pi * 0.8 * time)
+    reference *= 0.05 + 0.95 * beat**2
+    backing = []
+    for channel in reference:
+        _, _, spectrum = scipy_stft(channel, nperseg=1024, noverlap=768)
+        phases = np.cumsum(random.normal(0, 0.18, spectrum.shape), axis=1)
+        _, reconstructed = scipy_istft(
+            np.abs(spectrum) * np.exp(1j * phases), nperseg=1024, noverlap=768
+        )
+        backing.append(4 * reconstructed[:length])
+    backing = np.asarray(backing)
+    voice = 0.04 * np.sin(2 * np.pi * 431 * time) + 0.02 * np.sin(2 * np.pi * 862 * time)
+    live = np.stack([voice, 0.9 * voice])
+    output = process_audio(live + backing, reference, rate, 1.0, 8)
+    gain = float(np.sum(output * live) / np.sum(live * live))
+    depth = 10 * np.log10(np.sum(backing * backing) / np.sum((output - gain * live) ** 2))
+    assert depth > 1.7
+    assert gain == pytest.approx(1.0, abs=0.03)
+    assert corr(output.ravel(), live.ravel()) > 0.62
+
+
+def _tones_with_noise(rng, length, tones):
+    time = np.arange(length) / 16_000
+    signal = np.zeros(length)
+    for frequency in tones:
+        signal += (0.6 / len(tones)) * np.sin(
+            2 * np.pi * frequency * time + rng.uniform(0, 2 * np.pi)
+        )
+    noise = np.convolve(rng.normal(0.0, 1.0, length), np.ones(4) / 4, mode="same")
+    return 0.7 * signal + 0.25 * noise
+
+
+def test_side_domain_mask_reaches_backing_the_channel_sum_leaves_behind():
+    """The L-R stage earns its place where the sum-domain mask runs out of reach.
+
+    A playback that arrives over a wide PA carries backing the two channels hold
+    in common plus width they do not, while the live voice is one centre image.
+    The difference channel therefore carries the backing with little of the
+    voice in it, and masking mid and side in their own basis removes width the
+    shared mask cannot.  Measured on the drift and hall scenes: 0.1-1.0 dB more
+    depth, and neutralising the side fit takes it straight back - on the drift
+    scene this test builds, from 5.2 dB to 0.04 dB.
+    """
+    rate = 16_000
+    rng = np.random.default_rng(31)
+    length = rate * 6
+    # A played-back source the stage hears slightly fast, which is what puts the
+    # shared mask's own floor in the way of the remaining width.
+    reference = np.stack(
+        [
+            _tones_with_noise(rng, length, (110.0, 220.0)),
+            _tones_with_noise(rng, length, (110.0, 330.0)),
+        ]
+    )
+    reference *= 0.25 / np.max(np.abs(reference))
+    index = np.arange(length) / 1.004
+    backing = np.stack(
+        [0.9 * np.interp(index, np.arange(length), channel) for channel in reference]
+    )
+    centre = _tones_with_noise(rng, length, (431.0, 862.0))
+    live = np.stack([0.3 * centre, 0.28 * centre])
+    mixture = live + backing
+    body = slice(rate // 2, length - rate // 2)
+
+    def depth(output):
+        residual = output[:, body] - live[:, body]
+        return 10 * np.log10(np.mean(backing[:, body] ** 2) / np.mean(residual**2))
+
+    output = process_audio(mixture, reference, rate, 1.0, 8)
+    # Neutralise the side fit: whatever the stage removes on top of the shared
+    # mask has to disappear with it.
+    original = algorithms.power_transfer
+    try:
+
+        def flat_side(mixture_power, reference_power, sigma_frames, moments=None):
+            explained, confidence = original(mixture_power, reference_power, sigma_frames, moments)
+            explained[:] = 0.0
+            return explained, confidence
+
+        algorithms.power_transfer = flat_side
+        plain = process_audio(mixture, reference, rate, 1.0, 8)
+    finally:
+        algorithms.power_transfer = original
+
+    assert depth(output) > 4.0
+    assert depth(output) > depth(plain) + 4.0
+    assert corr(output[:, body].ravel(), live[:, body].ravel()) > 0.7
+
+
+def test_centre_extraction_follows_the_cancellation_and_only_where_it_should():
+    """Phantom Center's stage, run on the finished cancellation.
+
+    The extraction is only meaningful when the content the cancellation took out
+    is the wide one.  This builds a wide playback under a centre voice - the case
+    it exists for - and the opposite case, a centre playback under a wide crowd,
+    where extracting the centre would delete the voice.  The first must deepen,
+    the second must come through the cancellation unchanged.
+    """
+    rate = 16_000
+    rng = np.random.default_rng(51)
+    length = rate * 6
+    time = np.arange(length) / rate
+    wide = np.stack(
+        [
+            np.convolve(rng.normal(0.0, 0.2, length), np.ones(5) / 5, mode="same"),
+            np.convolve(rng.normal(0.0, 0.2, length), np.ones(5) / 5, mode="same"),
+        ]
+    )
+    for channel, tones in ((wide[0], (123.0, 246.0)), (wide[1], (181.0, 362.0))):
+        for tone in tones:
+            channel += 0.4 * np.sin(2 * np.pi * tone * time)
+    wide *= 0.25 / np.max(np.abs(wide))
+    voice = 0.25 * np.sin(2 * np.pi * 431 * time) + 0.1 * np.sin(2 * np.pi * 862 * time)
+    centred_live = np.stack([voice, voice])
+    wide_backing = np.stack([0.6 * wide[0], 0.55 * wide[1]])
+
+    body = slice(rate // 2, length - rate // 2)
+
+    def depth(output, live, backing):
+        residual = output[:, body] - live[:, body]
+        return 10 * np.log10(np.mean(backing[:, body] ** 2) / np.mean(residual**2))
+
+    mixture = centred_live + wide_backing
+    output = process_audio(mixture, wide, rate, 1.0, 8)
+    gain = float(
+        np.sum(output[:, body] * centred_live[:, body]) / np.sum(centred_live[:, body] ** 2)
+    )
+    assert gain == pytest.approx(1.0, abs=0.05)
+    assert depth(output, centred_live, wide_backing) > 2.0
+    assert corr(output[:, body].ravel(), centred_live[:, body].ravel()) > 0.9
+
+    # The inversion: a mono playback arrives as the perfect centre while the
+    # crowd is wide, so the cancellation removes a centre and the extraction
+    # would eat the voice.  It must leave the result exactly as it was.
+    mono_playback = np.stack([wide[0], wide[0]])
+    crowd = np.stack(
+        [
+            np.convolve(rng.normal(0.0, 0.2, length), np.ones(7) / 7, mode="same"),
+            -np.convolve(rng.normal(0.0, 0.2, length), np.ones(7) / 7, mode="same"),
+        ]
+    )
+    live = crowd + centred_live
+    mixture = live + 0.6 * mono_playback
+    untouched = process_audio(mixture, mono_playback, rate, 1.0, 8)
+    width, _energy = algorithms._stereo_width_and_energy(
+        mixture - untouched, algorithms.CancellationToken()
+    )
+    assert width < 4.0 * algorithms._CENTRE_MIN_WIDTH_RATIO
+    # The gate is what stops it: forcing the extraction on this same capture
+    # costs the voice, which is why the gate exists.
+    forced = algorithms._centre_extract(untouched, 1024, 256, algorithms.CancellationToken())
+    assert corr(forced[:, body].ravel(), live[:, body].ravel()) < corr(
+        untouched[:, body].ravel(), live[:, body].ravel()
+    )

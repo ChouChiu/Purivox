@@ -56,6 +56,14 @@
         <translation>Vocal isolation strength:</translation>
     </message>
     <message>
+        <source>stage_stack</source>
+        <translation>Cancel every source:</translation>
+    </message>
+    <message>
+        <source>stage_stack_hint</source>
+        <translation>Cancels every source over a stretch, not only the best-scoring one; for a stage that played several backing tracks at once.</translation>
+    </message>
+    <message>
         <source>status_group</source>
         <translation>Status</translation>
     </message>
@@ -278,6 +286,18 @@
     <message>
         <source>stage_add_sources</source>
         <translation>Add song sources</translation>
+    </message>
+    <message>
+        <source>stage_add_folder</source>
+        <translation>Add folder</translation>
+    </message>
+    <message>
+        <source>stage_folder_added</source>
+        <translation>Added {count} sources from the folder.</translation>
+    </message>
+    <message>
+        <source>stage_folder_empty</source>
+        <translation>That folder holds no audio files.</translation>
     </message>
     <message>
         <source>stage_remove_source</source>

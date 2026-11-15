@@ -10,11 +10,11 @@ export const STRENGTH_MAXIMUM = 100;
 export const DEFAULT_STRENGTH = 75;
 
 /**
- * The statistical window this shell fixes, matching the desktop's
- * `_GUI_REFERENCE_SIGMA_SECONDS`. Like the GUI, the browser exposes only the
- * strength and never asks the user to choose a sigma.
+ * The statistical window this shell fixes, matching the desktop default.
+ * Like the GUI, the browser exposes only the strength and never asks the
+ * user to choose a sigma.
  */
-export const SHELL_SIGMA = 3;
+export const SHELL_SIGMA = 1;
 
 /** Which stems one cancellation writes. Mirrors `OutputTracks` in the Python. */
 export type OutputTracks = "vocal" | "backing" | "both";

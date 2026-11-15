@@ -7,6 +7,7 @@ import soundfile as sf
 
 from shared.audio import (
     AudioData,
+    audio_files_in,
     conform_rate,
     create_pcm_audio,
     read_audio,
@@ -131,3 +132,20 @@ def test_conform_rate_releases_the_original_only_when_it_resamples():
         assert converted.sample_rate == 16_000
         assert abs(converted.frames - 16_000) <= 2
     assert not original.backing_path.exists()
+
+
+def test_a_folder_is_scanned_for_audio_files_only(tmp_path: Path):
+    """A library folder holds cover art, playlists and half-written downloads."""
+    (tmp_path / "nested").mkdir()
+    (tmp_path / "one.wav").write_bytes(b"")
+    (tmp_path / "two.FLAC").write_bytes(b"")
+    (tmp_path / "cover.jpg").write_bytes(b"")
+    (tmp_path / "disc.m3u").write_bytes(b"")
+    (tmp_path / "nested" / "three.mp3").write_bytes(b"")
+
+    found = audio_files_in(tmp_path)
+
+    # Sorted by path, and `nested/` sorts before `one.wav`.
+    assert [path.name for path in found] == ["three.mp3", "one.wav", "two.FLAC"]
+    assert all(path.is_absolute() for path in found)
+    assert audio_files_in(tmp_path / "missing") == ()

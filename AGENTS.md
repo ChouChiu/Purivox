@@ -126,7 +126,10 @@ slice (drift tracking, or a line through it where a fancam's multipath makes the
 gated by the narrowband `alignment_score` that keeps the matcher's position when alignment would
 make it worse), cancels with `process_audio` and blends the result in over a 50 ms crossfade.
 Ranges no clip covers are copied through untouched, so the backing track is silent exactly where
-nothing was cancelled.
+nothing was cancelled. With `IsolationJob.stack` on, the timeline keeps every credible placement of
+every source, so the same stretch can carry several clips: the renderer then cancels each one out of
+what the previous ones left and adds their backings, which is the mode for a stage that played
+several backing tracks at once.
 
 **Job lifecycle**: a page emits `start_requested`/`cancel_requested`; `MainWindow` builds the job
 dataclass and hands it to `JobPresenter`, which owns page running and progress state, hands the

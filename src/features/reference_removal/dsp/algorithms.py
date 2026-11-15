@@ -57,6 +57,14 @@ _INCOHERENT_MAX_SHARE = 0.55
 # Width of the single narrow smoothing pass over the finished mask, in
 # (frames, bins).
 _MASK_SMOOTHING = (0.75, 0.35)
+# Phantom Center's width control, read as a refinement of the side fit.  Its
+# exponent is -width/100, so a negative width makes the balance term stricter
+# and content sitting between the channels keeps more of its cell.
+_PC_WIDTH = -50.0
+# How far the centre share may take a cell the side fit has already found
+# leakage in, and the ceiling on that: the extraction may refine the side fit,
+# not replace it, because on a capture that hears a mono PA the playback is the
+# perfect centre and the crowd is not.
 # The mask ratio is formed from instantaneous per-cell powers, which forces the
 # narrow Gaussian pass to absorb nearly all of their variance.  Smoothing the
 # numerator and denominator in time first (sigma in frames, ~11.6 ms each at
@@ -80,6 +88,89 @@ _LEVEL_RELEASE_BLOCKS = 8
 _LONG_WINDOW_MARGIN = 0.003
 _WINDOW_PROBES = 3
 _WINDOW_PROBE_SECONDS = 8.0
+# The centre extraction that follows the cancellation, and the gate it runs
+# behind.  A phantom-centre reading only means anything when the content that
+# was removed is the wide one: where the playback arrived over a mono PA the
+# removal is the centre and the crowd is not, and extracting the centre there
+# deletes the voice.  Measured on the scenes, removed and output width differ by
+# 9.8-198x where the extraction helps and by 0.02-2.3x where it does not.
+_CENTRE_WIDTH = -50.0
+_CENTRE_MIN_WIDTH_RATIO = 4.0
+# And the removal has to be worth reading at all: a stage whose reference is
+# silent removes nothing, and the ratio of two negligible widths is noise.  The
+# threshold is deliberately low - a capture close to the playback keeps the song
+# at 12 dB over the voice, so the removal is a small fraction of the mixture
+# while still being the wide part of it.
+_CENTRE_MIN_REMOVED_SHARE = 0.01
+
+
+def _stereo_width_and_energy(audio: np.ndarray, cancel: CancellationToken) -> tuple[float, float]:
+    """How wide a signal sits, and how much of it there is.
+
+    A phantom-centre reading only means something when the content that was
+    taken out is the wide one.  Width is the side power over the mid power,
+    measured the same way on both sides of the cancellation; the mid power comes
+    back with it so the gate can tell a real removal from a statistical one.
+    """
+    block = min(audio.shape[1], BLOCK_FRAMES)
+    side = 0.0
+    mid = 0.0
+    for start in range(0, audio.shape[1], block):
+        cancel.raise_if_cancelled()
+        view = np.asarray(audio[:, start : start + block], dtype=np.float32)
+        difference = view[0] - view[1]
+        total = view[0] + view[1]
+        side += float(np.sum(np.square(difference)))
+        mid += float(np.sum(np.square(total)))
+    return side / max(mid, 1e-20), mid
+
+
+def _centre_extract(
+    audio: np.ndarray,
+    n_fft: int,
+    hop: int,
+    cancel: CancellationToken,
+) -> np.ndarray:
+    """Keep the phantom centre of audio and let its width go.
+
+    This is Phantom Center's stage, applied to the finished cancellation rather
+    than inside it: |L+R| against |L-R| is the inter-channel coherence and the
+    smaller over the larger channel is the balance, so the product says how much
+    of a cell sits between the two channels.  The side is scaled by that share
+    and the mid is left alone, which is what a centre extraction is.
+    """
+    left = stft(np.asarray(audio[0], dtype=np.float32), n_fft=n_fft, hop=hop)
+    right = stft(np.asarray(audio[1], dtype=np.float32), n_fft=n_fft, hop=hop)
+    cancel.raise_if_cancelled()
+    total = np.abs(left + right)
+    difference = np.abs(left - right)
+    share = np.maximum((total - difference) / np.maximum(total, 1e-20), 0.0)
+    np.minimum(share, 1.0, out=share)
+    balance = np.minimum(np.abs(left), np.abs(right))
+    np.divide(
+        balance,
+        np.maximum(np.maximum(np.abs(left), np.abs(right)), 1e-20),
+        out=balance,
+    )
+    np.power(balance, np.float32(-_CENTRE_WIDTH / 100.0), out=balance)
+    balance *= share
+    del share
+    # The criterion is instantaneous geometry and far too noisy to act on cell
+    # by cell; the same two passes the mask gets are what make it usable.
+    spectral_smooth(balance, _MASK_POWER_SMOOTH, 0.0, out=balance)
+    gaussian_filter(balance, sigma=_MASK_SMOOTHING, mode="reflect", output=balance)
+    np.clip(balance, 0.0, 1.0, out=balance)
+    mid = (left + right) * 0.5
+    side = (left - right) * 0.5
+    side *= balance
+    del balance
+    return np.stack(
+        [
+            istft(mid + side, hop=hop, length=audio.shape[1]),
+            istft(mid - side, hop=hop, length=audio.shape[1]),
+        ],
+        dtype=np.float32,
+    )
 
 
 def _analysis_fft_size(sample_rate: int) -> int:
@@ -455,6 +546,13 @@ def _reference_cancel(
         np.abs(reference_channel, out=power)
         np.square(power, out=power)
         reference_power += power
+    # The side mask below is built after the backing track has already read
+    # whatever it needs from the source, so its regressor is taken here, while
+    # the reference spectra are still resident.
+    side_reference_power = np.empty_like(residual_power)
+    np.subtract(reference_spectra[0], reference_spectra[1], out=spectrum)
+    np.abs(spectrum, out=side_reference_power)
+    np.square(side_reference_power, out=side_reference_power)
     mixture_power = np.zeros_like(residual_power)
     for mixture_channel in mix_spectra:
         np.abs(mixture_channel, out=power)
@@ -463,10 +561,19 @@ def _reference_cancel(
     incoherent_power, incoherent_confidence = power_transfer(
         mixture_power, reference_power, sigma_frames
     )
+    # Amplitude regression is less dominated by loud transients than power
+    # regression when effects decorrelate phase; its intercept keeps live content.
+    amplitude_power, amplitude_confidence = power_transfer(
+        np.sqrt(mixture_power), np.sqrt(reference_power), sigma_frames
+    )
+    np.square(amplitude_power, out=amplitude_power)
+    amplitude_power *= smoothstep(_POWER_FIT_LOW, _POWER_FIT_HIGH, amplitude_confidence)
     del reference_power
     if backing_power is None:
         del mixture_power, reference_spectra
     incoherent_power *= smoothstep(_POWER_FIT_LOW, _POWER_FIT_HIGH, incoherent_confidence)
+    np.maximum(incoherent_power, amplitude_power, out=incoherent_power)
+    del amplitude_power, amplitude_confidence
     if backing_power is not None:
         np.maximum(backing_power, incoherent_power, out=backing_power)
         # No backing can carry more power than the mixture it was fitted on.
@@ -530,7 +637,43 @@ def _reference_cancel(
         np.sqrt(backing_power, out=backing_power)
         backing_gain = np.clip(backing_power, 0.0, _MAX_BACKING_GAIN, out=backing_power)
         del backing_power
-    del mask_residual, remaining_power, removable_power, residual_power, power
+    # Phamtom-Center-style L-R stage.  The difference channel is the backing's
+    # own: a live stage adds content that is close to mono, so L-R carries the
+    # playback with far less of the voice in it.  Decomposing the residual into
+    # mid and side and masking each in its own basis therefore suppresses the
+    # width the shared mask has to leave behind.  Applying one side gain to
+    # L and R instead was measured and is wrong - a side floor applied to both
+    # channels alike is a mid floor, and it took the live gain with it
+    # (-0.27 on the drift scenes).
+    #
+    # The side mask is built from the same leakage split as the shared one:
+    # residual side power regressed on source side power, floored at the mask
+    # floor.  It can only ever be stricter than the shared mask - where the side
+    # has no evidence it falls back to that one - so a capture it says nothing
+    # about keeps exactly the depth it had.
+    side_residual_power = np.empty_like(residual_power)
+    np.subtract(residual_spectra[0], residual_spectra[1], out=spectrum)
+    np.abs(spectrum, out=side_residual_power)
+    np.square(side_residual_power, out=side_residual_power)
+    side_leakage, side_confidence = power_transfer(
+        side_residual_power, side_reference_power, sigma_frames
+    )
+    side_leakage *= smoothstep(_POWER_FIT_LOW, _POWER_FIT_HIGH, side_confidence)
+    np.minimum(side_leakage, side_residual_power, out=side_leakage)
+    np.multiply(side_residual_power, _MASK_FLOOR**2, out=power)
+    side_remaining = np.subtract(side_residual_power, side_leakage, out=side_leakage)
+    np.maximum(side_remaining, power, out=side_remaining)
+    side_mask = spectral_smooth(side_remaining, _MASK_POWER_SMOOTH, 0.0)
+    side_denominator = spectral_smooth(side_residual_power, _MASK_POWER_SMOOTH, 0.0)
+    side_denominator += 1e-12
+    side_mask /= side_denominator
+    np.clip(side_mask, _MASK_FLOOR**2, 1.0, out=side_mask)
+    np.sqrt(side_mask, out=side_mask)
+    gaussian_filter(side_mask, sigma=_MASK_SMOOTHING, mode="reflect", output=side_mask)
+    np.clip(side_mask, _MASK_FLOOR, 1.0, out=side_mask)
+    del side_denominator, side_remaining, side_residual_power, side_reference_power
+    del side_leakage, side_confidence
+    del mask_residual, remaining_power, removable_power, residual_power
     # The narrow Gaussian pass catches what the power-domain smoothing left:
     # isolated-bin musical noise, without refilling tonal notches from
     # untouched neighbours.  Berouti-style signal-dependent over-subtraction, an
@@ -544,8 +687,23 @@ def _reference_cancel(
     # Strength interpolates towards the fully processed spectrum.  With nothing
     # subtracted this is exactly the mask blend it replaces, 1 - a(1 - M), so
     # bypass at zero and monotonicity are unchanged.
+    np.minimum(side_mask, mask, out=side_mask)
+    left_residual = residual_spectra[0]
+    right_residual = residual_spectra[1]
+    mid = np.add(left_residual, right_residual, out=spectrum)
+    mid *= 0.5
+    side = np.empty_like(left_residual)
+    np.subtract(left_residual, right_residual, out=side)
+    side *= 0.5
+    mid *= mask
+    side *= side_mask
+    # Rotate the two masked halves back.  Both are still complex, so the
+    # channel that lost its side content reconstructs as a narrower version of
+    # itself rather than as an attenuated copy of the other.
+    np.add(mid, side, out=left_residual)
+    np.subtract(mid, side, out=right_residual)
+    del mid, side, side_mask
     for mixture_channel, residual in zip(mix_spectra, residual_spectra, strict=True):
-        np.multiply(mask, residual, out=residual)
         residual -= mixture_channel
         residual *= strength
         residual += mixture_channel
@@ -714,4 +872,24 @@ def process_audio(
         scale = peak_ceiling / value
         for start in range(0, length, cleanup_block):
             values[:, start : start + cleanup_block] *= scale
+    # Phantom Center runs after the removal, on what is left, and it is an
+    # enhancement rather than part of the cancellation, so it is gated on
+    # whether the cancellation actually took a wide image out.  A capture that
+    # heard a mono playback has a centre-shaped removal and keeps its centre.
+    removed_width, removed_energy = _stereo_width_and_energy(mix - result, cancel)
+    output_width, output_energy = _stereo_width_and_energy(result, cancel)
+    # A removal that took almost nothing has no wide image to read: the ratio of
+    # two tiny widths is noise, and a stage whose reference is silent must pass
+    # through untouched.
+    if (
+        removed_energy >= _CENTRE_MIN_REMOVED_SHARE * output_energy
+        and removed_width >= _CENTRE_MIN_WIDTH_RATIO * output_width
+    ):
+        extracted = _centre_extract(result, n_fft, n_fft // 4, cancel)
+        np.copyto(result, extracted)
+        del extracted
+        logger.info(
+            "centre extraction: the removed content is %.2f times as wide as the output",
+            removed_width / max(output_width, 1e-20),
+        )
     return result

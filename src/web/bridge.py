@@ -129,6 +129,7 @@ def _isolation_job(data: dict[str, Any]) -> IsolationJob:
         sigma=int(data.get("sigma", DEFAULT_SIGMA)),
         auto_align=bool(data.get("auto_align", True)),
         tracks=OutputTracks(data.get("tracks", OutputTracks.VOCAL)),
+        stack=bool(data.get("stack", False)),
     )
 
 

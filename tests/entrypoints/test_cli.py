@@ -24,7 +24,7 @@ def test_reference_command_parses_its_settings():
     assert parser.prog == "purivox"
 
     defaults = parser.parse_args(["mr", "song.wav", "reference.flac", "output.wav"])
-    assert defaults.sigma == 3
+    assert defaults.sigma == 1
     assert defaults.align
 
     custom = parser.parse_args(
@@ -152,3 +152,12 @@ def test_fetch_lists_what_has_been_downloaded(fetch_cli, capsys):
     assert _fetch(["--list"]) == 0
 
     assert capsys.readouterr().out.strip().endswith("track.wav")
+
+
+def test_reference_command_takes_the_stacked_switch():
+    parser = build_parser()
+    arguments = ["mr", "song.wav", "reference.flac", "output.wav"]
+
+    assert not parser.parse_args(arguments).stack
+    assert parser.parse_args([*arguments, "--stack"]).stack
+    assert not parser.parse_args([*arguments, "--stack", "--no-stack"]).stack

@@ -58,6 +58,14 @@ def build_parser() -> argparse.ArgumentParser:
     )
     reference.add_argument("--sigma", type=int, choices=SIGMA_CHOICES, default=DEFAULT_SIGMA)
     reference.add_argument("--align", action=argparse.BooleanOptionalAction, default=True)
+    # Every placement of every source over one stretch, for a stage that played
+    # several backing tracks at once.
+    reference.add_argument(
+        "--stack",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="cancel every placed source, including ones over the same stretch",
+    )
     reference.add_argument(
         "--tracks",
         type=OutputTracks,
@@ -176,6 +184,7 @@ def main(argv: list[str] | None = None) -> int:
             sigma=args.sigma,
             auto_align=args.align,
             tracks=args.tracks,
+            stack=args.stack,
         )
         result = run_isolation_job(job, None, token, _print_progress)
         for output in result.outputs:

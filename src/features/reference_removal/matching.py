@@ -6,15 +6,16 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 
 import numpy as np
-from scipy.fft import irfft, next_fast_len, rfft
 from scipy.signal import correlate, find_peaks, resample_poly
 
+from features.reference_removal.fingerprints import normalized_correlation, stage_spectra
 from features.reference_removal.models import (
     ClipKind,
     IsolationJob,
     StageAnalysis,
     TimelineClip,
 )
+from features.reference_removal.segments import match_segments
 from shared.audio import AudioData, read_audio
 from shared.dsp import log_flux_bands
 from shared.dsp.rate import estimate_rate
@@ -112,62 +113,6 @@ def _match_speed(
     return estimate.ratio
 
 
-@dataclass(frozen=True, slots=True)
-class _StageSpectra:
-    """The stage side of an anchor search, computed once instead of per anchor.
-
-    Every anchor of one search slides a query of the same width over the whole
-    stage track, so the stage's transform and its running energy do not change
-    between them.  Recomputing both per anchor was the bulk of an analysis: a
-    four-minute source asks for seven of them looking for the whole song and
-    another forty-six looking for short reuses.
-    """
-
-    length: int
-    size: int
-    spectra: np.ndarray
-    cumulative: np.ndarray
-
-
-def _stage_spectra(stage: np.ndarray, width: int) -> _StageSpectra:
-    """Prepare `stage` for correlating against any query of `width` frames.
-
-    The transform length is the one `scipy.signal.correlate` would have chosen
-    for this pair, so the scores below are the ones it would have returned.
-    """
-    length = stage.shape[1]
-    size = next_fast_len(length + width - 1, True)
-    cumulative = np.concatenate(
-        (np.zeros((stage.shape[0], 1)), np.cumsum(stage * stage, axis=1)),
-        axis=1,
-    )
-    # One band at a time, not one batched transform: pocketfft chooses a
-    # different vectorisation for a stack than for a single row, and the last
-    # digit of a score would then depend on how the bands were handed to it.
-    spectra = np.stack([rfft(band, size) for band in stage])
-    return _StageSpectra(length, size, spectra, cumulative)
-
-
-def _normalized_correlation(stage: _StageSpectra, query: np.ndarray) -> np.ndarray:
-    width = query.shape[1]
-    if width > stage.length:
-        return np.empty(0, dtype=np.float64)
-    score = np.zeros(stage.length - width + 1, dtype=np.float64)
-    stage_energy = np.zeros_like(score)
-    query_energy = float(np.sum(query * query))
-    for band, cumulative, query_band in zip(stage.spectra, stage.cumulative, query, strict=True):
-        # `correlate(a, b, "valid", "fft")` is this transform of `a` times the
-        # transform of the reversed `b`, sliced to the fully overlapping part.
-        full = irfft(band * rfft(query_band[::-1], stage.size), stage.size)
-        score += full[width - 1 : stage.length]
-        stage_energy += cumulative[width:] - cumulative[:-width]
-    return np.divide(
-        score,
-        np.sqrt(stage_energy * query_energy) + 1e-12,
-        out=np.zeros_like(score),
-    )
-
-
 def _cluster_hits(
     hits: list[_Hit],
     source_duration: float,
@@ -231,10 +176,10 @@ def _source_candidates(
     anchor_starts = np.unique(np.linspace(0, maximum_start, _ANCHORS).astype(int))
     hits: list[_Hit] = []
     peak_distance = max(round(4.0 * _FRAMES_PER_SECOND), 1)
-    stage = _stage_spectra(stage_features, anchor_width)
+    stage = stage_spectra(stage_features, anchor_width)
     for anchor_index, source_start in enumerate(anchor_starts):
         token.raise_if_cancelled()
-        scores = _normalized_correlation(
+        scores = normalized_correlation(
             stage,
             source_features[:, source_start : source_start + anchor_width],
         )
@@ -260,12 +205,12 @@ def _boundary_fragment_candidates(
     step = max(round(5.0 * _FRAMES_PER_SECOND), 1)
     boundary = round(75.0 * _FRAMES_PER_SECOND)
     hits: list[_Hit] = []
-    stage = _stage_spectra(stage_features, width)
+    stage = stage_spectra(stage_features, width)
     for anchor_index, source_start in enumerate(
         range(0, max(source_features.shape[1] - width + 1, 1), step)
     ):
         token.raise_if_cancelled()
-        scores = _normalized_correlation(
+        scores = normalized_correlation(
             stage,
             source_features[:, source_start : source_start + width],
         )
@@ -328,12 +273,50 @@ def _is_credible(candidate: _Candidate) -> bool:
     return (candidate.votes >= 2 and candidate.confidence >= 0.10) or candidate.confidence >= 0.28
 
 
+def _placement(
+    candidate: _Candidate,
+    source: Path,
+    source_index: int,
+    speed: float,
+    duration: float,
+) -> TimelineClip:
+    """Turn one credible candidate into the clip a renderer can cancel."""
+    start = max(0.0, candidate.timeline_start)
+    end = min(duration, candidate.timeline_start + candidate.source_duration)
+    # Positions found on the stretched proxy are stage-clock seconds; the clip
+    # records where the source itself starts, and the render stretches the slice
+    # it reads from there.
+    source_start = max(0.0, -candidate.timeline_start) / speed
+    return TimelineClip(
+        ClipKind.SONG,
+        start,
+        end,
+        source,
+        source_index,
+        source_start,
+        source_start + (end - start) / speed,
+        candidate.confidence,
+        speed=speed,
+    )
+
+
 def _choose_songs(
     candidates: list[list[_Candidate]],
     source_paths: tuple[Path, ...],
     speeds: tuple[float, ...],
     duration: float,
+    stack: bool,
 ) -> tuple[list[TimelineClip], list[Path]]:
+    """Pick the clips to cancel: one placement per source, or all of them.
+
+    One source over a stretch is the default.  Files that all match the same
+    minute of a recording describe one playback unless the stage really layered
+    them, so the best-scoring one is taken and the rest wait for another
+    stretch.  A stage that did layer them - several backing tracks at once -
+    needs every placement instead, which is what `stack` asks for: the stretches
+    then overlap on purpose and the render takes each source out of what the
+    previous ones left.
+    """
     ranked = sorted(
         (
             (candidate.votes, candidate.confidence, source_index, source, candidate)
@@ -349,39 +332,51 @@ def _choose_songs(
         key=lambda item: (item[0], item[1]),
     )
     clips: list[TimelineClip] = []
-    selected_sources: set[int] = set()
+    placed: dict[int, list[TimelineClip]] = {}
     for _votes, _confidence, source_index, source, selected in ranked:
-        if source_index in selected_sources:
+        if not stack and source_index in placed:
             continue
         start = max(0.0, selected.timeline_start)
         end = min(duration, selected.timeline_start + selected.source_duration)
-        if any(min(end, clip.stage_end) - max(start, clip.stage_start) > 2.0 for clip in clips):
+        if end <= start:
             continue
-        speed = speeds[source_index]
-        # Positions found on the stretched proxy are stage-clock seconds; the
-        # clip records where the source itself starts, and the render stretches
-        # the slice it reads from there.
-        source_start = max(0.0, -selected.timeline_start) / speed
-        clips.append(
-            TimelineClip(
-                ClipKind.SONG,
-                start,
-                end,
-                source,
-                source_index,
-                source_start,
-                source_start + (end - start) / speed,
-                selected.confidence,
-                speed=speed,
-            )
-        )
-        selected_sources.add(source_index)
-    missing = [source for index, source in enumerate(source_paths) if index not in selected_sources]
+        # Two candidates of one source over the same stretch are one placement
+        # found twice, whatever stacking says about the rest.
+        if any(_covered(clip, start, end) for clip in placed.get(source_index, ())):
+            continue
+        if not stack and any(_covered(clip, start, end) for clip in clips):
+            continue
+        clip = _placement(selected, source, source_index, speeds[source_index], duration)
+        clips.append(clip)
+        placed.setdefault(source_index, []).append(clip)
+    missing = [source for index, source in enumerate(source_paths) if index not in placed]
     return sorted(clips, key=lambda clip: clip.stage_start), missing
 
 
 def _overlaps(left: TimelineClip, start: float, end: float) -> bool:
+    """Whether two ranges share more than a moment of the stage timeline."""
     return min(left.stage_end, end) - max(left.stage_start, start) > 1.0
+
+
+def _covered(left: TimelineClip, start: float, end: float) -> bool:
+    """Whether a candidate is a placement the timeline already holds.
+
+    The threshold is the one the one-per-stretch rule has always used: two
+    ranges this far into each other describe the same content, not two.
+    """
+    return min(left.stage_end, end) - max(left.stage_start, start) > 2.0
+
+
+def _suppressed(left: TimelineClip, start: float, end: float, source: Path, stack: bool) -> bool:
+    """Whether an already placed clip keeps this candidate off the timeline.
+
+    A stretch is normally explained by one source, so any overlap costs the
+    candidate its place.  Stacking suppresses only the source's own coverage:
+    another source over the same stretch is one more layer to cancel.
+    """
+    if not _overlaps(left, start, end):
+        return False
+    return not stack or left.source == source
 
 
 def _find_fragments(
@@ -390,7 +385,15 @@ def _find_fragments(
     speeds: tuple[float, ...],
     songs: list[TimelineClip],
     duration: float,
+    stack: bool,
 ) -> list[TimelineClip]:
+    """Place the short reuses a source has that no song placement covers.
+
+    Without stacking a fragment has to stay clear of every song, because a
+    stretch is explained by one source.  With stacking the same short reuse of
+    another source is one more layer to cancel, so only the source's own
+    coverage suppresses it.
+    """
     fragments: list[TimelineClip] = []
     possible = [
         (candidate.votes, candidate.confidence, source_index, source, candidate)
@@ -414,9 +417,9 @@ def _find_fragments(
             continue
         if end - start < max(5.0, 2.0 / _FRAMES_PER_SECOND):
             continue
-        if any(_overlaps(song, start, end) for song in songs):
+        if any(_suppressed(song, start, end, source, stack) for song in songs):
             continue
-        if any(_overlaps(fragment, start, end) for fragment in fragments):
+        if any(_suppressed(fragment, start, end, source, stack) for fragment in fragments):
             continue
         speed = speeds[source_index]
         fragments.append(
@@ -552,6 +555,7 @@ def analyze_stage(
     candidate_groups: list[list[_Candidate]] = []
     fragment_candidate_groups: list[list[_Candidate]] = []
     speeds: list[float] = []
+    segment_groups: list[list[TimelineClip]] = []
     for index, source in enumerate(source_paths):
         token.raise_if_cancelled()
         report_progress(
@@ -577,6 +581,37 @@ def analyze_stage(
         candidate_groups.append(
             _source_candidates(stage_features, source_features, match_duration, token)
         )
+        segments = match_segments(
+            stage_features,
+            source_features,
+            _FRAMES_PER_SECOND,
+            duration,
+            match_duration,
+            token,
+            stage_proxy,
+            match_proxy,
+            _FEATURE_RATE,
+            candidate_groups[-1][0].timeline_start if candidate_groups[-1] else None,
+            min(0.4, max(0.12, 0.65 * candidate_groups[-1][0].confidence))
+            if candidate_groups[-1]
+            else 0.4,
+        )
+        segment_groups.append(
+            [
+                TimelineClip(
+                    ClipKind.SONG,
+                    segment.start,
+                    segment.end,
+                    source,
+                    index,
+                    max(0.0, (segment.start - segment.offset) / speed),
+                    min(source_duration, (segment.end - segment.offset) / speed),
+                    segment.confidence,
+                    speed=speed,
+                )
+                for segment in segments
+            ]
+        )
         fragment_candidate_groups.append(
             _verify_boundary_candidates(
                 stage_proxy,
@@ -587,7 +622,26 @@ def analyze_stage(
             )
         )
 
-    songs, missing = _choose_songs(candidate_groups, source_paths, tuple(speeds), duration)
+    songs, missing = _choose_songs(
+        candidate_groups, source_paths, tuple(speeds), duration, job.stack
+    )
+    for source, segments in zip(source_paths, segment_groups, strict=True):
+        if len(segments) < 2:
+            continue
+        others = [clip for clip in songs if clip.source != source]
+        # A segment path says where this source actually went; another source
+        # over the same stretch only competes with it when a stretch is meant to
+        # be explained by one source.
+        if not job.stack and any(
+            _overlaps(other, segment.stage_start, segment.stage_end)
+            for other in others
+            for segment in segments
+        ):
+            continue
+        songs = others + segments
+        missing = [path for path in missing if path != source]
+        logger.info("matched %s in %d continuous segments", source.name, len(segments))
+    songs.sort(key=lambda clip: clip.stage_start)
     fragments = _find_fragments(
         [
             full_candidates + boundary_candidates
@@ -599,6 +653,7 @@ def analyze_stage(
         tuple(speeds),
         songs,
         duration,
+        job.stack,
     )
     clips = _timeline(duration, songs + fragments)
     report_progress(progress, 100, "stage_analysis_done", count=len(songs))
