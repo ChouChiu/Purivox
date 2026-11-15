@@ -15,7 +15,11 @@ import JSZip from "jszip";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const source = resolve(here, "..", "..", "src");
-const target = resolve(here, "..", "public", "purivox-src.zip");
+// Imported by the bundle rather than copied out of public/, so Vite emits it
+// under a content hash: a deploy then cannot pair new page code with the previous
+// archive, which would drop a job field the Python side never learned to read and
+// quietly run the wrong pipeline.
+const target = resolve(here, "..", "generated", "purivox-src.zip");
 
 // `app` carries the window and job wiring the browser never imports: nothing
 // here reaches `app.main_window`, and the pipelines it used to orchestrate now

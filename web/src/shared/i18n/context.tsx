@@ -9,8 +9,8 @@ import {
 
 import {
 	type Catalogue,
+	catalogueFor,
 	type Language,
-	loadCatalogue,
 	preferredLanguage,
 	type Translate,
 	translateWith,
@@ -40,22 +40,14 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
 	const [language, setLanguageState] = useState<Language>(() =>
 		preferredLanguage(readStored()),
 	);
-	const [catalogue, setCatalogue] = useState<Catalogue>({});
-
+	// The catalogue travels inside the bundle, so it is there on the first
+	// render: no frame shows a raw key waiting for a download.
+	const catalogue: Catalogue = useMemo(
+		() => catalogueFor(language),
+		[language],
+	);
 	useEffect(() => {
-		let current = true;
-		loadCatalogue(language)
-			.then((entries) => {
-				if (current) setCatalogue(entries);
-			})
-			.catch(() => {
-				// Every key then resolves to itself, which is visible but not blank.
-				if (current) setCatalogue({});
-			});
 		document.documentElement.lang = language.replace("_", "-");
-		return () => {
-			current = false;
-		};
 	}, [language]);
 
 	const value = useMemo<LanguageContextValue>(

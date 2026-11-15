@@ -7,7 +7,12 @@ import { fileURLToPath } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const catalogues = resolve(here, "..", "..", "src", "resources", "i18n");
-const output = resolve(here, "..", "public", "i18n");
+// Outside public/ on purpose: Vite only fingerprints assets the bundle imports,
+// and the bundle is what decides which catalogue is read. A fixed file name in
+// public/ outlives the bundle that asked for it, so a deploy carrying new strings
+// left a returning visitor on the previous catalogue - and a key the page gained
+// in between resolved to itself, on screen.
+const output = resolve(here, "..", "generated", "i18n");
 
 const MESSAGE = /<message>([\s\S]*?)<\/message>/g;
 const SOURCE = /<source>([\s\S]*?)<\/source>/;

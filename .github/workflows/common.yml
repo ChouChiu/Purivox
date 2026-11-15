@@ -189,10 +189,11 @@ jobs:
 
       - name: Build site
         id: site
-        # `prebuild` packs src/ into the archive Pyodide unpacks and turns the
-        # Qt Linguist catalogues into the JSON the page translates from, so the
-        # bundle can never drift from the Python it runs.  `check` runs tsc and
-        # the front-end layering check before Vite sees anything.
+        # `generate` packs src/ into the archive Pyodide unpacks and turns the
+        # Qt Linguist catalogues into the JSON the page translates from; both are
+        # imported by the bundle, so Vite fingerprints them and a visitor cannot
+        # pair this deploy's code with the previous deploy's assets.  `check` runs
+        # tsc and the front-end layering check before Vite sees anything.
         run: bun run build
         working-directory: web
 

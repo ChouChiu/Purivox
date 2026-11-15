@@ -1,3 +1,9 @@
+import enUs from "../../../generated/i18n/en_us.json";
+import jaJp from "../../../generated/i18n/ja_jp.json";
+import koKr from "../../../generated/i18n/ko_kr.json";
+import zhCn from "../../../generated/i18n/zh_cn.json";
+import zhTw from "../../../generated/i18n/zh_tw.json";
+
 export const LANGUAGES = ["zh_cn", "zh_tw", "en_us", "ja_jp", "ko_kr"] as const;
 export type Language = (typeof LANGUAGES)[number];
 export const DEFAULT_LANGUAGE: Language = "zh_cn";
@@ -16,21 +22,25 @@ export type Translate = (
 	values?: Record<string, unknown>,
 ) => string;
 
-const loaded = new Map<Language, Promise<Catalogue>>();
+/**
+ * Every catalogue, built from the same `.ts` sources the desktop compiles.
+ *
+ * They arrive as imports rather than as a fetch: `scripts/build-i18n.mjs` writes
+ * them before Vite runs, so the bundle carries the exact strings it was built
+ * with, under a content hash.  Fetching them from a fixed path under `public/`
+ * meant a page could load the previous deploy's catalogue, and a key the page
+ * had gained since then resolved to itself - the raw key, on screen.
+ */
+const CATALOGUES: Record<Language, Catalogue> = {
+	zh_cn: zhCn,
+	zh_tw: zhTw,
+	en_us: enUs,
+	ja_jp: jaJp,
+	ko_kr: koKr,
+};
 
-/** Read one catalogue, built from the same `.ts` sources the desktop compiles. */
-export function loadCatalogue(language: Language): Promise<Catalogue> {
-	const cached = loaded.get(language);
-	if (cached !== undefined) return cached;
-	const request = fetch(
-		`${import.meta.env.BASE_URL}i18n/${language}.json`,
-	).then((response) => {
-		if (!response.ok)
-			throw new Error(`could not load the ${language} catalogue`);
-		return response.json() as Promise<Catalogue>;
-	});
-	loaded.set(language, request);
-	return request;
+export function catalogueFor(language: Language): Catalogue {
+	return CATALOGUES[language];
 }
 
 /**

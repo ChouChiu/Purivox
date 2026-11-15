@@ -244,6 +244,12 @@ and cancels the token on SIGINT.
 - The brand mark comes from `src/resources/purivox.svg` via `build-assets.mjs`; never redraw it.
   Biome's recommended rules with its own defaults (tab indent); suppress inline with a reason rather
   than turning a rule off globally.
+- Everything `generate` produces — the Pyodide archive and the translation JSON — lands in
+  `web/generated/` and is imported by the bundle, so Vite fingerprints it and the page can never load
+  a previous deploy's copy beside its own code. A fixed name under `public/` survives a deploy that
+  changed it, and the mismatch is silent: a key the page gained resolves to itself, a job field the
+  Python side never learned to read is dropped. `build-assets.mjs` is the exception, because an
+  `index.html` needs the mark at a path it can spell.
 
 ### Packaging
 
@@ -294,7 +300,8 @@ QT_QPA_PLATFORM=offscreen uv run --locked pytest tests/shared/test_jobs.py     #
 QT_QPA_PLATFORM=offscreen uv run --locked pytest tests/benchmarks --runslow   # 15-min gate
 uv build                                           # sdist + wheel
 
-# browser build (predev/prebuild repack src/ and regenerate the translation JSON)
+# browser build (generate — run by predev, prebuild and precheck — packs src/ into
+# web/generated/purivox-src.zip and writes the translation JSON beside it)
 cd web && bun install && bun run dev       # http://localhost:5173/
 cd web && bun run check                    # lint + tsc + layering; also `lint`, `format`, `build`
 PURIVOX_BASE=/repo/ bun run build          # only for a Pages *project* site subpath

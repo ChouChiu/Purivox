@@ -48,6 +48,24 @@ def test_the_console_script_and_version_point_at_real_code():
     assert (ROOT / config["tool"]["hatch"]["version"]["path"]).is_file()
 
 
+def test_the_site_reads_only_assets_its_own_build_fingerprinted():
+    """A fixed file name outlives the deploy that changed it.
+
+    The catalogues and the Pyodide archive used to sit in `web/public/` under
+    names that never change, so GitHub Pages' cache could hand a fresh bundle the
+    previous catalogue: every key the page had gained since resolved to itself and
+    the raw `stage_stack` showed on screen. Importing them instead lets Vite put a
+    content hash in the name, which is what this pins.
+    """
+    offenders = [
+        f"{path.relative_to(ROOT)}: {line.strip()}"
+        for path in sorted((ROOT / "web/src").rglob("*.ts*"))
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if "BASE_URL}i18n" in line or "BASE_URL}purivox-src.zip" in line
+    ]
+    assert not offenders, "generated assets must be imported, not fetched by name"
+
+
 def test_the_browser_build_carries_the_application_version():
     """The site's header reads its version from package.json, the desktop from version.py."""
     package = json.loads((ROOT / "web/package.json").read_text(encoding="utf-8"))

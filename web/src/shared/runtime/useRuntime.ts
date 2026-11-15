@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { SOURCE_ARCHIVE_URL } from "./archive";
 import { PurivoxClient } from "./PurivoxClient";
 import type { BootPayload } from "./protocol";
 
@@ -43,9 +44,8 @@ export function useRuntime(): Runtime {
 
 	const client = useMemo(
 		() =>
-			new PurivoxClient(
-				`${import.meta.env.BASE_URL}purivox-src.zip`,
-				(payload) => setStage(payload.stage),
+			new PurivoxClient(SOURCE_ARCHIVE_URL, (payload) =>
+				setStage(payload.stage),
 			),
 		[],
 	);

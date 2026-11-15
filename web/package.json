@@ -9,9 +9,9 @@
 		"lint": "biome check",
 		"format": "biome check --write",
 		"check": "tsc --noEmit && bun run lint && bun run scripts/check-architecture.mjs",
+		"precheck": "bun run generate",
 		"predev": "bun run generate",
 		"dev": "vite",
-		"prebuild": "bun run generate",
 		"build": "bun run check && vite build",
 		"preview": "vite preview"
 	},

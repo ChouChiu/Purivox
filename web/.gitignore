@@ -1,5 +1,4 @@
 node_modules/
 dist/
-public/purivox-src.zip
+generated/
 public/purivox.svg
-public/i18n/
